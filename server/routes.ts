@@ -56,6 +56,16 @@ import {
   cancelSubscriptionSchema,
 } from "@shared/subscriptionSchemas";
 import { InvitationEmailService } from "./invitationEmailService";
+import { sendEmail } from "./sendgrid";
+import {
+  isStripeEnabled,
+  createCheckoutSession,
+  createPortalSession,
+  constructWebhookEvent,
+  mapStripeStatusToPlan,
+  type StripePlan,
+} from "./stripeService";
+import { requirePlan } from "./billingMiddleware";
 
 const clerkClient = createClerkClient({
   secretKey: process.env.VITE_CLERK_SECRET_KEY,
@@ -6125,6 +6135,201 @@ print(json.dumps(rows))
     } catch (error) {
       console.error('Error completing onboarding:', error);
       res.status(500).json({ message: 'Failed to complete onboarding' });
+    }
+  });
+
+  // ============================================================================
+  // STRIPE BILLING ROUTES
+  // ============================================================================
+
+  // POST /api/billing/checkout - Create Stripe Checkout session and return redirect URL
+  app.post('/api/billing/checkout', isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { plan } = req.body;
+
+      if (!['professional', 'enterprise'].includes(plan)) {
+        return res.status(400).json({ message: 'Invalid plan. Must be professional or enterprise.' });
+      }
+
+      if (!isStripeEnabled) {
+        return res.status(503).json({
+          message: 'Stripe billing is not yet configured. Please contact support.',
+          configured: false,
+        });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: 'User not found' });
+
+      const host = `${req.protocol}://${req.get('host')}`;
+      const checkoutUrl = await createCheckoutSession({
+        userId,
+        email: user.email!,
+        plan: plan as StripePlan,
+        stripeCustomerId: user.stripeCustomerId,
+        successUrl: `${host}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${host}/subscription`,
+      });
+
+      res.json({ checkoutUrl });
+    } catch (error: any) {
+      console.error('Stripe checkout error:', error);
+      res.status(500).json({ message: error.message || 'Failed to create checkout session' });
+    }
+  });
+
+  // POST /api/billing/portal - Open Stripe Customer Portal for self-serve billing management
+  app.post('/api/billing/portal', isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const user = await storage.getUser(userId);
+
+      if (!user?.stripeCustomerId) {
+        return res.status(400).json({
+          message: 'No Stripe billing account found. Please subscribe first.',
+        });
+      }
+
+      if (!isStripeEnabled) {
+        return res.status(503).json({ message: 'Stripe billing is not configured.' });
+      }
+
+      const host = `${req.protocol}://${req.get('host')}`;
+      const portalUrl = await createPortalSession({
+        stripeCustomerId: user.stripeCustomerId,
+        returnUrl: `${host}/subscription`,
+      });
+
+      res.json({ portalUrl });
+    } catch (error: any) {
+      console.error('Stripe portal error:', error);
+      res.status(500).json({ message: error.message || 'Failed to open billing portal' });
+    }
+  });
+
+  // POST /api/billing/webhook - Stripe signed webhook handler
+  // Must receive raw body — captured via express.json verify callback in index.ts
+  app.post('/api/billing/webhook', async (req: any, res) => {
+    const sig = req.headers['stripe-signature'] as string;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!webhookSecret || !isStripeEnabled) {
+      console.warn('⚠️  Stripe webhook received but STRIPE_WEBHOOK_SECRET not configured');
+      return res.status(200).json({ received: true });
+    }
+
+    let event;
+    try {
+      event = constructWebhookEvent(req.rawBody, sig, webhookSecret);
+    } catch (err: any) {
+      console.error('❌ Stripe webhook signature verification failed:', err.message);
+      return res.status(400).json({ error: `Webhook Error: ${err.message}` });
+    }
+
+    try {
+      switch (event.type) {
+        case 'checkout.session.completed': {
+          const session = event.data.object as any;
+          const userId: string = session.metadata?.userId;
+          const plan: string = session.metadata?.plan;
+          const customerId: string = session.customer;
+          const subscriptionId: string = session.subscription;
+
+          if (userId && plan) {
+            await storage.updateUserSubscription(userId, {
+              subscriptionPlan: plan as 'professional' | 'enterprise',
+              subscriptionStatus: 'active',
+              stripeCustomerId: customerId,
+              stripeSubscriptionId: subscriptionId,
+              ocrCreditsLimit: 999,
+            });
+            console.log(`✅ Stripe checkout.session.completed: user=${userId} plan=${plan}`);
+          }
+          break;
+        }
+
+        case 'customer.subscription.updated': {
+          const sub = event.data.object as any;
+          const userId: string = sub.metadata?.userId;
+          const mappedStatus = mapStripeStatusToPlan(sub.status);
+          const priceId: string = sub.items?.data?.[0]?.price?.id;
+
+          let plan: 'professional' | 'enterprise' | undefined;
+          if (priceId && priceId === process.env.STRIPE_PRICE_PROFESSIONAL) plan = 'professional';
+          if (priceId && priceId === process.env.STRIPE_PRICE_ENTERPRISE) plan = 'enterprise';
+
+          if (userId) {
+            await storage.updateUserSubscription(userId, {
+              ...(plan ? { subscriptionPlan: plan, ocrCreditsLimit: 999 } : {}),
+              subscriptionStatus: mappedStatus,
+            });
+            console.log(`✅ Stripe customer.subscription.updated: user=${userId} status=${mappedStatus}`);
+          }
+          break;
+        }
+
+        case 'customer.subscription.deleted': {
+          const sub = event.data.object as any;
+          const userId: string = sub.metadata?.userId;
+
+          if (userId) {
+            await storage.updateUserSubscription(userId, {
+              subscriptionPlan: 'free',
+              subscriptionStatus: 'inactive',
+              stripeSubscriptionId: undefined,
+              ocrCreditsLimit: 5,
+            });
+            console.log(`✅ Stripe customer.subscription.deleted: user=${userId} → free`);
+          }
+          break;
+        }
+
+        case 'invoice.payment_failed': {
+          const invoice = event.data.object as any;
+          const customerEmail: string = invoice.customer_email;
+
+          if (customerEmail) {
+            try {
+              const appUrl = process.env.APP_URL || `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+              await sendEmail({
+                to: customerEmail,
+                from: 'billing@restroflow.com',
+                subject: 'Action Required: Payment Failed for RestroFlow',
+                html: `
+                  <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+                    <div style="background:#ef444420;border:1px solid #ef4444;border-radius:8px;padding:16px;margin-bottom:24px;">
+                      <h2 style="color:#ef4444;margin:0 0 8px;">⚠️ Payment Failed</h2>
+                      <p style="margin:0;color:#374151;">We were unable to process your RestroFlow subscription payment.</p>
+                    </div>
+                    <p>To keep your account active and avoid losing access to your data, please update your payment method.</p>
+                    <a href="${appUrl}/subscription"
+                       style="display:inline-block;background:#f97316;color:white;padding:12px 28px;
+                              text-decoration:none;border-radius:6px;font-weight:600;margin:16px 0;">
+                      Update Payment Method →
+                    </a>
+                    <p style="color:#6b7280;font-size:13px;margin-top:24px;">
+                      Questions? Reply to this email or contact <a href="mailto:support@restroflow.com">support@restroflow.com</a>
+                    </p>
+                  </div>
+                `,
+              });
+              console.log(`📧 Dunning email sent to ${customerEmail}`);
+            } catch (emailErr) {
+              console.error('❌ Failed to send dunning email:', emailErr);
+            }
+          }
+          break;
+        }
+
+        default:
+          console.log(`Unhandled Stripe event: ${event.type}`);
+      }
+
+      res.json({ received: true });
+    } catch (err) {
+      console.error('❌ Stripe webhook processing error:', err);
+      res.status(500).json({ error: 'Webhook processing failed' });
     }
   });
 

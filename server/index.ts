@@ -27,7 +27,12 @@ app.set('trust proxy', 1);
 // Apply enterprise security middleware
 app.use(securityHeaders);
 app.use('/api/', apiLimiter);
-app.use(express.json());
+// Capture raw body for Stripe webhook signature verification
+app.use(express.json({
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(clerkMiddleware({
