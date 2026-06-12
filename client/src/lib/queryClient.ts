@@ -8,6 +8,14 @@ async function throwIfResNotOk(res: Response) {
 }
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
+  try {
+    const token = await (window as any).Clerk?.session?.getToken();
+    if (token) {
+      return { 'Authorization': `Bearer ${token}` };
+    }
+  } catch (e) {
+    // Clerk not ready yet
+  }
   return {};
 }
 
@@ -62,8 +70,8 @@ export const getQueryFn: <T>(options: {
     const authHeaders = await getAuthHeaders();
     const res = await fetch(url, {
       headers: authHeaders,
-      credentials: "include", // Ensure cookies are always sent
-      cache: url.includes('/api/auth/me') ? 'no-store' : 'default', // Prevent caching for auth checks
+      credentials: "include",
+      cache: url.includes('/api/auth/me') ? 'no-store' : 'default',
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

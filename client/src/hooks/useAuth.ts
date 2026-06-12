@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useUser, useAuth as useClerkAuth } from '@clerk/clerk-react';
 
 type User = {
   id: string;
@@ -9,82 +10,84 @@ type User = {
 };
 
 export function useAuth() {
+  const { user: clerkUser, isLoaded, isSignedIn } = useUser();
+  const { getToken } = useClerkAuth();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isInitialized, setIsInitialized] = useState(false);
 
-  const checkAuthState = async () => {
+  const fetchUserData = async () => {
+    if (!clerkUser) return null;
     try {
-      console.log('🔍 Checking authentication state via session cookie...');
-      
+      const token = await getToken();
       const response = await fetch('/api/auth/me', {
-        credentials: 'include',
-        cache: 'no-store', // Prevent 304 Not Modified responses
         headers: {
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
+        cache: 'no-store',
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         if (data.ok && data.user) {
-          console.log('✅ Authentication successful:', data.user.email);
           setUser(data.user);
           return data.user;
         }
       }
-      
-      // Only clear auth on actual auth failures (401/403), not on server errors or 304
-      if (response.status === 401 || response.status === 403) {
-        console.log('❌ Authentication failed or no session found (401/403)');
-        setUser(null);
-        return null;
-      } else if (response.status >= 500) {
-        console.log('⚠️ Server error during auth check, preserving current auth state');
-        return user; // Preserve current user if server error
-      } else {
-        console.log('⚠️ Unexpected response status:', response.status, 'preserving current auth state');
-        return user; // Preserve current user for other non-success responses
-      }
+
+      // Fallback: use Clerk data directly
+      const fallback: User = {
+        id: clerkUser.id,
+        email: clerkUser.primaryEmailAddress?.emailAddress || '',
+        firstName: clerkUser.firstName || '',
+        lastName: clerkUser.lastName || '',
+        role: 'owner',
+      };
+      setUser(fallback);
+      return fallback;
     } catch (error) {
-      console.error('❌ Error checking auth state:', error);
-      // Network errors - preserve current auth state
-      console.log('⚠️ Network error during auth check, preserving current auth state');
-      return user;
+      console.error('Error fetching user data:', error);
+      const fallback: User = {
+        id: clerkUser.id,
+        email: clerkUser.primaryEmailAddress?.emailAddress || '',
+        firstName: clerkUser.firstName || '',
+        lastName: clerkUser.lastName || '',
+        role: 'owner',
+      };
+      setUser(fallback);
+      return fallback;
     }
   };
 
   useEffect(() => {
-    const initializeAuth = async () => {
-      setIsLoading(true);
-      await checkAuthState();
+    if (!isLoaded) return;
+
+    if (!isSignedIn || !clerkUser) {
+      setUser(null);
       setIsLoading(false);
-      setIsInitialized(true);
+      return;
+    }
+
+    const init = async () => {
+      setIsLoading(true);
+      await fetchUserData();
+      setIsLoading(false);
     };
 
-    initializeAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    if (!isInitialized) {
-      await checkAuthState();
-    }
-    return !!user;
-  };
+    init();
+  }, [isLoaded, isSignedIn, clerkUser?.id]);
 
   const refreshAuth = async () => {
-    setIsLoading(true);
-    const authUser = await checkAuthState();
-    setIsLoading(false);
-    return authUser;
+    const result = await fetchUserData();
+    return result;
   };
 
   return {
     user,
-    isLoading,
-    isAuthenticated: !!user,
-    isInitialized,
-    checkAuth,
+    isLoading: !isLoaded || isLoading,
+    isAuthenticated: isLoaded && isSignedIn && !!user,
+    isInitialized: isLoaded,
+    checkAuth: async () => !!user,
     refreshAuth,
   };
 }

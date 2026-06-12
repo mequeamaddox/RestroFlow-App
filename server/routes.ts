@@ -167,11 +167,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!userId) {
         return res.status(401).json({ ok: false, message: 'Not authenticated' });
       }
-      const email = sessionClaims?.email as string || '';
-      const user = await storage.getUserByEmail(email);
+
+      // Try to find user by Clerk userId first
+      let user = await storage.getUser(userId);
+
+      // Fall back to email lookup if not found by ID
+      if (!user) {
+        const email = sessionClaims?.email as string || '';
+        if (email) {
+          user = await storage.getUserByEmail(email);
+        }
+      }
+
+      // Auto-create owner user on first login if not in DB
+      if (!user) {
+        try {
+          const clerkUser = await clerkClient.users.getUser(userId);
+          const email = clerkUser.emailAddresses[0]?.emailAddress || '';
+          const firstName = clerkUser.firstName || '';
+          const lastName = clerkUser.lastName || '';
+
+          // Check if user exists by email
+          if (email) {
+            user = await storage.getUserByEmail(email);
+          }
+
+          if (!user) {
+            // Create the user as owner (first-time login)
+            await storage.upsertUser({ id: userId, email, firstName, lastName, role: 'owner' });
+            user = await storage.getUser(userId);
+          } else {
+            // Update the user's ID to Clerk's ID
+            await storage.upsertUser({ id: userId, email: user.email || email, firstName: user.firstName || firstName, lastName: user.lastName || lastName, role: user.role || 'owner' });
+            user = await storage.getUser(userId);
+          }
+        } catch (clerkErr) {
+          console.error('Could not fetch Clerk user:', clerkErr);
+          return res.status(401).json({ ok: false, message: 'User not found' });
+        }
+      }
+
       if (!user) {
         return res.status(401).json({ ok: false, message: 'User not found' });
       }
+
       res.json({
         ok: true,
         user: {
