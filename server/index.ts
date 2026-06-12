@@ -30,7 +30,10 @@ app.use('/api/', apiLimiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
-app.use(clerkMiddleware());
+app.use(clerkMiddleware({
+  publishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY,
+  secretKey: process.env.VITE_CLERK_SECRET_KEY,
+}));
 // Enable cookie parsing for session management
 
 app.use((req, res, next) => {

@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { requireAuth, optionalAuth, type AuthenticatedRequest } from './clerkAuth';
-import { getAuth, clerkClient } from '@clerk/express';
+import { getAuth, createClerkClient } from '@clerk/express';
 import { requirePermission, requireAnyPermission, Permission } from "./permissions";
 import multer from "multer";
 import csv from "csv-parser";
@@ -56,6 +56,11 @@ import {
   cancelSubscriptionSchema,
 } from "@shared/subscriptionSchemas";
 import { InvitationEmailService } from "./invitationEmailService";
+
+const clerkClient = createClerkClient({
+  secretKey: process.env.VITE_CLERK_SECRET_KEY,
+  publishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY,
+});
 
 // Use Clerk-only authentication
 const isAuthenticated = requireAuth;
