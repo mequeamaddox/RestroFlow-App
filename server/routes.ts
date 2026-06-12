@@ -1,8 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { verifyFirebaseToken, syncFirebaseUser, adminAuth, createFirebaseUser, createCustomToken, verifyIdToken, checkUserExistsInProject } from "./firebaseAuth";
-import { requireFirebaseAuth, optionalFirebaseAuth, type AuthenticatedRequest } from './firebaseAuthMiddleware';
+import { requireAuth, optionalAuth, type AuthenticatedRequest } from './clerkAuth';
+import { getAuth, clerkClient } from '@clerk/express';
 import { requirePermission, requireAnyPermission, Permission } from "./permissions";
 import multer from "multer";
 import csv from "csv-parser";
@@ -58,7 +58,7 @@ import {
 import { InvitationEmailService } from "./invitationEmailService";
 
 // Use Clerk-only authentication
-const isAuthenticated = requireClerkAuth;
+const isAuthenticated = requireAuth;
 
 // File upload configuration
 
@@ -144,312 +144,29 @@ function calculateSubscriptionTotal(plan: string | null, hrAddonLocations: numbe
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Firebase-only authentication - no session setup required
-
-  // Firebase Authentication Routes
-
-  // Server-side Firebase authentication to bypass client-side domain restrictions
+  // Clerk authentication routes - deprecated in favor of Clerk's built-in auth
   app.post('/api/auth/login', async (req, res) => {
-    try {
-      let { email, password } = req.body;
-      
-      // Input sanitization - trim whitespace and normalize email to lowercase
-      email = email?.trim().toLowerCase();
-      // Do not trim password - preserve exact user input including whitespace
-      
-      if (!email || !password) {
-        return res.status(400).json({ message: 'Email and password required' });
-      }
-
-      console.log('🔐 Server-side authentication attempt for:', email);
-
-      // API Key Diagnostic - verify server API key
-      const firebaseApiKey = process.env.VITE_FIREBASE_API_KEY;
-      if (!firebaseApiKey) {
-        console.error('❌ Firebase API key not configured');
-        return res.status(500).json({ message: 'Firebase configuration error' });
-      }
-
-      // Log API key info for debugging (safe - only first/last 6 chars)
-      console.log('🔑 API Key Diagnostic:', {
-        hasApiKey: !!firebaseApiKey,
-        keyLength: firebaseApiKey.length,
-        keyStart: firebaseApiKey.substring(0, 6),
-        keyEnd: firebaseApiKey.slice(-6),
-        expectedProjectId: 'restroflowsoftware'
-      });
-
-      const firebaseAuthUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${firebaseApiKey}`;
-      
-      console.log('🌐 Firebase Auth URL:', firebaseAuthUrl.replace(firebaseApiKey, 'API_KEY_HIDDEN'));
-      
-      const authResponse = await fetch(firebaseAuthUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: email,
-          password: password,
-          returnSecureToken: true,
-        }),
-      });
-
-      if (!authResponse.ok) {
-        const errorData = await authResponse.json();
-        
-        // Enhanced error logging for debugging
-        console.error('❌ Firebase authentication failed:', {
-          status: authResponse.status,
-          statusText: authResponse.statusText,
-          error: errorData,
-          email: email,
-          apiKeyUsed: firebaseApiKey ? `${firebaseApiKey.substring(0, 6)}...${firebaseApiKey.slice(-6)}` : 'None'
-        });
-        
-        // Check if this might be a project mismatch issue
-        if (errorData.error?.message === 'INVALID_LOGIN_CREDENTIALS') {
-          console.log('🔍 INVALID_LOGIN_CREDENTIALS detected - this could indicate:');
-          console.log('   1. Wrong Firebase project (API key mismatch)');
-          console.log('   2. User does not exist in this project');
-          console.log('   3. Incorrect password');
-          console.log('   4. Account disabled in this project');
-          console.log('💡 Suggestion: Verify API key points to correct Firebase project');
-        }
-        
-        let errorMessage = 'Authentication failed';
-        if (errorData.error?.message) {
-          switch (errorData.error.message) {
-            case 'EMAIL_NOT_FOUND':
-            case 'INVALID_PASSWORD':
-            case 'INVALID_LOGIN_CREDENTIALS':
-              errorMessage = 'Invalid email or password';
-              break;
-            case 'USER_DISABLED':
-              errorMessage = 'Account has been disabled';
-              break;
-            case 'TOO_MANY_ATTEMPTS_TRY_LATER':
-              errorMessage = 'Too many failed attempts. Please try again later.';
-              break;
-            default:
-              errorMessage = errorData.error.message;
-          }
-        }
-        
-        return res.status(401).json({ 
-          message: errorMessage,
-          debug: {
-            originalError: errorData.error?.message,
-            possibleCause: errorData.error?.message === 'INVALID_LOGIN_CREDENTIALS' ? 
-              'API key might point to wrong Firebase project' : 'Authentication failure'
-          }
-        });
-      }
-
-      const firebaseData = await authResponse.json();
-      console.log('✅ Firebase authentication successful for:', email);
-
-      // Verify the ID token using Firebase Admin SDK
-      const decodedToken = await verifyFirebaseToken(firebaseData.idToken);
-      
-      // Check if user exists in our database
-      let user = await storage.getUser(decodedToken.uid);
-      
-      // If user doesn't exist, check if they're invited
-      if (!user) {
-        console.log('🔍 User not found in database, checking for employee/invitation:', decodedToken.email);
-        
-        // Check if this email exists as an employee (invited user)
-        const employees = await storage.getEmployees();
-        const invitedEmployee = employees.find(emp => 
-          emp.email?.toLowerCase() === decodedToken.email?.toLowerCase()
-        );
-        
-        if (!invitedEmployee) {
-          console.log('❌ User not invited:', decodedToken.email);
-          return res.status(403).json({ 
-            message: 'Not invited', 
-            error: 'This user has not been invited to access the system' 
-          });
-        }
-
-        // Sync Firebase user and create user record for invited employee
-        console.log('✅ Creating user record for invited employee:', decodedToken.email);
-        user = await syncFirebaseUser({
-          uid: decodedToken.uid,
-          email: decodedToken.email || null,
-          displayName: decodedToken.name || null,
-          photoURL: null
-        });
-      }
-
-      // Check if user is active
-      if (!user) {
-        return res.status(403).json({ 
-          message: 'Access denied', 
-          error: 'User account not found or inactive' 
-        });
-      }
-
-      console.log('✅ Server-side login successful for:', user.email, 'role:', user.role);
-      
-      // Create Firebase session cookie for secure authentication
-      const expiresIn = 60 * 60 * 24 * 5 * 1000; // 5 days
-      const sessionCookie = await adminAuth.createSessionCookie(firebaseData.idToken, { expiresIn });
-      
-      // Determine secure flag based on request
-      const isSecure = req.secure || req.get('x-forwarded-proto') === 'https';
-      
-      // Set session cookie with proper flags for Replit cross-origin
-      res.cookie('__session', sessionCookie, {
-        maxAge: expiresIn,
-        httpOnly: true,
-        secure: isSecure,
-        sameSite: isSecure ? 'none' : 'lax',
-        path: '/'
-      });
-      
-      console.log('🍪 Session cookie set successfully for:', user.email);
-      
-      res.json({
-        success: true,
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role
-        }
-      });
-    } catch (error) {
-      console.error('❌ Server-side authentication error:', error);
-      res.status(500).json({ message: 'Authentication failed' });
-    }
+    res.status(410).json({ 
+      message: 'Deprecated. Authentication is now handled by Clerk.' 
+    });
+  });
+    app.post('/api/auth/login-legacy', async (req, res) => {    res.status(410).json({ 
+      message: 'Deprecated. Use Clerk authentication.' 
+    });
   });
 
-  // Firebase login - verify token and check user invitation status
-  app.post('/api/auth/firebase-login', async (req, res) => {
-    try {
-      const { idToken } = req.body;
-      
-      if (!idToken) {
-        return res.status(400).json({ message: 'Firebase ID token required' });
-      }
-
-      // Verify Firebase token
-      const decodedToken = await verifyFirebaseToken(idToken);
-      
-      // Check if user exists in our database
-      let user = await storage.getUser(decodedToken.uid);
-      
-      // If user doesn't exist, check if they're invited
-      if (!user) {
-        console.log('🔍 User not found in database, checking for employee/invitation:', decodedToken.email);
-        
-        // Check if this email exists as an employee (invited user)
-        const employees = await storage.getEmployees();
-        const invitedEmployee = employees.find(emp => 
-          emp.email?.toLowerCase() === decodedToken.email?.toLowerCase()
-        );
-        
-        if (!invitedEmployee) {
-          console.log('❌ User not invited:', decodedToken.email);
-          return res.status(403).json({ 
-            message: 'Not invited', 
-            error: 'This user has not been invited to access the system' 
-          });
-        }
-
-        // Sync Firebase user and create user record for invited employee
-        console.log('✅ Creating user record for invited employee:', decodedToken.email);
-        user = await syncFirebaseUser({
-          uid: decodedToken.uid,
-          email: decodedToken.email || null,
-          displayName: decodedToken.name || null,
-          photoURL: null
-        });
-      }
-
-      // Check if user is active
-      if (!user) {
-        return res.status(403).json({ 
-          message: 'Access denied', 
-          error: 'User account not found or inactive' 
-        });
-      }
-
-      console.log('✅ Firebase login successful for:', user.email, 'role:', user.role);
-      res.json({
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role
-        }
-      });
-    } catch (error) {
-      console.error('❌ Firebase authentication error:', error);
-      res.status(401).json({ message: 'Authentication failed' });
-    }
-  });
-
-  // Get current user info (Firebase session cookie authentication)
   app.get('/api/auth/me', async (req, res) => {
     try {
-      console.log('🔍 Checking auth state for /api/auth/me');
-      
-      // Prevent caching to avoid 304 Not Modified responses that cause auth issues
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-      res.setHeader('Surrogate-Control', 'no-store');
-      
-      // Extract session cookie
-      const sessionCookie = req.cookies.__session;
-      if (!sessionCookie) {
-        console.log('❌ No session cookie found');
-        return res.status(401).json({ 
-          ok: false,
-          message: 'Not authenticated',
-          error: 'No session cookie found' 
-        });
+      const { userId, sessionClaims } = getAuth(req);
+      if (!userId) {
+        return res.status(401).json({ ok: false, message: 'Not authenticated' });
       }
-
-      // Verify Firebase session cookie
-      let decodedToken;
-      try {
-        decodedToken = await adminAuth.verifySessionCookie(sessionCookie, true);
-      } catch (error) {
-        console.error('❌ Firebase session cookie verification failed:', error);
-        return res.status(401).json({ 
-          ok: false,
-          message: 'Not authenticated',
-          error: 'Invalid session cookie' 
-        });
-      }
-
-      // Load user data from database by email (not UID)
-      const user = await storage.getUserByEmail(decodedToken.email || '');
-      
+      const email = sessionClaims?.email as string || '';
+      const user = await storage.getUserByEmail(email);
       if (!user) {
-        console.log('❌ User not found in database for session check:', decodedToken.email);
-        return res.status(401).json({ 
-          ok: false,
-          message: 'User not found', 
-          error: 'User must log in through the proper login flow first' 
-        });
+        return res.status(401).json({ ok: false, message: 'User not found' });
       }
-
-      // Check if user is active
-      if (!user) {
-        return res.status(403).json({ 
-          message: 'Access denied', 
-          error: 'User account not found or inactive' 
-        });
-      }
-
-      console.log('✅ Firebase authentication successful for:', user.email);
       res.json({
         ok: true,
         user: {
@@ -461,99 +178,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
     } catch (error) {
-      console.error('❌ Error getting user info:', error);
+      console.error('Error getting user info:', error);
       res.status(500).json({ message: 'Failed to get user info' });
     }
   });
 
-  // Logout endpoint - clear session cookie
   app.post('/api/auth/logout', (req, res) => {
-    try {
-      // Clear the session cookie
-      res.clearCookie('__session', {
-        httpOnly: true,
-        secure: req.secure || req.get('x-forwarded-proto') === 'https',
-        sameSite: (req.secure || req.get('x-forwarded-proto') === 'https') ? 'none' : 'lax',
-        path: '/'
-      });
-      
-      console.log('🍪 Session cookie cleared successfully');
-      res.json({ 
-        success: true, 
-        message: 'Logout successful' 
-      });
-    } catch (error) {
-      console.error('❌ Logout error:', error);
-      res.status(500).json({ message: 'Logout failed' });
-    }
+    res.clearCookie('__session');
+    res.json({ success: true, message: 'Logout successful' });
   });
-
-  // Diagnostic endpoint to check if user exists in current Firebase project
   app.post('/api/auth/diagnostic/check-user', async (req, res) => {
-    try {
-      const { email } = req.body;
-      
-      if (!email) {
-        return res.status(400).json({ message: 'Email required for diagnostic' });
-      }
-
-      console.log('🔬 Firebase User Diagnostic for:', email);
-
-      // Check API key configuration
-      const firebaseApiKey = process.env.VITE_FIREBASE_API_KEY;
-      
-      const diagnosticInfo = {
-        timestamp: new Date().toISOString(),
-        email: email,
-        apiKey: {
-          hasKey: !!firebaseApiKey,
-          keyLength: firebaseApiKey?.length || 0,
-          keyStart: firebaseApiKey?.substring(0, 6) || 'None',
-          keyEnd: firebaseApiKey?.slice(-6) || 'None'
-        },
-        project: {
-          expected: 'restroflowsoftware',
-          configured: process.env.VITE_FIREBASE_PROJECT_ID || 'Not set'
-        }
-      };
-
-      console.log('🔍 Diagnostic Info:', diagnosticInfo);
-
-      // Check if user exists in current Firebase project using Admin SDK
-      const userExistenceCheck = await checkUserExistsInProject(email);
-      
-      const response = {
-        success: true,
-        diagnostics: diagnosticInfo,
-        userExists: userExistenceCheck,
-        adminSdkWorking: !!adminAuth,
-        suggestions: [] as string[]
-      };
-
-      // Add suggestions based on findings
-      if (!userExistenceCheck.exists) {
-        response.suggestions.push('User does not exist in current Firebase project');
-        response.suggestions.push('Verify API key points to correct Firebase project');
-        response.suggestions.push('Check if user was created in different Firebase project');
-      }
-
-      if (diagnosticInfo.apiKey.keyStart === 'AIzaSy' && !userExistenceCheck.exists) {
-        response.suggestions.push('API key format appears correct but user not found - likely wrong project');
-      }
-
-      console.log('✅ Diagnostic completed:', response);
-      res.json(response);
-
-    } catch (error) {
-      const err = error as Error;
-      console.error('❌ Diagnostic endpoint error:', err);
-      res.status(500).json({ 
-        success: false,
-        message: 'Diagnostic failed',
-        error: err.message,
-        adminSdkError: !adminAuth ? 'Admin SDK not properly initialized' : null
-      });
-    }
+    res.status(410).json({ message: 'Diagnostic endpoint removed.' });
   });
 
 
@@ -565,14 +200,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // Note: Mobile login endpoint moved to Firebase compatibility section below
-
-
-
-
-
-
-
+ // Mobile login handled by Clerk
 
   // Invoice Processing Routes
   app.get('/api/invoices', isAuthenticated, async (req, res) => {
@@ -1100,45 +728,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Accept invitation and create employee account (public route)
   app.post('/api/invitations/:token/accept', async (req, res) => {
     try {
       const { token } = req.params;
-      const { password, firebaseUid } = req.body;
+      const { password } = req.body;
 
-      if (!password || !firebaseUid) {
-        return res.status(400).json({ message: "Password and Firebase UID required" });
+      if (!password) {
+        return res.status(400).json({ message: "Password required" });
       }
 
       const invitation = await storage.getInvitationToken(token);
-      
       if (!invitation) {
         return res.status(404).json({ message: "Invitation not found" });
       }
-
       if (invitation.status !== 'pending') {
-        return res.status(400).json({ 
-          message: `Invitation is ${invitation.status}`,
-          status: invitation.status 
-        });
+        return res.status(400).json({ message: `Invitation is ${invitation.status}`, status: invitation.status });
       }
-
       if (new Date() > new Date(invitation.expiresAt)) {
         await storage.updateInvitationToken(invitation.id, {});
         return res.status(400).json({ message: "Invitation has expired" });
       }
 
-      // Create Firebase user account
+      // Create Clerk user account
+      let clerkUserId: string;
       try {
-        await createFirebaseUser(invitation.email, password);
-      } catch (firebaseError) {
-        console.error("Error creating Firebase user:", firebaseError);
+        const clerkUser = await clerkClient.users.createUser({
+          emailAddress: [invitation.email],
+          password: password,
+          firstName: invitation.firstName || '',
+          lastName: invitation.lastName || '',
+        });
+        clerkUserId = clerkUser.id;
+      } catch (clerkError) {
+        console.error("Error creating Clerk user:", clerkError);
         return res.status(400).json({ message: "Failed to create user account" });
       }
 
-      // Create user record in the users table
       const user = await storage.upsertUser({
-        id: firebaseUid,
+        id: clerkUserId,
         email: invitation.email,
         firstName: invitation.firstName || '',
         lastName: invitation.lastName || '',
@@ -1146,7 +773,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         defaultLocationId: invitation.locationId,
       });
 
-      // Create employee record if HR addon is enabled for location
       if (invitation.locationId) {
         const locations = await storage.getLocations();
         const location = locations.find(loc => loc.id === invitation.locationId);
@@ -1161,26 +787,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             hourlyRate: invitation.hourlyRate,
             salary: invitation.salary,
           };
-
           const employee = await storage.createEmployee(employeeData);
-          
-          // Mark invitation as accepted and link to employee
           await storage.acceptInvitationToken(token, employee.id);
         } else {
-          // Mark invitation as accepted without employee record
           await storage.acceptInvitationToken(token, '');
         }
       }
 
       res.json({
         message: "Invitation accepted successfully",
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role,
-        }
+        user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role }
       });
     } catch (error) {
       console.error("Error accepting invitation:", error);
@@ -3195,7 +2811,7 @@ print(json.dumps(rows))
         return res.status(400).json({ message: 'Location ID required', code: 'LOCATION_REQUIRED' });
       }
 
-      // Get user from Firebase authentication
+      // Get user from Clerk authentication
       const user = req.user;
       
       // Exempt owners from HR add-on restrictions
@@ -3343,11 +2959,16 @@ print(json.dumps(rows))
           // Generate a temporary password for the employee
           const tempPassword = 'TEMP1234!';
           
-          console.log('🔥 Creating Firebase user for employee:', employee.email);
-          
-          // Create Firebase user account
-          const firebaseUser = await createFirebaseUser(employee.email, tempPassword);
-          const userId = firebaseUser.uid;
+          console.log('👤 Creating Clerk user for employee:', employee.email);
+
+          // Create Clerk user account
+          const clerkUser = await clerkClient.users.createUser({
+            emailAddress: [employee.email],
+            password: tempPassword,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+          });
+          const userId = clerkUser.id;
           
           // Create user record in our database with proper role mapping
           const employeeWithPosition = await storage.getEmployee(employee.id);
@@ -3362,12 +2983,12 @@ print(json.dumps(rows))
             role: userRole,
           });
           
-          // Update employee record to reference Firebase UID for easier lookup
+          // Update employee record with Clerk user ID
           await storage.updateEmployee(employee.id, { 
-            notes: `Firebase UID: ${userId}` 
+            notes: `Clerk ID: ${userId}` 
           });
-          
-          console.log('✅ Firebase user and local user account created successfully');
+
+          console.log('✅ Clerk user and local user account created successfully');
           
           // Send welcome email with login credentials
           console.log('📧 Attempting to send welcome email to:', employee.email);
@@ -3735,7 +3356,7 @@ print(json.dumps(rows))
   // Employee Self-Service Time Clock API - Personal time tracking
   app.get('/api/employees/:employeeId/time-entries', isAuthenticated, async (req, res) => {
     try {
-      // Get user ID from Firebase authentication
+      // Get user ID from Clerk authentication
       const userId = req.user!.id;
       console.log('🕐 Time entries request - userId:', userId, 'employeeId:', req.params.employeeId);
       
@@ -3808,7 +3429,7 @@ print(json.dumps(rows))
 
   app.get('/api/employees/:employeeId/shifts', isAuthenticated, async (req, res) => {
     try {
-      // Get user ID from Firebase authentication
+      // Get user ID from Clerk authentication
       const userId = req.user!.id;
       // Ensure employees can only access their own shifts
       if (req.params.employeeId !== userId) {
@@ -3824,7 +3445,7 @@ print(json.dumps(rows))
 
   app.post('/api/employees/:employeeId/clock-in', isAuthenticated, async (req, res) => {
     try {
-      // Get user ID from Firebase authentication
+      // Get user ID from Clerk authentication
       const userId = req.user!.id;
       // Ensure employees can only clock in for themselves
       if (req.params.employeeId !== userId) {
@@ -3840,7 +3461,7 @@ print(json.dumps(rows))
 
   app.post('/api/employees/:employeeId/clock-out', isAuthenticated, async (req, res) => {
     try {
-      // Get user ID from Firebase authentication
+      // Get user ID from Clerk authentication
       const userId = req.user!.id;
       // Ensure employees can only clock out for themselves
       if (req.params.employeeId !== userId) {
@@ -3862,7 +3483,7 @@ print(json.dumps(rows))
 
   app.post('/api/employees/:employeeId/break-start', isAuthenticated, async (req, res) => {
     try {
-      // Get user ID from Firebase authentication
+      // Get user ID from Clerk authentication
       const userId = req.user!.id;
       if (req.params.employeeId !== userId) {
         return res.status(403).json({ message: 'Access denied - can only start break for yourself' });
@@ -3882,7 +3503,7 @@ print(json.dumps(rows))
 
   app.post('/api/employees/:employeeId/break-end', isAuthenticated, async (req, res) => {
     try {
-      // Get user ID from Firebase authentication
+      // Get user ID from Clerk authentication
       const userId = req.user!.id;
       if (req.params.employeeId !== userId) {
         return res.status(403).json({ message: 'Access denied - can only end break for yourself' });

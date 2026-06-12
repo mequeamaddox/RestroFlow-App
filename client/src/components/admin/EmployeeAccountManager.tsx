@@ -81,7 +81,8 @@ export function EmployeeAccountManager() {
             Create Employee Account
           </CardTitle>
           <CardDescription>
-            Create Firebase authentication accounts for employees. They will use these credentials to log in to the employee workspace.
+            Create employee accounts. They will use these credentials to log in to the employee workspace.
+            The password will be temporary and they will be prompted to change it on first login.
           </CardDescription>
         </CardHeader>
         <CardContent>

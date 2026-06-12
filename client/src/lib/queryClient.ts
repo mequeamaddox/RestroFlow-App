@@ -1,5 +1,4 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
-import { auth } from './firebase';
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -9,19 +8,7 @@ async function throwIfResNotOk(res: Response) {
 }
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  const headers: Record<string, string> = {};
-  
-  try {
-    const user = auth.currentUser;
-    if (user) {
-      const idToken = await user.getIdToken();
-      headers['Authorization'] = `Bearer ${idToken}`;
-    }
-  } catch (error) {
-    console.error('Failed to get Firebase token:', error);
-  }
-  
-  return headers;
+  return {};
 }
 
 export async function apiRequest(

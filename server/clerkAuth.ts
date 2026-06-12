@@ -76,10 +76,10 @@ export function getAllInvitations(): Invitation[] {
 export { clerkMiddleware };
 
 /**
- * Main auth middleware - drop-in replacement for requireFirebaseAuth
+ * Main auth middleware - Clerk authentication
  * Same req.user shape, same invitation check, same error responses
  */
-export async function requireFirebaseAuth(
+export async function requireAuth(
   req: Request,
   res: Response,
   next: NextFunction
@@ -162,7 +162,7 @@ export async function requireFirebaseAuth(
 /**
  * Optional auth - for public endpoints that work with or without auth
  */
-export async function optionalFirebaseAuth(
+export async function optionalAuth(
   req: Request,
   res: Response,
   next: NextFunction

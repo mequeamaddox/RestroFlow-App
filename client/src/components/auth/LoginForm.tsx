@@ -10,7 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Mail, Lock } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-// Server-side authentication - no client-side Firebase imports needed
+// Server-side authentication handled by Clerk
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -89,7 +89,7 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
   };
 
   const handlePasswordReset = async () => {
-    // Password reset functionality disabled - requires client-side Firebase
+    // Password reset handled by Clerk
     setError('Password reset is currently unavailable. Please contact your administrator.');
   };
 
