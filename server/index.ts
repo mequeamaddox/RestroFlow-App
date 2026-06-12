@@ -1,3 +1,4 @@
+import { clerkMiddleware } from './clerkAuth';
 import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
@@ -28,7 +29,9 @@ app.use(securityHeaders);
 app.use('/api/', apiLimiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser()); // Enable cookie parsing for session management
+app.use(cookieParser());
+app.use(clerkMiddleware());
+// Enable cookie parsing for session management
 
 app.use((req, res, next) => {
   const start = Date.now();

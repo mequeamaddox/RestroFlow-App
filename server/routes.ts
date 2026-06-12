@@ -57,8 +57,8 @@ import {
 } from "@shared/subscriptionSchemas";
 import { InvitationEmailService } from "./invitationEmailService";
 
-// Use Firebase-only authentication
-const isAuthenticated = requireFirebaseAuth;
+// Use Clerk-only authentication
+const isAuthenticated = requireClerkAuth;
 
 // File upload configuration
 
