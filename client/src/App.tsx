@@ -12,7 +12,6 @@ import Landing from "@/pages/landing";
 import Pricing from "@/pages/pricing";
 import Subscription from "@/pages/subscription";
 import Auth from "@/pages/auth";
-import FirebaseAuth from "@/pages/firebase-auth";
 import Dashboard from "@/pages/dashboard";
 import Inventory from "@/pages/inventory";
 import Recipes from "@/pages/recipes";

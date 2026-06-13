@@ -159,17 +159,6 @@ function calculateSubscriptionTotal(plan: string | null, hrAddonLocations: numbe
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Clerk authentication routes - deprecated in favor of Clerk's built-in auth
-  app.post('/api/auth/login', async (req, res) => {
-    res.status(410).json({ 
-      message: 'Deprecated. Authentication is now handled by Clerk.' 
-    });
-  });
-    app.post('/api/auth/login-legacy', async (req, res) => {    res.status(410).json({ 
-      message: 'Deprecated. Use Clerk authentication.' 
-    });
-  });
-
   app.get('/api/auth/me', async (req, res) => {
     try {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -241,11 +230,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.clearCookie('__session');
     res.json({ success: true, message: 'Logout successful' });
   });
-  app.post('/api/auth/diagnostic/check-user', async (req, res) => {
-    res.status(410).json({ message: 'Diagnostic endpoint removed.' });
-  });
-
-
   // Legacy admin employee creation route - now redirects to unified HR system
   app.post('/api/admin/create-employee', isAuthenticated, async (req, res) => {
     res.status(410).json({ 

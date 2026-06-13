@@ -12,7 +12,7 @@ export async function logSecurityEvent(req: any, action: string, severity: 'low'
       resource: req.route?.path || req.path,
       ipAddress: req.ip || req.connection.remoteAddress,
       userAgent: req.get('User-Agent'),
-      sessionId: req.sessionID,
+      sessionId: (req as any).auth?.sessionId || req.user?.id || null,
       severity,
       metadata: metadata ? JSON.stringify(metadata) : null,
     });
