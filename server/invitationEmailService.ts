@@ -1,4 +1,4 @@
-import { sendEmail } from './sendgrid';
+import { sendEmail } from './email';
 import type { InvitationToken } from '@shared/schema';
 
 interface InvitationEmailData {

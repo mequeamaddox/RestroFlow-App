@@ -56,7 +56,7 @@ import {
   cancelSubscriptionSchema,
 } from "@shared/subscriptionSchemas";
 import { InvitationEmailService } from "./invitationEmailService";
-import { sendEmail } from "./sendgrid";
+import { sendEmail } from "./email";
 import {
   isStripeEnabled,
   createCheckoutSession,
@@ -3047,9 +3047,7 @@ print(json.dumps(rows))
           // Send welcome email with login credentials
           console.log('📧 Attempting to send welcome email to:', employee.email);
           try {
-            console.log('📧 Importing SendGrid service...');
-            const { sendEmail } = await import('./sendgrid');
-            console.log('📧 SendGrid service imported successfully');
+            const { sendEmail } = await import('./email');
             
             const emailParams = {
               to: employee.email,
@@ -4467,7 +4465,7 @@ print(json.dumps(rows))
       // Send invitation based on method
       if (sendMethod === 'email' && email) {
         try {
-          const { sendEmail } = await import('./sendgrid');
+          const { sendEmail } = await import('./email');
           const employee = await storage.getEmployee(employeeId);
           
           await sendEmail({
@@ -5248,18 +5246,18 @@ print(json.dumps(rows))
     }
   });
 
-  // Test endpoint for SendGrid email functionality
+  // Test endpoint for Resend email functionality
   app.post('/api/test/email', isAuthenticated, async (req, res) => {
     try {
-      console.log('🧪 Testing SendGrid email functionality...');
-      const { sendEmail } = await import('./sendgrid');
+      console.log('🧪 Testing Resend email functionality...');
+      const { sendEmail } = await import('./email');
       
       const testResult = await sendEmail({
         to: 'mequeamaddox@gmail.com',
         from: 'mequeamaddox@gmail.com',
         subject: 'RestroFlow Email Test',
-        text: 'This is a test email from RestroFlow to verify SendGrid is working.',
-        html: '<p>This is a <strong>test email</strong> from RestroFlow to verify SendGrid is working.</p>'
+        text: 'This is a test email from RestroFlow to verify Resend is working.',
+        html: '<p>This is a <strong>test email</strong> from RestroFlow to verify Resend is working.</p>'
       });
       
       console.log('✅ Test email sent successfully!');

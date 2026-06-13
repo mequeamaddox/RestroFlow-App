@@ -110,6 +110,7 @@
     "react-icons": "^5.4.0",
     "react-resizable-panels": "^2.1.7",
     "recharts": "^2.15.2",
+    "resend": "^6.12.4",
     "sharp": "^0.34.3",
     "squareup": "^1.0.0",
     "stripe": "^18.4.0",
