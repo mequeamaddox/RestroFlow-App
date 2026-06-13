@@ -3594,7 +3594,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.post('/api/hr/payroll/pay-periods/:id/calculate', async (req, res) => {
+  app.post('/api/hr/payroll/pay-periods/:id/calculate', isAuthenticated, async (req, res) => {
     try {
       const paystubs = await storage.calculatePayroll(req.params.id);
       res.json(paystubs);
@@ -3715,7 +3715,7 @@ print(json.dumps(rows))
   });
 
   // Manual payroll entry endpoints
-  app.post('/api/payroll-periods/:id/manual-paycheck', async (req, res) => {
+  app.post('/api/payroll-periods/:id/manual-paycheck', isAuthenticated, async (req, res) => {
     try {
       const payPeriodId = req.params.id;
       const manualData = req.body;
@@ -3728,7 +3728,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.patch('/api/paychecks/:id', async (req, res) => {
+  app.patch('/api/paychecks/:id', isAuthenticated, async (req, res) => {
     try {
       const paycheckId = req.params.id;
       const updateData = req.body;
@@ -3742,7 +3742,7 @@ print(json.dumps(rows))
   });
 
   // Employee pay stub access endpoints
-  app.get('/api/employee/:employeeId/pay-stubs', async (req, res) => {
+  app.get('/api/employee/:employeeId/pay-stubs', isAuthenticated, async (req, res) => {
     try {
       const { employeeId } = req.params;
       const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
@@ -3770,7 +3770,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.get('/api/employee/:employeeId/payroll-summary', async (req, res) => {
+  app.get('/api/employee/:employeeId/payroll-summary', isAuthenticated, async (req, res) => {
     try {
       const { employeeId } = req.params;
       const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
@@ -5056,7 +5056,7 @@ print(json.dumps(rows))
   // Payroll API Routes
   
   // Get payroll periods
-  app.get("/api/payroll-periods", async (req, res) => {
+  app.get("/api/payroll-periods", isAuthenticated, async (req, res) => {
     try {
       const { locationId } = req.query;
       const periods = await storage.getPayrollPeriods(locationId as string);
@@ -5144,7 +5144,7 @@ print(json.dumps(rows))
   });
 
   // Get paychecks for a payroll period
-  app.get("/api/payroll-periods/:id/paychecks", async (req, res) => {
+  app.get("/api/payroll-periods/:id/paychecks", isAuthenticated, async (req, res) => {
     try {
       const paychecks = await storage.getPaychecks(req.params.id);
       res.json(paychecks);
@@ -5201,7 +5201,7 @@ print(json.dumps(rows))
   });
 
   // Payroll settings routes - now with location-aware functionality
-  app.get("/api/payroll/paycheck-settings", async (req, res) => {
+  app.get("/api/payroll/paycheck-settings", isAuthenticated, async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       const settings = await storage.getPaycheckSettings(locationId);
@@ -5212,7 +5212,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.put("/api/payroll/paycheck-settings", async (req, res) => {
+  app.put("/api/payroll/paycheck-settings", isAuthenticated, async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       console.log('🎯 Updating paycheck settings with real data:', req.body);
