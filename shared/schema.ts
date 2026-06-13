@@ -74,6 +74,7 @@ export const categories = pgTable("categories", {
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
   type: varchar("type", { length: 50 }).default("general"), // general, bar, kitchen, cleaning, etc.
+  locationId: uuid("location_id").references(() => locations.id, { onDelete: "cascade" }), // null = global/shared across all locations
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -795,6 +796,7 @@ export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   title: varchar("title", { length: 200 }).notNull(),
   description: text("description"),
+  locationId: uuid("location_id").references(() => locations.id, { onDelete: "cascade" }),
   assignedTo: uuid("assigned_to").references(() => employees.id),
   createdBy: uuid("created_by").references(() => users.id),
   priority: varchar("priority").default("medium"),
@@ -823,6 +825,7 @@ export const taskCompletions = pgTable("task_completions", {
 // Team messaging and announcements
 export const messages = pgTable("messages", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  locationId: uuid("location_id").references(() => locations.id, { onDelete: "cascade" }), // null = system-wide broadcast
   senderId: varchar("sender_id").references(() => users.id), // Changed from uuid to varchar to match users.id
   recipientType: varchar("recipient_type", { length: 20 }).notNull(), // individual, department, location, all
   recipientId: uuid("recipient_id"), // employee/department/location ID
@@ -888,6 +891,7 @@ export const timeEntries = pgTable("time_entries", {
 // Team Resources for document management
 export const teamResources = pgTable("team_resources", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  locationId: uuid("location_id").references(() => locations.id, { onDelete: "cascade" }), // null = shared across all locations
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   fileUrl: varchar("file_url", { length: 500 }).notNull(),

@@ -1,4 +1,5 @@
 import { clerkMiddleware } from './clerkAuth';
+import { locationContextMiddleware } from './locationContext';
 import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
@@ -39,6 +40,7 @@ app.use(clerkMiddleware({
   publishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY,
   secretKey: process.env.VITE_CLERK_SECRET_KEY,
 }));
+app.use(locationContextMiddleware);
 // Enable cookie parsing for session management
 
 app.use((req, res, next) => {
