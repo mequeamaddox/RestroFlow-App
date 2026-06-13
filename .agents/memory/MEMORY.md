@@ -1,0 +1,1 @@
+- [npm registry override](npm-registry-override.md) — Replit env var forces package firewall; use --registry=https://registry.npmjs.org/ CLI flag, never rely on .npmrc alone

@@ -39,7 +39,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm install --no-fund --no-audit && npm run dev"
+args = "rm -rf node_modules && npm install --registry=https://registry.npmjs.org/ --no-fund --no-audit && npm run dev"
 waitForPort = 5000
 
 [agent]
