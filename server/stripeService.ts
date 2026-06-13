@@ -32,6 +32,7 @@ export async function createCheckoutSession(params: {
   stripeCustomerId?: string | null;
   successUrl: string;
   cancelUrl: string;
+  trialDays?: number;
 }): Promise<string> {
   if (!stripe) throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY.');
   const plan = PLANS[params.plan];
@@ -49,6 +50,7 @@ export async function createCheckoutSession(params: {
     metadata: { userId: params.userId, plan: params.plan },
     subscription_data: {
       metadata: { userId: params.userId, plan: params.plan },
+      ...(params.trialDays ? { trial_period_days: params.trialDays } : {}),
     },
     allow_promotion_codes: true,
   };
@@ -62,6 +64,17 @@ export async function createCheckoutSession(params: {
   const session = await stripe.checkout.sessions.create(sessionParams);
   if (!session.url) throw new Error('Stripe did not return a checkout URL');
   return session.url;
+}
+
+export async function cancelStripeSubscription(
+  subscriptionId: string,
+  immediately = false
+): Promise<Stripe.Subscription> {
+  if (!stripe) throw new Error('Stripe is not configured.');
+  if (immediately) {
+    return stripe.subscriptions.cancel(subscriptionId);
+  }
+  return stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true });
 }
 
 export async function createPortalSession(params: {

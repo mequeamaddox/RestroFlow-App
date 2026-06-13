@@ -192,14 +192,21 @@ export function requireLocationAccess(locationId?: string) {
   return async (req: any, res: Response, next: NextFunction) => {
     try {
       const userId = req.user?.id;
-      const targetLocationId = locationId || req.params.locationId || req.query.locationId;
-      
+      const userRole = req.user?.role;
+      const targetLocationId = locationId || req.params.locationId || req.query.locationId as string || req.body?.locationId;
+
       if (!targetLocationId) {
         return res.status(400).json({ message: 'Location ID required' });
       }
 
+      // Owners have unrestricted access to all locations within their organisation
+      if (userRole === 'owner') {
+        req.authorizedLocationId = targetLocationId;
+        return next();
+      }
+
       const permissions = await storage.getUserPermissions(userId);
-      const hasLocationAccess = permissions.some(perm => 
+      const hasLocationAccess = permissions.some(perm =>
         perm.locationId === targetLocationId && perm.isActive
       );
 
@@ -207,7 +214,7 @@ export function requireLocationAccess(locationId?: string) {
         await logSecurityEvent(req, 'location_access_denied', 'high', {
           user_id: userId,
           attempted_location: targetLocationId,
-          user_locations: permissions.map(p => p.locationId)
+          user_locations: permissions.map((p: any) => p.locationId),
         });
         return res.status(403).json({ message: 'Access denied to this location' });
       }

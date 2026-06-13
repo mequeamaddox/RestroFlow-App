@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { requireAuth, optionalAuth, type AuthenticatedRequest } from './clerkAuth';
 import { getAuth, createClerkClient } from '@clerk/express';
 import { requirePermission, requireAnyPermission, Permission } from "./permissions";
+import { requireLocationAccess } from "./securityMiddleware";
 import multer from "multer";
 import csv from "csv-parser";
 import { Readable } from "stream";
@@ -58,9 +59,11 @@ import {
 import { InvitationEmailService } from "./invitationEmailService";
 import { sendEmail } from "./email";
 import {
+  stripe,
   isStripeEnabled,
   createCheckoutSession,
   createPortalSession,
+  cancelStripeSubscription,
   constructWebhookEvent,
   mapStripeStatusToPlan,
   type StripePlan,
@@ -1016,7 +1019,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Dashboard metrics
-  app.get('/api/dashboard/metrics', isAuthenticated, async (req, res) => {
+  app.get('/api/dashboard/metrics', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       const metrics = await storage.getDashboardMetrics(locationId);
@@ -1073,7 +1076,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Vendors
-  app.get('/api/vendors', isAuthenticated, async (req, res) => {
+  app.get('/api/vendors', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       const vendors = await storage.getVendors(locationId);
@@ -1133,7 +1136,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Inventory Items
-  app.get('/api/inventory', isAuthenticated, async (req, res) => {
+  app.get('/api/inventory', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       const items = await storage.getInventoryItems(locationId);
@@ -1683,7 +1686,7 @@ print(json.dumps(rows))
 
   // Menu Items & Recipes
   // Recipes
-  app.get('/api/recipes', isAuthenticated, async (req, res) => {
+  app.get('/api/recipes', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       const recipes = await storage.getRecipes(locationId);
@@ -1829,7 +1832,7 @@ print(json.dumps(rows))
   });
 
   // Enterprise Variance Reporting API Routes
-  app.get('/api/variance/summary', isAuthenticated, async (req, res) => {
+  app.get('/api/variance/summary', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       const days = parseInt(req.query.days as string) || 30;
@@ -1846,7 +1849,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.get('/api/variance/report', isAuthenticated, async (req, res) => {
+  app.get('/api/variance/report', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       const startDate = new Date(req.query.startDate as string);
@@ -1864,7 +1867,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.get('/api/variance/production', isAuthenticated, async (req, res) => {
+  app.get('/api/variance/production', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       const startDate = new Date(req.query.startDate as string);
@@ -1954,7 +1957,7 @@ print(json.dumps(rows))
   });
 
   // Purchase Orders
-  app.get('/api/purchase-orders', isAuthenticated, async (req, res) => {
+  app.get('/api/purchase-orders', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       const orders = await storage.getPurchaseOrders(locationId);
@@ -2173,7 +2176,7 @@ print(json.dumps(rows))
   });
 
   // Waste Tracking
-  app.get('/api/waste', isAuthenticated, async (req, res) => {
+  app.get('/api/waste', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       const entries = await storage.getWasteEntries(locationId);
@@ -5947,53 +5950,45 @@ print(json.dumps(rows))
     }
   });
 
-  // POST /api/subscriptions/cancel - Cancel active subscription
+  // POST /api/subscriptions/cancel - Cancel active Stripe subscription at period end
   app.post('/api/subscriptions/cancel', isAuthenticated, async (req, res) => {
     try {
-      if (!squareSubscriptionService.isEnabled()) {
-        return res.status(503).json({ 
-          message: 'Square subscription service not configured' 
-        });
-      }
-
-      const validatedData = cancelSubscriptionSchema.parse(req.body);
       const userId = req.user!.id;
-
       const user = await storage.getSubscriptionByUser(userId);
-      if (!user || !user.squareSubscriptionId) {
-        return res.status(404).json({ 
-          message: 'No active subscription found' 
-        });
+
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
       }
 
       // Only owners can cancel subscriptions
       if (user.role !== 'owner') {
-        return res.status(403).json({ 
-          message: 'Access denied. Only business owners can cancel subscriptions.' 
+        return res.status(403).json({
+          message: 'Access denied. Only business owners can cancel subscriptions.',
         });
       }
 
-      console.log('🔄 Cancelling Square subscription:', user.squareSubscriptionId);
-
-      // Cancel subscription in Square
-      const cancelled = await squareSubscriptionService.cancelSubscription(user.squareSubscriptionId);
-      
-      if (!cancelled) {
-        throw new Error('Failed to cancel subscription in Square');
+      // If the user has a Stripe subscription, cancel via Stripe
+      if (user.stripeSubscriptionId && isStripeEnabled) {
+        console.log('🔄 Cancelling Stripe subscription at period end:', user.stripeSubscriptionId);
+        await cancelStripeSubscription(user.stripeSubscriptionId, false);
+        // Status will be updated by the customer.subscription.updated webhook
+        console.log('✅ Stripe subscription set to cancel at period end for user:', userId);
+        return res.json({
+          success: true,
+          message: 'Your subscription will be cancelled at the end of the current billing period.',
+        });
       }
 
-      // Update user subscription status
+      // Fallback: no Stripe subscription — direct downgrade to free
       await storage.updateUserSubscription(userId, {
         subscriptionStatus: 'cancelled',
         hrAddonEnabled: false,
-        ocrCreditsLimit: 5 // Reset to free plan limit
+        ocrCreditsLimit: 5,
       });
-
-      console.log('✅ Square subscription cancelled successfully for user:', userId);
 
       res.json({
         success: true,
-        message: 'Subscription cancelled successfully'
+        message: 'Subscription cancelled successfully',
       });
 
     } catch (error) {
@@ -6145,6 +6140,7 @@ print(json.dumps(rows))
       if (!user) return res.status(404).json({ message: 'User not found' });
 
       const host = `${req.protocol}://${req.get('host')}`;
+      const trialDays = req.body.trialDays ? parseInt(req.body.trialDays) : undefined;
       const checkoutUrl = await createCheckoutSession({
         userId,
         email: user.email!,
@@ -6152,6 +6148,7 @@ print(json.dumps(rows))
         stripeCustomerId: user.stripeCustomerId,
         successUrl: `${host}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${host}/subscription`,
+        ...(trialDays && trialDays > 0 ? { trialDays } : {}),
       });
 
       res.json({ checkoutUrl });
@@ -6263,6 +6260,72 @@ print(json.dumps(rows))
               ocrCreditsLimit: 5,
             });
             console.log(`✅ Stripe customer.subscription.deleted: user=${userId} → free`);
+          }
+          break;
+        }
+
+        case 'invoice.paid': {
+          const invoice = event.data.object as any;
+          const customerId: string = invoice.customer;
+          // Refresh subscription end date when an invoice is successfully paid
+          if (customerId && stripe) {
+            try {
+              const subscriptions = await stripe.subscriptions.list({ customer: customerId, limit: 1 });
+              const sub = subscriptions.data[0];
+              if (sub?.metadata?.userId) {
+                await storage.updateUserSubscription(sub.metadata.userId, {
+                  subscriptionStatus: mapStripeStatusToPlan(sub.status),
+                });
+                console.log(`✅ Stripe invoice.paid: refreshed status for customer=${customerId}`);
+              }
+            } catch (e) {
+              console.error('❌ Failed to refresh subscription after invoice.paid:', e);
+            }
+          }
+          break;
+        }
+
+        case 'customer.subscription.trial_will_end': {
+          const sub = event.data.object as any;
+          const userId: string = sub.metadata?.userId;
+          const trialEnd: number = sub.trial_end;
+          const customerEmail: string = sub.customer_email;
+
+          if (customerEmail || userId) {
+            try {
+              let email = customerEmail;
+              if (!email && userId) {
+                const u = await storage.getUser(userId);
+                email = u?.email ?? '';
+              }
+              if (email) {
+                const trialEndDate = new Date(trialEnd * 1000).toLocaleDateString('en-US', {
+                  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+                });
+                const appUrl = process.env.APP_URL || 'https://app.restroflow.com';
+                await sendEmail({
+                  to: email,
+                  from: 'billing@restroflow.com',
+                  subject: 'Your RestroFlow trial ends soon',
+                  html: `
+                    <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+                      <h2 style="color:#f97316;">Your free trial ends on ${trialEndDate}</h2>
+                      <p>After your trial ends, you'll be charged automatically based on your chosen plan.
+                         No action needed if you'd like to continue — your card on file will be billed.</p>
+                      <p>To update your payment method or cancel before the trial ends, visit your billing portal.</p>
+                      <a href="${appUrl}/subscription"
+                         style="display:inline-block;background:#f97316;color:white;padding:12px 28px;
+                                text-decoration:none;border-radius:6px;font-weight:600;margin:16px 0;">
+                        Manage Subscription →
+                      </a>
+                    </div>
+                  `,
+                });
+                console.log(`📧 Trial-ending reminder sent to ${email}`);
+              }
+            } catch (emailErr) {
+              console.error('❌ Failed to send trial-ending email:', emailErr);
+            }
           }
           break;
         }
