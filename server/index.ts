@@ -41,7 +41,7 @@ app.use(express.json({
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(session({
-  store: new PgStore({ conString: process.env.DATABASE_URL, tableName: 'sessions' }),
+  store: new PgStore({ conString: process.env.DATABASE_URL || process.env.NEON_DATABASE_URL, tableName: 'sessions' }),
   secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
   resave: false,
   saveUninitialized: false,
