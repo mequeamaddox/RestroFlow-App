@@ -2,6 +2,10 @@ import { clerkMiddleware } from './clerkAuth';
 import { locationContextMiddleware } from './locationContext';
 import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
+import session from 'express-session';
+import pgSession from 'connect-pg-simple';
+
+const PgStore = pgSession(session);
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { securityHeaders, apiLimiter } from "./securityMiddleware";
@@ -36,6 +40,18 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
+app.use(session({
+  store: new PgStore({ conString: process.env.DATABASE_URL, tableName: 'sessions' }),
+  secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  },
+}));
 app.use(clerkMiddleware({
   publishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY,
   secretKey: process.env.VITE_CLERK_SECRET_KEY,
