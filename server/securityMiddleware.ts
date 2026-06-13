@@ -187,52 +187,65 @@ export function validateInput(schema: any) {
   };
 }
 
-// Location access control
+// Core location access check — usable both as middleware and inline in route handlers.
+// Sends 403/404 itself and returns false if denied; returns true if access is granted.
+export async function assertLocationAccess(req: any, res: Response, locationId: string): Promise<boolean> {
+  const userId = req.user?.id;
+  const userRole = req.user?.role;
+
+  if (!userId) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return false;
+  }
+
+  // Every user (including owners) must own or have explicit permission for the location.
+  if (userRole === 'owner') {
+    const location = await storage.getLocationById(locationId);
+    if (!location) {
+      res.status(404).json({ message: 'Location not found' });
+      return false;
+    }
+    if (location.ownerId && location.ownerId !== userId) {
+      await logSecurityEvent(req, 'location_access_denied', 'critical', {
+        user_id: userId,
+        attempted_location: locationId,
+        location_owner: location.ownerId,
+      });
+      res.status(403).json({ message: 'Access denied to this location' });
+      return false;
+    }
+    return true;
+  }
+
+  const permissions = await storage.getUserPermissions(userId);
+  const hasAccess = permissions.some((p: any) => p.locationId === locationId && p.isActive);
+  if (!hasAccess) {
+    await logSecurityEvent(req, 'location_access_denied', 'high', {
+      user_id: userId,
+      attempted_location: locationId,
+      user_locations: permissions.map((p: any) => p.locationId),
+    });
+    res.status(403).json({ message: 'Access denied to this location' });
+    return false;
+  }
+  return true;
+}
+
+// Location access control middleware — reads locationId from params, query, or body.
 export function requireLocationAccess(locationId?: string) {
   return async (req: any, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user?.id;
-      const userRole = req.user?.role;
-      const targetLocationId = locationId || req.params.locationId || req.query.locationId as string || req.body?.locationId;
+      const targetLocationId = locationId || req.params.locationId || (req.query.locationId as string) || req.body?.locationId;
 
       if (!targetLocationId) {
         return res.status(400).json({ message: 'Location ID required' });
       }
 
-      // Owners can only access locations they own (ownerId matches) or legacy locations (ownerId null)
-      if (userRole === 'owner') {
-        const location = await storage.getLocationById(targetLocationId);
-        if (!location) {
-          return res.status(404).json({ message: 'Location not found' });
-        }
-        if (location.ownerId && location.ownerId !== userId) {
-          await logSecurityEvent(req, 'location_access_denied', 'critical', {
-            user_id: userId,
-            attempted_location: targetLocationId,
-            location_owner: location.ownerId,
-          });
-          return res.status(403).json({ message: 'Access denied to this location' });
-        }
+      const allowed = await assertLocationAccess(req, res, targetLocationId);
+      if (allowed) {
         req.authorizedLocationId = targetLocationId;
-        return next();
+        next();
       }
-
-      const permissions = await storage.getUserPermissions(userId);
-      const hasLocationAccess = permissions.some(perm =>
-        perm.locationId === targetLocationId && perm.isActive
-      );
-
-      if (!hasLocationAccess) {
-        await logSecurityEvent(req, 'location_access_denied', 'high', {
-          user_id: userId,
-          attempted_location: targetLocationId,
-          user_locations: permissions.map((p: any) => p.locationId),
-        });
-        return res.status(403).json({ message: 'Access denied to this location' });
-      }
-
-      req.authorizedLocationId = targetLocationId;
-      next();
     } catch (error) {
       console.error('Location access control error:', error);
       res.status(500).json({ message: 'Access control error' });

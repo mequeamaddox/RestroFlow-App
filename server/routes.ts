@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { requireAuth, optionalAuth, type AuthenticatedRequest } from './clerkAuth';
 import { getAuth, createClerkClient } from '@clerk/express';
 import { requirePermission, requireAnyPermission, Permission } from "./permissions";
-import { requireLocationAccess } from "./securityMiddleware";
+import { requireLocationAccess, assertLocationAccess } from "./securityMiddleware";
 import multer from "multer";
 import csv from "csv-parser";
 import { Readable } from "stream";
@@ -272,12 +272,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { status } = req.body;
       const inv = await storage.getInvoiceById(id);
       if (!inv) return res.status(404).json({ message: 'Invoice not found' });
-      if (req.user!.role !== 'owner') {
-        const perms = await storage.getUserPermissions(req.user!.id);
-        if (!perms.some((p: any) => p.locationId === inv.location_id && p.isActive)) {
-          return res.status(403).json({ message: 'Access denied' });
-        }
-      }
+      if (!await assertLocationAccess(req, res, inv.location_id)) return;
       const invoice = await storage.updateInvoiceStatus(id, status);
       res.json(invoice);
     } catch (error) {
@@ -291,12 +286,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const inv = await storage.getInvoiceById(id);
       if (!inv) return res.status(404).json({ message: 'Invoice not found' });
-      if (req.user!.role !== 'owner') {
-        const perms = await storage.getUserPermissions(req.user!.id);
-        if (!perms.some((p: any) => p.locationId === inv.location_id && p.isActive)) {
-          return res.status(403).json({ message: 'Access denied' });
-        }
-      }
+      if (!await assertLocationAccess(req, res, inv.location_id)) return;
       await storage.deleteInvoice(id);
       res.json({ message: "Invoice deleted successfully" });
     } catch (error) {
@@ -355,14 +345,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('OCR completed with confidence:', ocrResult.confidence);
       console.log('Extracted text preview:', ocrResult.text.substring(0, 200) + '...');
 
-      // Save the uploaded file to object storage (falls back to disk if unavailable)
+      // Save the uploaded file to object storage.
+      // In production, object storage is required — no silent fallback to local disk.
       let filePath: string;
+      const isProduction = process.env.NODE_ENV === 'production';
       try {
         const objService = new ObjectStorageService();
         filePath = await objService.uploadBuffer(req.file.buffer, req.file.mimetype, 'invoices');
         console.log('Saved invoice file to object storage:', filePath);
       } catch (storageErr) {
-        console.warn('Object storage unavailable, falling back to local disk:', storageErr);
+        if (isProduction) {
+          console.error('Object storage failed in production — refusing disk fallback:', storageErr);
+          return res.status(503).json({
+            message: 'File storage unavailable. Please try again later.',
+            error: 'object_storage_unavailable',
+          });
+        }
+        // Dev-only disk fallback
+        console.warn('Object storage unavailable (dev), falling back to local disk:', storageErr);
         const timestamp = Date.now();
         const sanitizedFilename = req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
         const fileExtension = path.extname(sanitizedFilename);
@@ -372,7 +372,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const uploadDir = path.dirname(filePath);
         if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
         fs.writeFileSync(filePath, req.file.buffer);
-        console.log('Saved invoice file to disk (fallback):', filePath);
+        console.log('Saved invoice file to disk (dev fallback):', filePath);
       }
 
       // Parse invoice data from extracted text
@@ -502,12 +502,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Verify the requesting user has access to this invoice's location
-      if (req.user!.role !== 'owner') {
-        const perms = await storage.getUserPermissions(req.user!.id);
-        if (!perms.some((p: any) => p.locationId === invoice.location_id && p.isActive)) {
-          return res.status(403).json({ message: 'Access denied' });
-        }
-      }
+      if (!await assertLocationAccess(req, res, invoice.location_id)) return;
 
       const attachmentPath: string = invoice.attachment_path;
 
@@ -545,12 +540,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const invoiceId = req.params.id;
       const inv = await storage.getInvoiceById(invoiceId);
       if (!inv) return res.status(404).json({ message: 'Invoice not found' });
-      if (req.user!.role !== 'owner') {
-        const perms = await storage.getUserPermissions(req.user!.id);
-        if (!perms.some((p: any) => p.locationId === inv.location_id && p.isActive)) {
-          return res.status(403).json({ message: 'Access denied' });
-        }
-      }
+      if (!await assertLocationAccess(req, res, inv.location_id)) return;
       console.log('🔍 Approve request received for invoice:', invoiceId);
       console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
       
@@ -1122,9 +1112,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const vendor = await storage.getVendor(id);
-      if (!vendor) {
-        return res.status(404).json({ message: "Vendor not found" });
-      }
+      if (!vendor) return res.status(404).json({ message: "Vendor not found" });
+      if (vendor.locationId && !await assertLocationAccess(req, res, vendor.locationId)) return;
       res.json(vendor);
     } catch (error) {
       console.error("Error fetching vendor:", error);
@@ -1146,6 +1135,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/vendors/:id', isAuthenticated, async (req, res) => {
     try {
       const { id } = req.params;
+      const existing = await storage.getVendor(id);
+      if (!existing) return res.status(404).json({ message: "Vendor not found" });
+      if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
       const vendorData = insertVendorSchema.partial().parse(req.body);
       const vendor = await storage.updateVendor(id, vendorData);
       res.json(vendor);
@@ -1158,6 +1150,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/vendors/:id', isAuthenticated, async (req, res) => {
     try {
       const { id } = req.params;
+      const existing = await storage.getVendor(id);
+      if (!existing) return res.status(404).json({ message: "Vendor not found" });
+      if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
       await storage.deleteVendor(id);
       res.status(204).send();
     } catch (error) {
@@ -1178,7 +1173,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/inventory/low-stock', isAuthenticated, async (req, res) => {
+  app.get('/api/inventory/low-stock', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       const items = await storage.getLowStockItems(locationId);
@@ -1190,7 +1185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get remaining stock levels with multi-unit conversion
-  app.get('/api/inventory/stock-levels', isAuthenticated, async (req, res) => {
+  app.get('/api/inventory/stock-levels', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       
@@ -1210,9 +1205,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const item = await storage.getInventoryItem(id);
-      if (!item) {
-        return res.status(404).json({ message: "Inventory item not found" });
-      }
+      if (!item) return res.status(404).json({ message: "Inventory item not found" });
+      if (item.locationId && !await assertLocationAccess(req, res, item.locationId)) return;
       res.json(item);
     } catch (error) {
       console.error("Error fetching inventory item:", error);
@@ -1249,6 +1243,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/inventory/:id', isAuthenticated, async (req, res) => {
     try {
       const { id } = req.params;
+      const existing = await storage.getInventoryItem(id);
+      if (!existing) return res.status(404).json({ message: "Inventory item not found" });
+      if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
       const itemData = insertInventoryItemSchema.partial().parse(req.body);
       const item = await storage.updateInventoryItem(id, itemData);
       res.json(item);
@@ -1261,6 +1258,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/inventory/:id', isAuthenticated, async (req, res) => {
     try {
       const { id } = req.params;
+      const existing = await storage.getInventoryItem(id);
+      if (!existing) return res.status(404).json({ message: "Inventory item not found" });
+      if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
       await storage.deleteInventoryItem(id);
       res.status(204).send();
     } catch (error) {
@@ -1732,9 +1732,8 @@ print(json.dumps(rows))
     try {
       const { id } = req.params;
       const recipe = await storage.getRecipe(id);
-      if (!recipe) {
-        return res.status(404).json({ message: "Recipe not found" });
-      }
+      if (!recipe) return res.status(404).json({ message: "Recipe not found" });
+      if (recipe.locationId && !await assertLocationAccess(req, res, recipe.locationId)) return;
       res.json(recipe);
     } catch (error) {
       console.error("Error fetching recipe:", error);
@@ -1916,7 +1915,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.post('/api/variance/production', isAuthenticated, async (req, res) => {
+  app.post('/api/variance/production', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const { recipeId, locationId, quantityProduced, batchNumber } = req.body;
       const userId = req.user!.id;
@@ -1944,7 +1943,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.post('/api/variance/generate', isAuthenticated, async (req, res) => {
+  app.post('/api/variance/generate', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const { locationId, startDate, endDate } = req.body;
       
@@ -2003,9 +2002,8 @@ print(json.dumps(rows))
     try {
       const { id } = req.params;
       const order = await storage.getPurchaseOrder(id);
-      if (!order) {
-        return res.status(404).json({ message: "Purchase order not found" });
-      }
+      if (!order) return res.status(404).json({ message: "Purchase order not found" });
+      if (order.locationId && !await assertLocationAccess(req, res, order.locationId)) return;
       res.json(order);
     } catch (error) {
       console.error("Error fetching purchase order:", error);
@@ -2045,9 +2043,8 @@ print(json.dumps(rows))
       
       // Get current order to check status change
       const currentOrder = await storage.getPurchaseOrder(id);
-      if (!currentOrder) {
-        return res.status(404).json({ message: "Purchase order not found" });
-      }
+      if (!currentOrder) return res.status(404).json({ message: "Purchase order not found" });
+      if (currentOrder.locationId && !await assertLocationAccess(req, res, currentOrder.locationId)) return;
       
       // Convert string dates to Date objects and prepare data
       const orderData = {
