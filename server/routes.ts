@@ -244,7 +244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
  // Mobile login handled by Clerk
 
   // Invoice Processing Routes
-  app.get('/api/invoices', isAuthenticated, async (req, res) => {
+  app.get('/api/invoices', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const { status, locationId } = req.query;
       const invoices = await storage.getInvoices(status as string, locationId as string);
@@ -270,6 +270,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const { status } = req.body;
+      const inv = await storage.getInvoiceById(id);
+      if (!inv) return res.status(404).json({ message: 'Invoice not found' });
+      if (req.user!.role !== 'owner') {
+        const perms = await storage.getUserPermissions(req.user!.id);
+        if (!perms.some((p: any) => p.locationId === inv.location_id && p.isActive)) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+      }
       const invoice = await storage.updateInvoiceStatus(id, status);
       res.json(invoice);
     } catch (error) {
@@ -281,6 +289,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/invoices/:id', isAuthenticated, async (req, res) => {
     try {
       const { id } = req.params;
+      const inv = await storage.getInvoiceById(id);
+      if (!inv) return res.status(404).json({ message: 'Invoice not found' });
+      if (req.user!.role !== 'owner') {
+        const perms = await storage.getUserPermissions(req.user!.id);
+        if (!perms.some((p: any) => p.locationId === inv.location_id && p.isActive)) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+      }
       await storage.deleteInvoice(id);
       res.json({ message: "Invoice deleted successfully" });
     } catch (error) {
@@ -289,7 +305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/invoices/stats', isAuthenticated, async (req, res) => {
+  app.get('/api/invoices/stats', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const { locationId } = req.query;
       const stats = await storage.getInvoiceStats(locationId as string);
@@ -301,7 +317,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Invoice Upload with AWS Textract OCR Processing
-  app.post('/api/invoices/upload', isAuthenticated, upload.single('invoice'), async (req, res) => {
+  app.post('/api/invoices/upload', isAuthenticated, requireLocationAccess(), upload.single('invoice'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
@@ -339,23 +355,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('OCR completed with confidence:', ocrResult.confidence);
       console.log('Extracted text preview:', ocrResult.text.substring(0, 200) + '...');
 
-      // Save the uploaded file permanently
-      const timestamp = Date.now();
-      const sanitizedFilename = req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const fileExtension = path.extname(sanitizedFilename);
-      const baseFilename = path.basename(sanitizedFilename, fileExtension);
-      const fileName = `${timestamp}_${baseFilename}${fileExtension}`;
-      const filePath = path.join('uploads', 'invoices', fileName);
-      
-      // Ensure the directory exists
-      const uploadDir = path.dirname(filePath);
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
+      // Save the uploaded file to object storage (falls back to disk if unavailable)
+      let filePath: string;
+      try {
+        const objService = new ObjectStorageService();
+        filePath = await objService.uploadBuffer(req.file.buffer, req.file.mimetype, 'invoices');
+        console.log('Saved invoice file to object storage:', filePath);
+      } catch (storageErr) {
+        console.warn('Object storage unavailable, falling back to local disk:', storageErr);
+        const timestamp = Date.now();
+        const sanitizedFilename = req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const fileExtension = path.extname(sanitizedFilename);
+        const baseFilename = path.basename(sanitizedFilename, fileExtension);
+        const fileName = `${timestamp}_${baseFilename}${fileExtension}`;
+        filePath = path.join('uploads', 'invoices', fileName);
+        const uploadDir = path.dirname(filePath);
+        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+        fs.writeFileSync(filePath, req.file.buffer);
+        console.log('Saved invoice file to disk (fallback):', filePath);
       }
-      
-      // Write the file to disk
-      fs.writeFileSync(filePath, req.file.buffer);
-      console.log('Saved invoice file to:', filePath);
 
       // Parse invoice data from extracted text
       const parsedData = OCRService.parseInvoiceFromText(ocrResult.text);
@@ -477,39 +495,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/invoices/:id/attachment', isAuthenticated, async (req, res) => {
     try {
       const { id } = req.params;
-      
-      // Get invoice data to find attachment path
-      const invoices = await storage.getInvoices();
-      const invoice = invoices.find(inv => inv.id === id);
-      
-      if (!invoice || !invoice.attachmentPath) {
+
+      const invoice = await storage.getInvoiceById(id);
+      if (!invoice || !invoice.attachment_path) {
         return res.status(404).json({ message: "Invoice attachment not found" });
       }
-      
-      // Check if file exists
-      if (!fs.existsSync(invoice.attachmentPath)) {
-        return res.status(404).json({ message: "Attachment file not found on disk" });
+
+      // Verify the requesting user has access to this invoice's location
+      if (req.user!.role !== 'owner') {
+        const perms = await storage.getUserPermissions(req.user!.id);
+        if (!perms.some((p: any) => p.locationId === invoice.location_id && p.isActive)) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
       }
-      
-      // Get file info
-      const fileName = path.basename(invoice.attachmentPath);
-      const fileExtension = path.extname(fileName);
-      
-      // Set appropriate content type
+
+      const attachmentPath: string = invoice.attachment_path;
+
+      // Object storage path — stream via GCS
+      if (attachmentPath.startsWith('/objects/')) {
+        const objService = new ObjectStorageService();
+        const objectFile = await objService.getObjectEntityFile(attachmentPath);
+        return objService.downloadObject(objectFile, res);
+      }
+
+      // Legacy: local disk fallback
+      if (!fs.existsSync(attachmentPath)) {
+        return res.status(404).json({ message: "Attachment file not found" });
+      }
+      const fileName = path.basename(attachmentPath);
+      const fileExtension = path.extname(fileName).toLowerCase();
       let contentType = 'application/octet-stream';
       if (fileExtension === '.pdf') contentType = 'application/pdf';
       else if (fileExtension === '.jpg' || fileExtension === '.jpeg') contentType = 'image/jpeg';
       else if (fileExtension === '.png') contentType = 'image/png';
       else if (fileExtension === '.txt') contentType = 'text/plain';
-      
-      // Set headers for file download/viewing
       res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
-      
-      // Stream the file
-      const fileStream = fs.createReadStream(invoice.attachmentPath);
-      fileStream.pipe(res);
-      
+      fs.createReadStream(attachmentPath).pipe(res);
+
     } catch (error) {
       console.error("Error serving invoice attachment:", error);
       res.status(500).json({ message: "Failed to serve attachment" });
@@ -520,6 +543,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/invoices/:id/approve', isAuthenticated, async (req, res) => {
     try {
       const invoiceId = req.params.id;
+      const inv = await storage.getInvoiceById(invoiceId);
+      if (!inv) return res.status(404).json({ message: 'Invoice not found' });
+      if (req.user!.role !== 'owner') {
+        const perms = await storage.getUserPermissions(req.user!.id);
+        if (!perms.some((p: any) => p.locationId === inv.location_id && p.isActive)) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+      }
       console.log('🔍 Approve request received for invoice:', invoiceId);
       console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
       
@@ -918,7 +949,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Business Intelligence Routes
-  app.get('/api/business-intelligence/daily-pnl', isAuthenticated, async (req, res) => {
+  app.get('/api/business-intelligence/daily-pnl', isAuthenticated, requirePlan('professional'), async (req, res) => {
     try {
       const { range, location } = req.query;
       const pnl = await storage.getDailyPnL(range as string, location as string);
@@ -929,7 +960,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/business-intelligence/kpis', isAuthenticated, async (req, res) => {
+  app.get('/api/business-intelligence/kpis', isAuthenticated, requirePlan('professional'), async (req, res) => {
     try {
       const { range, location } = req.query;
       const kpis = await storage.getKPIMetrics(range as string, location as string);
@@ -940,7 +971,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/business-intelligence/profitability', isAuthenticated, async (req, res) => {
+  app.get('/api/business-intelligence/profitability', isAuthenticated, requirePlan('professional'), async (req, res) => {
     try {
       const { range, location } = req.query;
       const analysis = await storage.getProfitabilityAnalysis(range as string, location as string);
@@ -951,7 +982,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/business-intelligence/menu-performance', isAuthenticated, async (req, res) => {
+  app.get('/api/business-intelligence/menu-performance', isAuthenticated, requirePlan('professional'), async (req, res) => {
     try {
       const { range, location } = req.query;
       const performance = await storage.getMenuPerformance(range as string, location as string);
@@ -962,7 +993,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/business-intelligence/cost-analysis', isAuthenticated, async (req, res) => {
+  app.get('/api/business-intelligence/cost-analysis', isAuthenticated, requirePlan('professional'), async (req, res) => {
     try {
       const { range, location } = req.query;
       const analysis = await storage.getCostAnalysis(range as string, location as string);
@@ -987,7 +1018,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/locations', isAuthenticated, async (req, res) => {
     try {
       const locationData = insertLocationSchema.parse(req.body);
-      const location = await storage.createLocation(locationData);
+      const location = await storage.createLocation({ ...locationData, ownerId: req.user!.id });
       res.status(201).json(location);
     } catch (error) {
       console.error("Error creating location:", error);
@@ -2698,7 +2729,7 @@ print(json.dumps(rows))
   });
 
   // Analytics routes
-  app.get('/api/analytics/alerts', isAuthenticated, async (req: any, res) => {
+  app.get('/api/analytics/alerts', isAuthenticated, requirePlan('professional'), async (req: any, res) => {
     try {
       const locationId = req.query.locationId;
       const result = await db.execute(sql`
@@ -2714,7 +2745,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.get('/api/analytics/business-intelligence', isAuthenticated, async (req: any, res) => {
+  app.get('/api/analytics/business-intelligence', isAuthenticated, requirePlan('professional'), async (req: any, res) => {
     try {
       const locationId = req.query.locationId;
       const period = req.query.period || 'today';
@@ -2775,7 +2806,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.get('/api/analytics/profit-loss', isAuthenticated, async (req: any, res) => {
+  app.get('/api/analytics/profit-loss', isAuthenticated, requirePlan('professional'), async (req: any, res) => {
     try {
       const locationId = req.query.locationId;
       const period = req.query.period || 'month';
@@ -4052,7 +4083,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.get('/api/analytics/realtime', isAuthenticated, async (req, res) => {
+  app.get('/api/analytics/realtime', isAuthenticated, requirePlan('professional'), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       
@@ -4087,7 +4118,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.get('/api/analytics/sales-trend', isAuthenticated, async (req, res) => {
+  app.get('/api/analytics/sales-trend', isAuthenticated, requirePlan('professional'), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       const timeRange = req.query.timeRange as string || '7d';
@@ -4130,7 +4161,7 @@ print(json.dumps(rows))
   });
 
   // Manual backfill endpoint for business intelligence (admin only)
-  app.post('/api/analytics/backfill-bi', isAuthenticated, async (req: any, res) => {
+  app.post('/api/analytics/backfill-bi', isAuthenticated, requirePlan('professional'), async (req: any, res) => {
     try {
       // Only allow owner role to trigger backfill
       if (req.user.role !== 'owner') {

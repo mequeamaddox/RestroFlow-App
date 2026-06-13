@@ -552,6 +552,11 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(locations).orderBy(locations.name);
   }
 
+  async getLocationById(id: string): Promise<Location | null> {
+    const result = await db.execute(sql`SELECT * FROM locations WHERE id = ${id} LIMIT 1`);
+    return (result.rows[0] as Location) || null;
+  }
+
   async createLocation(locationData: InsertLocation): Promise<Location> {
     const [location] = await db
       .insert(locations)
@@ -1956,6 +1961,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(inventoryItems.locationId, locationId));
   }
   // Advanced MarginEdge-like Features Implementation
+
+  async getInvoiceById(id: string): Promise<any | null> {
+    const result = await db.execute(sql`SELECT * FROM invoice_processing WHERE id = ${id} LIMIT 1`);
+    return result.rows[0] || null;
+  }
 
   async getInvoices(status?: string, locationId?: string): Promise<any[]> {
     try {

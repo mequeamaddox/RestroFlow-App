@@ -199,8 +199,20 @@ export function requireLocationAccess(locationId?: string) {
         return res.status(400).json({ message: 'Location ID required' });
       }
 
-      // Owners have unrestricted access to all locations within their organisation
+      // Owners can only access locations they own (ownerId matches) or legacy locations (ownerId null)
       if (userRole === 'owner') {
+        const location = await storage.getLocationById(targetLocationId);
+        if (!location) {
+          return res.status(404).json({ message: 'Location not found' });
+        }
+        if (location.ownerId && location.ownerId !== userId) {
+          await logSecurityEvent(req, 'location_access_denied', 'critical', {
+            user_id: userId,
+            attempted_location: targetLocationId,
+            location_owner: location.ownerId,
+          });
+          return res.status(403).json({ message: 'Access denied to this location' });
+        }
         req.authorizedLocationId = targetLocationId;
         return next();
       }

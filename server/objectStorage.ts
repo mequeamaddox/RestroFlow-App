@@ -170,6 +170,19 @@ export class ObjectStorageService {
     return objectFile;
   }
 
+  // Uploads a buffer (e.g. from multer memoryStorage) directly to object storage.
+  // Returns the /objects/ path to store in the database.
+  async uploadBuffer(buffer: Buffer, contentType: string, subdir = 'invoices'): Promise<string> {
+    const privateObjectDir = this.getPrivateObjectDir();
+    const objectId = randomUUID();
+    const fullPath = `${privateObjectDir}/${subdir}/${objectId}`;
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+    await file.save(buffer, { contentType, resumable: false });
+    return `/objects/${subdir}/${objectId}`;
+  }
+
   normalizeObjectEntityPath(rawPath: string): string {
     if (!rawPath.startsWith("https://storage.googleapis.com/")) {
       return rawPath;

@@ -38,6 +38,7 @@ export const locations = pgTable("locations", {
   manager: varchar("manager"),
   isActive: boolean("is_active").default(true),
   hrAddonEnabled: boolean("hr_addon_enabled").default(false), // HR add-on subscription status
+  ownerId: varchar("owner_id"), // user ID of the owner — enforces cross-tenant isolation
   createdAt: timestamp("created_at").defaultNow(),
 });
 
