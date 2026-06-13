@@ -6291,7 +6291,7 @@ print(json.dumps(rows))
 
           if (customerEmail) {
             try {
-              const appUrl = process.env.APP_URL || `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+              const appUrl = process.env.APP_URL || 'https://app.restroflow.com';
               await sendEmail({
                 to: customerEmail,
                 from: 'billing@restroflow.com',
