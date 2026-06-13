@@ -53,8 +53,8 @@ app.use(session({
   },
 }));
 app.use(clerkMiddleware({
-  publishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY,
-  secretKey: process.env.VITE_CLERK_SECRET_KEY,
+  publishableKey: process.env.CLERK_PUBLISHABLE_KEY || process.env.VITE_CLERK_PUBLISHABLE_KEY,
+  secretKey: process.env.CLERK_SECRET_KEY || process.env.VITE_CLERK_SECRET_KEY,
 }));
 app.use(locationContextMiddleware);
 // Enable cookie parsing for session management

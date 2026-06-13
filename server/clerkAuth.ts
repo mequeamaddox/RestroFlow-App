@@ -1,8 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { clerkMiddleware, getAuth } from '@clerk/express';
+import { clerkMiddleware, getAuth, createClerkClient } from '@clerk/express';
 import { storage } from './storage';
 
-// Extend Express Request interface - same shape as before
 declare global {
   namespace Express {
     interface Request {
@@ -27,7 +26,7 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
-// Invitation system - kept exactly as before
+// Invitation system
 interface Invitation {
   id: string;
   email: string;
@@ -72,12 +71,38 @@ export function getAllInvitations(): Invitation[] {
   return Array.from(invitations.values());
 }
 
-// Export Clerk's middleware for use in index.ts
 export { clerkMiddleware };
 
+// Lazy Clerk client — only instantiated when secret key is present
+function getClerkClient() {
+  const secretKey = process.env.CLERK_SECRET_KEY || process.env.VITE_CLERK_SECRET_KEY;
+  if (!secretKey) return null;
+  return createClerkClient({ secretKey });
+}
+
 /**
- * Main auth middleware - Clerk authentication
- * Same req.user shape, same invitation check, same error responses
+ * Resolve the primary email for a Clerk userId.
+ * Falls back to sessionClaims.email if the API call fails.
+ */
+async function resolveEmail(userId: string, sessionClaims: any): Promise<string> {
+  // Try sessionClaims first (fastest, no API call)
+  const claimEmail = (sessionClaims?.email ?? sessionClaims?.['email_address'] ?? '') as string;
+  if (claimEmail) return claimEmail;
+
+  // Fall back to Clerk API
+  try {
+    const clerkClient = getClerkClient();
+    if (!clerkClient) return '';
+    const clerkUser = await clerkClient.users.getUser(userId);
+    return clerkUser.emailAddresses?.[0]?.emailAddress ?? '';
+  } catch (err) {
+    console.warn('⚠️ Could not fetch Clerk user by ID:', err);
+    return '';
+  }
+}
+
+/**
+ * Main auth middleware — requires a valid Clerk session.
  */
 export async function requireAuth(
   req: Request,
@@ -85,25 +110,28 @@ export async function requireAuth(
   next: NextFunction
 ) {
   try {
-    // Get Clerk auth state from request
     const { userId, sessionClaims } = getAuth(req);
 
     if (!userId) {
       return res.status(401).json({
         message: 'Unauthorized',
-        error: 'No valid authentication found'
+        error: 'No valid Clerk session found'
       });
     }
 
-    const email = sessionClaims?.email as string || '';
+    const email = await resolveEmail(userId, sessionClaims);
 
-    // Load user from database by email
-    let user = await storage.getUserByEmail(email);
+    // Load user from DB
+    let user = email ? await storage.getUserByEmail(email) : null;
 
-    // If not in DB, check if they're an invited employee
+    // If not found by email, try by Clerk ID directly
     if (!user) {
-      console.log('🔍 User not in DB, checking invitation:', email);
+      user = await storage.getUser(userId).catch(() => null);
+    }
 
+    // If still not found, check invited employees
+    if (!user && email) {
+      console.log('🔍 User not in DB, checking invitations:', email);
       const employees = await storage.getEmployees();
       const invitedEmployee = employees.find(emp =>
         emp.email?.toLowerCase() === email.toLowerCase()
@@ -117,14 +145,24 @@ export async function requireAuth(
         });
       }
 
-      // Create user record for invited employee
-      console.log('✅ Creating user record for invited employee:', email);
-      const nameParts = (sessionClaims?.name as string || '').split(' ');
+      // Auto-provision user for invited employee
+      console.log('✅ Provisioning user for invited employee:', email);
+      const clerkClient = getClerkClient();
+      let firstName = '';
+      let lastName = '';
+      if (clerkClient) {
+        try {
+          const clerkUser = await clerkClient.users.getUser(userId);
+          firstName = clerkUser.firstName ?? '';
+          lastName = clerkUser.lastName ?? '';
+        } catch {}
+      }
+
       await storage.upsertUser({
         id: userId,
         email,
-        firstName: nameParts[0] || '',
-        lastName: nameParts.slice(1).join(' ') || '',
+        firstName,
+        lastName,
         role: invitedEmployee.role || 'employee',
       });
 
@@ -138,7 +176,6 @@ export async function requireAuth(
       });
     }
 
-    // Set req.user - exact same shape as before
     req.user = {
       id: user.id,
       email: user.email || '',
@@ -147,11 +184,9 @@ export async function requireAuth(
       role: user.role || 'employee'
     };
 
-    console.log('✅ Clerk auth successful:', user.email, 'role:', user.role);
     next();
-
   } catch (error) {
-    console.error('❌ Clerk auth middleware error:', error);
+    console.error('❌ Clerk auth error:', error);
     res.status(500).json({
       message: 'Authentication error',
       error: 'Internal server error during authentication'
@@ -160,7 +195,7 @@ export async function requireAuth(
 }
 
 /**
- * Optional auth - for public endpoints that work with or without auth
+ * Optional auth — attaches user to req if a valid session exists, otherwise continues.
  */
 export async function optionalAuth(
   req: Request,
@@ -171,8 +206,8 @@ export async function optionalAuth(
     const { userId, sessionClaims } = getAuth(req);
 
     if (userId) {
-      const email = sessionClaims?.email as string || '';
-      const user = await storage.getUserByEmail(email);
+      const email = await resolveEmail(userId, sessionClaims);
+      const user = email ? await storage.getUserByEmail(email) : null;
 
       if (user) {
         req.user = {
@@ -186,8 +221,7 @@ export async function optionalAuth(
     }
 
     next();
-  } catch (error) {
-    console.log('ℹ️ Optional auth failed, continuing without user');
+  } catch {
     next();
   }
 }
