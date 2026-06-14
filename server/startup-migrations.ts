@@ -41,6 +41,18 @@ const migrations: { name: string; sql: string }[] = [
     name: "pos_event_queue.status_idx",
     sql: "CREATE INDEX IF NOT EXISTS pos_event_queue_status_idx ON pos_event_queue (status, process_after) WHERE status IN ('pending','failed')",
   },
+  {
+    name: "employee_onboarding_data.social_security_number -> text",
+    sql: "ALTER TABLE employee_onboarding_data ALTER COLUMN social_security_number TYPE text",
+  },
+  {
+    name: "employee_onboarding_data.account_number -> text",
+    sql: "ALTER TABLE employee_onboarding_data ALTER COLUMN account_number TYPE text",
+  },
+  {
+    name: "employee_onboarding_data.routing_number -> text",
+    sql: "ALTER TABLE employee_onboarding_data ALTER COLUMN routing_number TYPE text",
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

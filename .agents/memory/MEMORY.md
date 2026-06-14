@@ -3,3 +3,4 @@
 - [startup migrations](startup-migrations.md) — Two parallel migration files must stay in sync: server/startup-migrations.ts (dev, runs on tsx start) and scripts/migrate.mjs (prod, runs before npm start)
 - [Clerk auth failure modes](clerk-auth.md) — "user not found" = pub/secret keys from different apps; prod (pk_live) keys are domain-locked so they fail in Replit preview, use pk_test for dev
 - [Railway deployment setup](railway-deploy.md) — Nixpacks (no Dockerfile); the real fix is `--cache /tmp/npm-cache` (avoids npm crash) + NODE_ENV=development npm install + explicit .bin paths; keep uv.lock deleted.
+- [PII encryption](pii-encryption.md) — onboarding SSN/bank fields AES-256-GCM at rest; always-encrypt on write, never-throw on decrypt; needs PII_ENCRYPTION_KEY in dev AND Railway.

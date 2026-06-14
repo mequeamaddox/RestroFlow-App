@@ -11,6 +11,7 @@ Sentry.init({
 });
 
 import { clerkMiddleware, logClerkKeyDiagnostics } from './clerkAuth';
+import { logEncryptionStatus } from './encryption';
 import { locationContextMiddleware } from './locationContext';
 import { runStartupMigrations } from './startup-migrations';
 import { validateObjectStorageConfig } from './objectStorage';
@@ -51,6 +52,7 @@ app.use(express.json({
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 logClerkKeyDiagnostics();
+logEncryptionStatus();
 app.use(clerkMiddleware({
   publishableKey: process.env.CLERK_PUBLISHABLE_KEY || process.env.VITE_CLERK_PUBLISHABLE_KEY,
   secretKey: process.env.CLERK_SECRET_KEY,

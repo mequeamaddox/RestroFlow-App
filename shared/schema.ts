@@ -1618,7 +1618,7 @@ export const employeeOnboardingData = pgTable("employee_onboarding_data", {
   state: varchar("state", { length: 50 }),
   zipCode: varchar("zip_code", { length: 10 }),
   dateOfBirth: date("date_of_birth"),
-  socialSecurityNumber: varchar("social_security_number", { length: 11 }), // Encrypted
+  socialSecurityNumber: text("social_security_number"), // Encrypted at rest (AES-256-GCM)
   
   // Emergency Contact
   emergencyContactName: varchar("emergency_contact_name", { length: 100 }),
@@ -1627,8 +1627,8 @@ export const employeeOnboardingData = pgTable("employee_onboarding_data", {
   
   // Banking Information (for direct deposit)
   bankName: varchar("bank_name", { length: 100 }),
-  accountNumber: varchar("account_number", { length: 50 }), // Encrypted
-  routingNumber: varchar("routing_number", { length: 20 }), // Encrypted
+  accountNumber: text("account_number"), // Encrypted at rest (AES-256-GCM)
+  routingNumber: text("routing_number"), // Encrypted at rest (AES-256-GCM)
   accountType: varchar("account_type", { length: 20 }), // checking, savings
   
   // Form metadata

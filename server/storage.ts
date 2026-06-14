@@ -192,6 +192,7 @@ import {
   type InsertOwnerOnboardingStep,
 } from "@shared/schema";
 import { db } from "./db";
+import { encryptOnboardingPII, decryptOnboardingPII } from "./encryption";
 import { eq, sql, desc, and, or, gte, lte, lt, ilike, sum, isNull, isNotNull, asc, inArray } from "drizzle-orm";
 
 // Local authentication user interface
@@ -4491,9 +4492,9 @@ export class DatabaseStorage implements IStorage {
   async saveEmployeeOnboardingData(data: InsertEmployeeOnboardingData): Promise<EmployeeOnboardingData> {
     const [savedData] = await db
       .insert(employeeOnboardingData)
-      .values(data)
+      .values(encryptOnboardingPII(data))
       .returning();
-    return savedData;
+    return decryptOnboardingPII(savedData);
   }
 
   async getEmployeeOnboardingData(employeeId: string): Promise<EmployeeOnboardingData | undefined> {
@@ -4501,16 +4502,16 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(employeeOnboardingData)
       .where(eq(employeeOnboardingData.employeeId, employeeId));
-    return data;
+    return decryptOnboardingPII(data);
   }
 
   async updateEmployeeOnboardingData(employeeId: string, data: Partial<InsertEmployeeOnboardingData>): Promise<EmployeeOnboardingData> {
     const [updatedData] = await db
       .update(employeeOnboardingData)
-      .set({ ...data, updatedAt: new Date() })
+      .set({ ...encryptOnboardingPII(data), updatedAt: new Date() })
       .where(eq(employeeOnboardingData.employeeId, employeeId))
       .returning();
-    return updatedData;
+    return decryptOnboardingPII(updatedData);
   }
 
   async getEmployeeWithOnboardingData(employeeId: string): Promise<{ employee?: Employee; onboardingData?: EmployeeOnboardingData }> {
@@ -4704,7 +4705,7 @@ export class DatabaseStorage implements IStorage {
       const [onboarding] = await db.select()
         .from(employeeOnboardingData)
         .where(eq(employeeOnboardingData.employeeId, employeeId));
-      onboardingData = onboarding || null;
+      onboardingData = decryptOnboardingPII(onboarding) || null;
     } catch (error) {
       // Table might not exist yet, ignore error
       console.log('Onboarding data table not found, skipping...');
