@@ -3777,22 +3777,23 @@ print(json.dumps(rows))
     try {
       const { employeeId } = req.params;
       const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
-      
-      // For owner account using Replit user ID, get the actual employee record
+
+      // Resolve the employee record: try direct lookup first (Clerk ID stored on employee),
+      // then fall back to email match from the authenticated session.
       let actualEmployeeId = employeeId;
-      if (employeeId === '46308728') {
-        const user = await storage.getUser(employeeId);
-        if (user && user.email) {
-          // Find the employee record by email
+      const directEmployee = await storage.getEmployee(employeeId);
+      if (!directEmployee) {
+        const user = await storage.getUser(req.user!.id);
+        if (user?.email) {
           const employees = await storage.getEmployees();
-          const employee = employees.find(emp => emp.email === user.email);
-          if (employee) {
-            actualEmployeeId = employee.id;
-            console.log(`📋 Mapped user ${employeeId} to employee ${actualEmployeeId}`);
+          const byEmail = employees.find(emp => emp.email === user.email);
+          if (byEmail) {
+            actualEmployeeId = byEmail.id;
+            console.log(`📋 Resolved employee by email: ${actualEmployeeId}`);
           }
         }
       }
-      
+
       const payStubs = await storage.getEmployeePayStubs(actualEmployeeId, year);
       res.json(payStubs);
     } catch (error) {
@@ -3805,22 +3806,23 @@ print(json.dumps(rows))
     try {
       const { employeeId } = req.params;
       const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
-      
-      // For owner account using Replit user ID, get the actual employee record
+
+      // Resolve the employee record: try direct lookup first (Clerk ID stored on employee),
+      // then fall back to email match from the authenticated session.
       let actualEmployeeId = employeeId;
-      if (employeeId === '46308728') {
-        const user = await storage.getUser(employeeId);
-        if (user && user.email) {
-          // Find the employee record by email
+      const directEmployee = await storage.getEmployee(employeeId);
+      if (!directEmployee) {
+        const user = await storage.getUser(req.user!.id);
+        if (user?.email) {
           const employees = await storage.getEmployees();
-          const employee = employees.find(emp => emp.email === user.email);
-          if (employee) {
-            actualEmployeeId = employee.id;
-            console.log(`📋 Mapped user ${employeeId} to employee ${actualEmployeeId}`);
+          const byEmail = employees.find(emp => emp.email === user.email);
+          if (byEmail) {
+            actualEmployeeId = byEmail.id;
+            console.log(`📋 Resolved employee by email: ${actualEmployeeId}`);
           }
         }
       }
-      
+
       const summary = await storage.getEmployeePayrollSummary(actualEmployeeId, year);
       res.json(summary);
     } catch (error) {
