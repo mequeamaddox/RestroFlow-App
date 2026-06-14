@@ -6,13 +6,17 @@ description: How this project is built/deployed on Railway — the exact working
 ## Working config (do NOT change without strong reason)
 - Builder: **NIXPACKS** (the Railway dashboard is set to Nixpacks; a custom Dockerfile gets ignored and only adds conflicting signals — do not add one)
 - `railway.json`: builder NIXPACKS, buildCommand `npm run build`, startCommand `npm run start`
-- `nixpacks.toml` install: `NODE_ENV=development NPM_CONFIG_PRODUCTION=false npm install --include=dev --cache /tmp/npm-cache --no-fund --no-audit` (the `NPM_CONFIG_PRODUCTION=false --include=dev` is load-bearing — see root cause below)
+- `nixpacks.toml` install: `NODE_ENV=development npm install --include=dev --no-fund --no-audit --maxsockets=3` (NO `--cache /tmp/...` — that caused RAM OOM; see root cause below)
 - `nixpacks.toml` build: explicit binary paths `/app/node_modules/.bin/vite build && /app/node_modules/.bin/esbuild ...`
 
-## The REAL root cause of `sh: vite: not found` (confirmed from build logs)
-The Railway service has a **production config in its env vars** (NODE_ENV=production and/or NPM_CONFIG_PRODUCTION=true). npm honors this as `production=true` (you'll see `npm warn config production Use --omit=dev instead` in the log) and **skips ALL devDependencies**. vite + esbuild are devDeps → not installed → build fails with `vite: not found` (exit 127).
-- A bare `NODE_ENV=development` prefix on the install command is NOT enough — npm's `production`/`NPM_CONFIG_PRODUCTION` setting overrides it.
-- **Fix that works:** install command must be `NODE_ENV=development NPM_CONFIG_PRODUCTION=false npm install --include=dev --cache /tmp/npm-cache --no-fund --no-audit`. The `NPM_CONFIG_PRODUCTION=false` + `--include=dev` force devDeps in regardless of the ambient production env var.
+## The REAL root cause of `sh: vite: not found` (confirmed across MANY build logs)
+`vite: not found` is a SYMPTOM, not the cause. The actual failure is **`npm error Exit handler never called!` during the install phase** — npm gets killed before it finishes, so vite/esbuild never land in node_modules, and the later build step then can't find vite.
+- This crash is **independent of the install command** — verified it persists across `npm ci`, `npm install`, with/without NODE_ENV, with/without NPM_CONFIG_PRODUCTION, with/without `--include=dev`. Changing install flags does NOT fix it. Stop tweaking flags expecting a fix.
+- The `npm warn config production Use --omit=dev instead` line is a red herring (it fires just because the deprecated `production` key is set to ANY value, incl. false). It does not mean devDeps were skipped.
+- Pattern in logs: `scheduling build on Metal builder` → ~60s later `Exit handler never called!`. Strongly indicates the Railway builder is **OOM-killing** the npm process (or the Metal-builder migration kills it).
+- Most likely trigger of the regression: the dependency tree grew (Sentry, jsdom, @testing-library, @csstools added) AND the old install command wrote npm cache to `--cache /tmp/npm-cache`. `/tmp` is RAM-backed on the builder, so a bigger cache → RAM exhaustion → OOM kill. Smaller old tree fit in RAM; new one doesn't.
+- **Fix being tried:** drop `--cache /tmp/npm-cache` (use the disk-backed BuildKit cache mount `/root/.npm` instead) and add `--maxsockets=3` to cut peak memory/concurrency: `NODE_ENV=development npm install --include=dev --no-fund --no-audit --maxsockets=3`.
+- If it STILL crashes, it is a **Railway build-environment limit** (build RAM / Metal builder), not something fixable in repo config — user must raise build resources or contact Railway support.
 
 ## Build command precedence
 `railway.json` buildCommand (`npm run build`) OVERRIDES nixpacks.toml `[phases.build]`. So the build actually runs the package.json script `vite build && esbuild ...`. Once devDeps are installed, vite is on PATH (Nixpacks appends `/app/node_modules/.bin` to PATH). The explicit `.bin/` paths in nixpacks `[phases.build]` are effectively dead config — the install phase is what matters.
