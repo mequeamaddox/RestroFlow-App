@@ -25,6 +25,32 @@ const migrations = [
     name: "locations.owner_id",
     sql: `ALTER TABLE locations ADD COLUMN IF NOT EXISTS owner_id varchar`,
   },
+  {
+    name: "pos_integrations.last_webhook_at",
+    sql: `ALTER TABLE pos_integrations ADD COLUMN IF NOT EXISTS last_webhook_at timestamp`,
+  },
+  {
+    name: "pos_event_queue table",
+    sql: `CREATE TABLE IF NOT EXISTS pos_event_queue (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      integration_id uuid NOT NULL REFERENCES pos_integrations(id),
+      provider varchar NOT NULL,
+      event_type varchar NOT NULL,
+      source varchar NOT NULL,
+      idempotency_key varchar UNIQUE,
+      payload jsonb NOT NULL,
+      status varchar NOT NULL DEFAULT 'pending',
+      attempts integer NOT NULL DEFAULT 0,
+      last_error text,
+      process_after timestamp DEFAULT now(),
+      processed_at timestamp,
+      created_at timestamp DEFAULT now()
+    )`,
+  },
+  {
+    name: "pos_event_queue.status_idx",
+    sql: `CREATE INDEX IF NOT EXISTS pos_event_queue_status_idx ON pos_event_queue (status, process_after) WHERE status IN ('pending','failed')`,
+  },
 ];
 
 async function run() {

@@ -1059,6 +1059,7 @@ export const posIntegrations = pgTable("pos_integrations", {
   webhookUrl: varchar("webhook_url"), // Generated webhook URL for this integration
   isActive: boolean("is_active").default(true),
   lastSyncAt: timestamp("last_sync_at"),
+  lastWebhookAt: timestamp("last_webhook_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1191,6 +1192,26 @@ export const webhookEvents = pgTable("webhook_events", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// POS Event Queue — Postgres-backed job queue (no Redis required).
+// Events from SpotOn webhooks AND fallback polling flow through this table
+// so processing is always async and idempotent across multiple server instances.
+// Workers claim rows with SELECT … FOR UPDATE SKIP LOCKED.
+export const posEventQueue = pgTable("pos_event_queue", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  integrationId: uuid("integration_id").references(() => posIntegrations.id).notNull(),
+  provider: varchar("provider").notNull(),
+  eventType: varchar("event_type").notNull(),   // 'order' | 'timeclock' | 'backfill'
+  source: varchar("source").notNull(),           // 'webhook' | 'poll'
+  idempotencyKey: varchar("idempotency_key").unique(),
+  payload: jsonb("payload").notNull(),
+  status: varchar("status").default("pending").notNull(), // pending | processing | done | failed
+  attempts: integer("attempts").default(0).notNull(),
+  lastError: text("last_error"),
+  processAfter: timestamp("process_after").defaultNow(),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // POS Integration schema exports
 export const insertPosIntegrationSchema = createInsertSchema(posIntegrations).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPosMenuItemSchema = createInsertSchema(posMenuItems).omit({ id: true, createdAt: true, updatedAt: true });
@@ -1200,6 +1221,7 @@ export const insertPosSaleItemSchema = createInsertSchema(posSaleItems).omit({ i
 export const insertPosEmployeeSchema = createInsertSchema(posEmployees).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPosEmployeeMappingSchema = createInsertSchema(posEmployeeMappings).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPosTimeclockSchema = createInsertSchema(posTimeclocks).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPosEventQueueSchema = createInsertSchema(posEventQueue).omit({ id: true, createdAt: true });
 
 // Relations for POS tables
 export const posIntegrationsRelations = relations(posIntegrations, ({ one, many }) => ({
@@ -1643,6 +1665,8 @@ export type InsertLocation = z.infer<typeof insertLocationSchema>;
 export type Category = typeof categories.$inferSelect;
 export type PosIntegration = typeof posIntegrations.$inferSelect;
 export type InsertPosIntegration = z.infer<typeof insertPosIntegrationSchema>;
+export type PosEventQueue = typeof posEventQueue.$inferSelect;
+export type InsertPosEventQueue = z.infer<typeof insertPosEventQueueSchema>;
 export type PosMenuItem = typeof posMenuItems.$inferSelect;
 export type InsertPosMenuItem = z.infer<typeof insertPosMenuItemSchema>;
 export type PosItemMapping = typeof posItemMappings.$inferSelect;

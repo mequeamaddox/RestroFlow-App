@@ -151,6 +151,34 @@ export function registerPosRoutes(app: Express): void {
     }
   });
 
+  // SpotOn webhook — enqueues immediately and returns 200 fast.
+  // Set SPOTON_WEBHOOK_SECRET env var to enable HMAC-SHA256 signature verification.
+  app.post('/api/webhooks/spoton', async (req, res) => {
+    try {
+      const sig = req.headers['x-spoton-signature'] as string | undefined;
+      if (sig && process.env.SPOTON_WEBHOOK_SECRET) {
+        const crypto = await import('crypto');
+        const expected = `sha256=${crypto.createHmac('sha256', process.env.SPOTON_WEBHOOK_SECRET)
+          .update(JSON.stringify(req.body)).digest('hex')}`;
+        if (sig !== expected) return res.status(401).json({ message: 'Invalid webhook signature' });
+      }
+
+      const locationId = req.body.location_id ?? req.body.locationId;
+      if (!locationId) return res.status(400).json({ message: 'Missing location_id in payload' });
+
+      const integration = await storage.getPosIntegrationByMerchant(locationId, 'spoton');
+      if (!integration) return res.status(404).json({ message: 'No active SpotOn integration for this location' });
+
+      const eventId = req.body.eventId ?? req.body.id ?? `${locationId}:${req.body.type ?? 'event'}:${Date.now()}`;
+      await posService.enqueueSpotOnWebhook(integration.id, req.body, eventId);
+
+      res.status(200).json({ received: true });
+    } catch (error) {
+      console.error('SpotOn webhook error:', error);
+      res.status(500).json({ message: 'Webhook processing failed' });
+    }
+  });
+
   app.post('/api/webhooks/clover', async (req, res) => {
     try {
       await posService.processOrderWebhook(req.body);

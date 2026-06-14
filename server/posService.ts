@@ -579,6 +579,192 @@ export class PosService {
     await this.processInventoryDeductions(posSale.id);
   }
 
+  // ── Queue API ────────────────────────────────────────────────────────────
+
+  /** Called by the SpotOn webhook route — enqueues the event and stamps lastWebhookAt. */
+  async enqueueSpotOnWebhook(integrationId: string, payload: any, idempotencyKey: string): Promise<void> {
+    await storage.enqueueEvent({
+      integrationId,
+      provider: "spoton",
+      eventType: payload.type?.toLowerCase() ?? "order",
+      source: "webhook",
+      idempotencyKey,
+      payload,
+      status: "pending",
+      attempts: 0,
+    });
+    await storage.updatePosIntegrationWebhookAt(integrationId);
+  }
+
+  /** Enqueues a fallback-poll job for a single integration (deduped per 5-min window). */
+  async enqueuePollBatch(integrationId: string, eventType: "order" | "timeclock"): Promise<void> {
+    const window = Math.floor(Date.now() / (5 * 60 * 1000));
+    await storage.enqueueEvent({
+      integrationId,
+      provider: "spoton",
+      eventType,
+      source: "poll",
+      idempotencyKey: `poll:${integrationId}:${eventType}:${window}`,
+      payload: {},
+      status: "pending",
+      attempts: 0,
+    });
+  }
+
+  /** Enqueues a daily backfill job (deduped per calendar day). */
+  async enqueueBackfill(integrationId: string, hours: number): Promise<void> {
+    const day = new Date().toISOString().slice(0, 10);
+    await storage.enqueueEvent({
+      integrationId,
+      provider: "spoton",
+      eventType: "backfill",
+      source: "poll",
+      idempotencyKey: `backfill:${integrationId}:${day}`,
+      payload: { hours },
+      status: "pending",
+      attempts: 0,
+    });
+  }
+
+  /** Called by the queue processor setInterval every 5 s. */
+  async processNextQueueBatch(limit: number): Promise<void> {
+    const events = await storage.claimQueueEvents(limit);
+    await Promise.all(events.map(e => this.processQueuedEvent(e)));
+  }
+
+  private async processQueuedEvent(event: any): Promise<void> {
+    try {
+      const integration = await storage.getPosIntegration(event.integrationId);
+      if (!integration || !integration.isActive) {
+        await storage.markQueueEventDone(event.id);
+        return;
+      }
+
+      switch (event.eventType) {
+        case "order":
+          if (event.source === "webhook") {
+            await this.processSpotOnOrderPayload(event.payload, integration);
+          } else {
+            await this.pollSpotOnOrders(integration.id);
+          }
+          break;
+        case "timeclock":
+          await this.pollSpotOnTimeclock(integration.id);
+          break;
+        case "backfill":
+          await this.runSpotOnBackfill(integration, (event.payload as any)?.hours ?? 26);
+          break;
+        default:
+          console.warn(`Unknown POS queue event type: ${event.eventType}`);
+      }
+
+      await storage.markQueueEventDone(event.id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Exponential backoff: 30 s, 2 min, 8 min
+      const delaySec = Math.min(Math.pow(4, event.attempts ?? 0) * 30, 8 * 60);
+      const processAfter = new Date(Date.now() + delaySec * 1000);
+      await storage.markQueueEventFailed(event.id, msg, processAfter);
+      console.error(`POS queue event ${event.id} (${event.eventType}) failed — retry after ${delaySec}s:`, msg);
+    }
+  }
+
+  /** Normalises and persists a SpotOn order from a webhook payload. */
+  private async processSpotOnOrderPayload(payload: any, integration: any): Promise<void> {
+    const order = payload.order ?? payload;
+    const existing = await storage.getPosSaleByOrderId(integration.id, order.id);
+    if (existing) return;
+
+    const posSale = await storage.createPosSale({
+      posOrderId: order.id,
+      posIntegrationId: integration.id,
+      locationId: integration.locationId,
+      total: order.totalAmount?.amount ?? order.total?.toString() ?? "0",
+      orderDate: new Date(order.createdAt ?? order.created_at ?? Date.now()),
+      inventoryProcessed: false,
+    });
+
+    const addLineItem = async (li: any) => {
+      await storage.createPosSaleItem({
+        posSaleId: posSale.id,
+        itemName: li.name,
+        quantity: Number(li.quantity ?? 1),
+        unitPrice: li.preDiscountsAmount?.amount ?? li.price?.toString() ?? "0",
+        totalPrice: li.totalAmount?.amount ?? "0",
+      });
+    };
+
+    for (const check of order.checks ?? []) {
+      for (const li of check.items ?? []) await addLineItem(li);
+      for (const guest of check.guests ?? []) {
+        for (const li of guest.items ?? []) await addLineItem(li);
+      }
+    }
+
+    await this.processInventoryDeductions(posSale.id);
+  }
+
+  /** Runs the 26-hour slice-by-slice backfill for one integration. */
+  private async runSpotOnBackfill(integration: any, hours: number): Promise<void> {
+    const credentials = integration.credentials as { apiKey?: string };
+    if (!credentials?.apiKey) return;
+
+    const baseUrl = this.getBaseUrl("spoton", integration.environment);
+    if (!baseUrl) return;
+
+    const now = new Date();
+    let totalOrders = 0;
+
+    for (let offset = hours * 60; offset > 0; offset -= 30) {
+      const end = new Date(now.getTime() - (offset - 30) * 60 * 1000);
+      const start = new Date(now.getTime() - offset * 60 * 1000);
+      const params = new URLSearchParams({
+        updatedAtStart: toRFC3339Z(start),
+        updatedAtEnd: toRFC3339Z(end),
+      });
+
+      try {
+        const url = `${baseUrl}/locations/${encodeURIComponent(integration.merchantId)}/orders?${params}`;
+        const res = await fetch(url, { headers: { "x-api-key": credentials.apiKey! } });
+        if (!res.ok) { console.error(`SpotOn backfill slice ${res.status}`); continue; }
+
+        const orders = await res.json();
+        for (const order of orders ?? []) {
+          if (await storage.getPosSaleByOrderId(integration.id, order.id)) continue;
+
+          const posSale = await storage.createPosSale({
+            posOrderId: order.id,
+            posIntegrationId: integration.id,
+            locationId: integration.locationId,
+            total: order.totalAmount?.amount ?? "0",
+            orderDate: new Date(order.createdAt ?? Date.now()),
+            inventoryProcessed: false,
+          });
+
+          for (const check of order.checks ?? []) {
+            for (const li of [...(check.items ?? []), ...(check.guests ?? []).flatMap((g: any) => g.items ?? [])]) {
+              await storage.createPosSaleItem({
+                posSaleId: posSale.id,
+                itemName: li.name,
+                quantity: Number(li.quantity ?? 1),
+                unitPrice: li.preDiscountsAmount?.amount ?? "0",
+                totalPrice: li.totalAmount?.amount ?? "0",
+              });
+            }
+          }
+          totalOrders++;
+        }
+      } catch (sliceErr) {
+        console.error("SpotOn backfill slice error:", sliceErr);
+      }
+    }
+
+    if (totalOrders > 0) {
+      console.log(`SpotOn backfill: ${totalOrders} orders for integration ${integration.id}`);
+      await storage.updatePosIntegration(integration.id, { lastSyncAt: new Date() });
+    }
+  }
+
   public async processInventoryDeductions(saleId: string): Promise<void> {
     try {
       const sale = await storage.getPosSaleById(saleId);

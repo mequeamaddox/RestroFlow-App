@@ -67,8 +67,11 @@ import {
   posEmployeeMappings,
   posTimeclocks,
   webhookEvents,
+  posEventQueue,
   type PosIntegration,
   type InsertPosIntegration,
+  type PosEventQueue,
+  type InsertPosEventQueue,
   type PosMenuItem,
   type InsertPosMenuItem,
   type PosItemMapping,
@@ -310,6 +313,13 @@ export interface IStorage {
   createPosIntegration(integration: InsertPosIntegration): Promise<PosIntegration>;
   updatePosIntegration(id: string, integration: Partial<InsertPosIntegration>): Promise<PosIntegration>;
   deletePosIntegration(id: string): Promise<void>;
+  updatePosIntegrationWebhookAt(id: string): Promise<void>;
+
+  // POS event queue (webhook-first async processing)
+  enqueueEvent(event: InsertPosEventQueue): Promise<PosEventQueue>;
+  claimQueueEvents(limit: number): Promise<PosEventQueue[]>;
+  markQueueEventDone(id: string): Promise<void>;
+  markQueueEventFailed(id: string, error: string, processAfter: Date): Promise<void>;
 
   // POS menu items
   getPosMenuItems(integrationId: string): Promise<PosMenuItem[]>;
@@ -1011,6 +1021,60 @@ export class DatabaseStorage implements IStorage {
 
   async deletePosIntegration(id: string): Promise<void> {
     await db.delete(posIntegrations).where(eq(posIntegrations.id, id));
+  }
+
+  async updatePosIntegrationWebhookAt(id: string): Promise<void> {
+    await db.update(posIntegrations)
+      .set({ lastWebhookAt: new Date(), updatedAt: new Date() })
+      .where(eq(posIntegrations.id, id));
+  }
+
+  // POS Event Queue
+  async enqueueEvent(eventData: InsertPosEventQueue): Promise<PosEventQueue> {
+    const [event] = await db
+      .insert(posEventQueue)
+      .values(eventData)
+      .onConflictDoNothing({ target: posEventQueue.idempotencyKey })
+      .returning();
+    // If conflict (duplicate idempotency key), return existing row
+    if (!event) {
+      const [existing] = await db.select().from(posEventQueue)
+        .where(eq(posEventQueue.idempotencyKey, eventData.idempotencyKey!));
+      return existing;
+    }
+    return event;
+  }
+
+  async claimQueueEvents(limit: number): Promise<PosEventQueue[]> {
+    // Atomic claim using FOR UPDATE SKIP LOCKED — safe for multi-instance deployments
+    const now = new Date();
+    const rows = await db.execute(sql`
+      UPDATE pos_event_queue
+      SET status = 'processing', attempts = attempts + 1
+      WHERE id IN (
+        SELECT id FROM pos_event_queue
+        WHERE status IN ('pending', 'failed')
+          AND process_after <= ${now.toISOString()}
+          AND attempts < 3
+        ORDER BY created_at
+        LIMIT ${limit}
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING *
+    `);
+    return (rows.rows ?? rows as any[]) as PosEventQueue[];
+  }
+
+  async markQueueEventDone(id: string): Promise<void> {
+    await db.update(posEventQueue)
+      .set({ status: 'done', processedAt: new Date() })
+      .where(eq(posEventQueue.id, id));
+  }
+
+  async markQueueEventFailed(id: string, error: string, processAfter: Date): Promise<void> {
+    await db.update(posEventQueue)
+      .set({ status: 'failed', lastError: error, processAfter })
+      .where(eq(posEventQueue.id, id));
   }
 
   // POS Menu Items
