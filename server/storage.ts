@@ -217,19 +217,15 @@ export interface IStorage {
   
   // Subscription operations
   updateUserSubscription(userId: string, subscriptionData: { 
-    subscriptionPlan?: 'free' | 'professional' | 'enterprise';
+    subscriptionPlan?: 'free' | 'professional';
     subscriptionStatus?: 'active' | 'inactive' | 'cancelled' | 'past_due';
     stripeCustomerId?: string;
     stripeSubscriptionId?: string;
-    squareCustomerId?: string;
-    squareSubscriptionId?: string;
     subscriptionEndDate?: Date;
     ocrCreditsLimit?: number;
     hrAddonEnabled?: boolean;
   }): Promise<User>;
-  createSquareCustomer(userId: string, squareCustomerId: string): Promise<User>;
   getSubscriptionByUser(userId: string): Promise<User | undefined>;
-  getUserBySquareCustomerId(squareCustomerId: string): Promise<User | undefined>;
   updateOcrCreditsUsed(userId: string, creditsUsed: number): Promise<User>;
   checkOcrAccess(userId: string): Promise<{ hasAccess: boolean; creditsRemaining: number; plan: string }>;
   resetOcrCredits(userId: string): Promise<User>;
@@ -646,12 +642,10 @@ export class DatabaseStorage implements IStorage {
 
   // Subscription operations
   async updateUserSubscription(userId: string, subscriptionData: { 
-    subscriptionPlan?: 'free' | 'professional' | 'enterprise';
+    subscriptionPlan?: 'free' | 'professional';
     subscriptionStatus?: 'active' | 'inactive' | 'cancelled' | 'past_due';
     stripeCustomerId?: string;
     stripeSubscriptionId?: string;
-    squareCustomerId?: string;
-    squareSubscriptionId?: string;
     subscriptionEndDate?: Date;
     ocrCreditsLimit?: number;
     hrAddonEnabled?: boolean;
@@ -690,7 +684,7 @@ export class DatabaseStorage implements IStorage {
     const creditsLimit = user.ocrCreditsLimit || 5;
     
     // Premium users have unlimited OCR access
-    if (plan === 'professional' || plan === 'enterprise') {
+    if (plan === 'professional') {
       return { hasAccess: true, creditsRemaining: 999, plan };
     }
     
@@ -713,25 +707,8 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async createSquareCustomer(userId: string, squareCustomerId: string): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set({
-        squareCustomerId,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, userId))
-      .returning();
-    return user;
-  }
-
   async getSubscriptionByUser(userId: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, userId));
-    return user;
-  }
-
-  async getUserBySquareCustomerId(squareCustomerId: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.squareCustomerId, squareCustomerId));
     return user;
   }
 

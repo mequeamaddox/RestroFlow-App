@@ -69,13 +69,6 @@ const PLAN_FEATURES = {
     color: 'from-orange-500 to-red-500',
     features: ['Up to 3 locations', 'Unlimited OCR scanning', 'Advanced analytics', 'POS integration', 'Waste tracking', 'Vendor management'],
   },
-  enterprise: {
-    name: 'Enterprise',
-    price: 329,
-    icon: Crown,
-    color: 'from-purple-500 to-pink-500',
-    features: ['Unlimited locations', 'Unlimited OCR scanning', 'HR & employee management', 'Payroll integration', 'Priority support', 'Custom reports', 'Multi-unit dashboard'],
-  },
 };
 
 export default function SubscriptionPage() {
@@ -130,7 +123,7 @@ export default function SubscriptionPage() {
     },
   });
 
-  const handleCheckout = async (plan: 'professional' | 'enterprise') => {
+  const handleCheckout = async (plan: 'professional') => {
     setCheckoutLoading(plan);
     try {
       const res = await apiRequest('POST', '/api/billing/checkout', { plan });
@@ -381,41 +374,27 @@ export default function SubscriptionPage() {
             </Card>
 
             {/* Upgrade CTA */}
-            {currentPlan !== 'enterprise' && (
+            {currentPlan === 'free' && (
               <Card className="bg-gradient-to-br from-orange-900/30 to-red-900/30 border-orange-500/30">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-white text-base flex items-center gap-2">
                     <Zap className="h-4 w-4 text-orange-400" />
-                    {currentPlan === 'free' ? 'Upgrade Your Plan' : 'Upgrade to Enterprise'}
+                    Upgrade Your Plan
                   </CardTitle>
                   <CardDescription className="text-slate-300 text-xs">
-                    {currentPlan === 'free'
-                      ? 'Unlock unlimited OCR, more locations, and advanced features'
-                      : 'Add HR management, payroll, and unlimited locations'}
+                    Unlock unlimited OCR, more locations, and advanced features
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  {currentPlan === 'free' && (
-                    <Button
-                      className="w-full bg-orange-500 hover:bg-orange-600 text-white"
-                      onClick={() => handleCheckout('professional')}
-                      disabled={checkoutLoading === 'professional'}
-                    >
-                      {checkoutLoading === 'professional'
-                        ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        : <Star className="h-4 w-4 mr-2" />}
-                      Professional · $179/mo
-                    </Button>
-                  )}
                   <Button
-                    className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                    onClick={() => handleCheckout('enterprise')}
-                    disabled={checkoutLoading === 'enterprise'}
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+                    onClick={() => handleCheckout('professional')}
+                    disabled={checkoutLoading === 'professional'}
                   >
-                    {checkoutLoading === 'enterprise'
+                    {checkoutLoading === 'professional'
                       ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      : <Crown className="h-4 w-4 mr-2" />}
-                    Enterprise · $329/mo
+                      : <Star className="h-4 w-4 mr-2" />}
+                    Professional · $179/mo
                   </Button>
                   <Link href="/pricing">
                     <Button variant="ghost" size="sm" className="w-full text-slate-400 hover:text-white text-xs">
@@ -425,6 +404,28 @@ export default function SubscriptionPage() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Enterprise — contact sales */}
+            <Card className="bg-gradient-to-br from-purple-900/30 to-pink-900/30 border-purple-500/30">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-white text-base flex items-center gap-2">
+                  <Crown className="h-4 w-4 text-purple-400" />
+                  Need Enterprise?
+                </CardTitle>
+                <CardDescription className="text-slate-300 text-xs">
+                  Multi-unit dashboards, custom reporting, and dedicated support — let's build a plan that fits.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                  onClick={() => window.open('mailto:sales@restroflow.com?subject=Enterprise%20Plan%20Inquiry', '_blank')}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Contact Sales
+                </Button>
+              </CardContent>
+            </Card>
 
             {/* Support */}
             <Card className="bg-slate-800/80 border-slate-700/50">
@@ -485,10 +486,10 @@ export default function SubscriptionPage() {
                       </li>
                     ))}
                   </ul>
-                  {planId !== 'free' && planId !== currentPlan && (
+                  {planId === 'professional' && (
                     <Button
-                      className={`w-full ${planId === 'enterprise' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-orange-500 hover:bg-orange-600'} text-white`}
-                      onClick={() => handleCheckout(planId as 'professional' | 'enterprise')}
+                      className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+                      onClick={() => handleCheckout(planId as 'professional')}
                       disabled={checkoutLoading === planId}
                       size="sm"
                     >
@@ -501,6 +502,34 @@ export default function SubscriptionPage() {
                 </CardContent>
               </Card>
             ))}
+            {/* Enterprise — contact us */}
+            <Card className="border-slate-700/50 bg-slate-800/60">
+              <CardHeader className="pb-3">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center mb-2">
+                  <Crown className="h-5 w-5 text-white" />
+                </div>
+                <CardTitle className="text-white text-base">Enterprise</CardTitle>
+                <CardDescription className="text-slate-300 font-semibold text-lg">Custom pricing</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-1 mb-4">
+                  {['Unlimited locations', 'HR & employee management', 'Payroll integration', 'Priority support', 'Custom reports', 'Multi-unit dashboard'].map((feat) => (
+                    <li key={feat} className="flex items-center gap-2 text-sm text-slate-300">
+                      <Check className="h-3 w-3 text-green-400 flex-shrink-0" />
+                      {feat}
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                  onClick={() => window.open('mailto:sales@restroflow.com?subject=Enterprise%20Plan%20Inquiry', '_blank')}
+                  size="sm"
+                >
+                  <ExternalLink className="h-3 w-3 mr-1" />
+                  Contact Us
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </div>
       )}

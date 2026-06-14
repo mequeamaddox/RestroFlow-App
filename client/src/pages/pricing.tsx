@@ -47,16 +47,14 @@ export default function Pricing() {
   // Create subscription mutation
   const createSubscriptionMutation = useMutation({
     mutationFn: async (data: { plan: string; hrAddonLocations: number }) => {
-      const response = await apiRequest('POST', '/api/subscriptions/create', {
-        email: (user as any)?.email,
+      const response = await apiRequest('POST', '/api/billing/checkout', {
         plan: data.plan,
-        hrAddonLocations: data.hrAddonLocations
       });
       return response.json();
     },
     onSuccess: (data) => {
       if (data.checkoutUrl) {
-        // Redirect to Square checkout
+        // Redirect to Stripe checkout
         window.location.href = data.checkoutUrl;
       } else {
         toast({
@@ -269,16 +267,16 @@ export default function Pricing() {
                   <div className="text-center">
                     <div className="text-lg font-semibold text-slate-300 mb-2">RestroFlow Professional</div>
                     <div className="text-3xl font-bold text-green-400">
-                      ${billingCycle === 'monthly' ? '199' : '159'}/mo
+                      ${billingCycle === 'monthly' ? '179' : '143'}/mo
                     </div>
                     <div className="text-sm text-orange-300 font-semibold">
-                      Save ${billingCycle === 'monthly' ? '$131' : '$171'}/mo per location
+                      Save ${billingCycle === 'monthly' ? '151' : '187'}/mo per location
                     </div>
                   </div>
                 </div>
                 <div className="mt-4 pt-4 border-t border-slate-600">
                   <div className="text-lg font-bold text-orange-300">
-                    Annual Savings: ${billingCycle === 'monthly' ? '$1,572' : '$2,052'} per location
+                    Annual Savings: ${billingCycle === 'monthly' ? '1,812' : '2,244'} per location
                   </div>
                 </div>
               </div>
@@ -292,7 +290,7 @@ export default function Pricing() {
                     <Users className="h-6 w-6 text-blue-400 mr-2" />
                     <h3 className="text-xl font-bold text-white">HR Employee Management Add-on</h3>
                   </div>
-                  <p className="text-slate-300 text-sm">Add comprehensive employee management to your Professional or Enterprise plan</p>
+                  <p className="text-slate-300 text-sm">Add comprehensive employee management to your Professional plan</p>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -607,7 +605,7 @@ export default function Pricing() {
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-slate-300">Professional Plan</span>
-                        <span className="text-white">${billingCycle === 'monthly' ? '199' : '159'}/mo</span>
+                        <span className="text-white">${billingCycle === 'monthly' ? '179' : '143'}/mo</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-300">Clover POS Integration</span>
@@ -621,7 +619,7 @@ export default function Pricing() {
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-slate-300">Professional Plan</span>
-                        <span className="text-white">${billingCycle === 'monthly' ? '199' : '159'}/mo</span>
+                        <span className="text-white">${billingCycle === 'monthly' ? '179' : '143'}/mo</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-300">Bar Operations Add-on</span>
@@ -633,7 +631,7 @@ export default function Pricing() {
                       </div>
                       <div className="border-t border-slate-600 mt-2 pt-2 flex justify-between font-semibold">
                         <span className="text-white">Total per location</span>
-                        <span className="text-orange-400">${billingCycle === 'monthly' ? '278' : '222'}/mo</span>
+                        <span className="text-orange-400">${billingCycle === 'monthly' ? '258' : '206'}/mo</span>
                       </div>
                     </div>
                   </div>
@@ -641,10 +639,10 @@ export default function Pricing() {
                 
                 <div className="mt-6 text-center p-4 bg-green-900/20 rounded-xl border border-green-500/30">
                   <div className="text-lg font-bold text-green-400">
-                    Total Monthly Cost: ${billingCycle === 'monthly' ? '477' : '381'}/mo for both locations
+                    Total Monthly Cost: ${billingCycle === 'monthly' ? '437' : '349'}/mo for both locations
                   </div>
                   <div className="text-sm text-slate-300 mt-1">
-                    vs leading competitors: $660/mo - Save ${billingCycle === 'monthly' ? '$183' : '$279'}/mo (${billingCycle === 'monthly' ? '$2,196' : '$3,348'}/year)
+                    vs leading competitors: $660/mo - Save ${billingCycle === 'monthly' ? '223' : '311'}/mo (${billingCycle === 'monthly' ? '2,676' : '3,732'}/year)
                   </div>
                 </div>
               </CardContent>

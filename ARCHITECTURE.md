@@ -21,7 +21,7 @@ analytics, POS integration, and an HR/payroll add-on. Tenancy is anchored on
 | Database    | PostgreSQL (Neon serverless, accessed over WebSockets) |
 | Auth        | Clerk (`@clerk/express`) |
 | Monitoring  | Sentry |
-| Billing     | Square (Stripe code paths also exist — see [BILLING](BILLING.md)) |
+| Billing     | Stripe (see [BILLING](BILLING.md)) |
 | Other       | SendGrid (email), AWS S3 / Replit Object Storage, AWS Textract + Tesseract.js (OCR) |
 
 ## Directory layout
@@ -45,7 +45,7 @@ server/          Express backend
   locationContext.ts     Per-transaction location scoping
   encryption.ts  AES-256-GCM field encryption for PII
   ocrService.ts  Invoice OCR pipeline
-  squareSubscriptionService.ts, billingMiddleware.ts  Billing
+  stripeService.ts, billingMiddleware.ts  Billing (Stripe)
   startup-migrations.ts  Idempotent migrations run on dev startup
 shared/
   schema.ts      Drizzle schema + Zod insert schemas (source of truth, shared FE/BE)

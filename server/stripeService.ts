@@ -15,12 +15,6 @@ export const PLANS = {
     amount: 17900,
     ocrLimit: 999,
   },
-  enterprise: {
-    name: 'Enterprise',
-    priceId: process.env.STRIPE_PRICE_ENTERPRISE || '',
-    amount: 39900,
-    ocrLimit: 999,
-  },
 } as const;
 
 export type StripePlan = keyof typeof PLANS;

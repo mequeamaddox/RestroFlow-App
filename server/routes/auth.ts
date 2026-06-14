@@ -119,7 +119,7 @@ export function registerAuthRoutes(app: Express): void {
         subscriptionPlan: plan,
         subscriptionStatus: 'active',
         hrAddonEnabled: hrAddonEnabled || false,
-        ocrCreditsLimit: plan === 'professional' || plan === 'enterprise' ? 999 : 5,
+        ocrCreditsLimit: plan === 'professional' ? 999 : 5,
       });
       res.json({ success: true, message: 'Plan upgraded successfully' });
     } catch (error) {

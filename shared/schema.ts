@@ -60,8 +60,6 @@ export const users = pgTable("users", {
   subscriptionStatus: subscriptionStatusEnum("subscription_status").default("inactive"),
   stripeCustomerId: varchar("stripe_customer_id"),
   stripeSubscriptionId: varchar("stripe_subscription_id"),
-  squareCustomerId: varchar("square_customer_id"), // Square customer ID
-  squareSubscriptionId: varchar("square_subscription_id"), // Square subscription ID
   subscriptionEndDate: timestamp("subscription_end_date"),
   ocrCreditsUsed: integer("ocr_credits_used").default(0),
   ocrCreditsLimit: integer("ocr_credits_limit").default(5), // Free tier gets 5 OCR processes

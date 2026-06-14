@@ -2,11 +2,6 @@ import type { Express } from 'express';
 import { storage } from '../storage';
 import { isAuthenticated, calculateSubscriptionTotal } from './helpers';
 import { requireLocationAccess } from '../securityMiddleware';
-import { db } from '../db';
-import { eq } from 'drizzle-orm';
-import { users } from '@shared/schema';
-import { squareSubscriptionService } from '../squareSubscriptionService';
-import { createSubscriptionSchema, squareWebhookSchema } from '@shared/subscriptionSchemas';
 import { sendEmail } from '../email';
 import {
   stripe,
@@ -72,24 +67,48 @@ export function registerBillingRoutes(app: Express): void {
     }
   });
 
-  // ─── Square Subscription ──────────────────────────────────────────────────
+  // ─── Subscriptions ────────────────────────────────────────────────────────
 
   app.get('/api/subscriptions/plans', async (_req, res) => {
-    try {
-      const subscriptionData = squareSubscriptionService.getCompleteSubscriptionData();
-      const responseData: any = { ...subscriptionData };
-      if (squareSubscriptionService.isEnabled()) {
-        responseData.config = squareSubscriptionService.getConfiguration();
-        responseData.squareEnabled = true;
-      } else {
-        responseData.squareEnabled = false;
-        responseData.message = 'Square checkout disabled - subscription plans available for preview';
-      }
-      res.json(responseData);
-    } catch (error: any) {
-      console.error('Error fetching subscription plans:', error);
-      res.status(500).json({ message: 'Failed to fetch subscription plans', error: error.message });
-    }
+    res.json({
+      plans: [
+        {
+          id: 'professional',
+          name: 'Professional (Core)',
+          price: 179,
+          billingCycle: 'MONTHLY',
+          popular: true,
+          features: [
+            'Unlimited OCR invoice processing',
+            'Advanced image OCR (scanned invoices)',
+            'Support for all file types (PDF, Images)',
+            'Advanced analytics dashboard',
+            'Unlimited locations',
+            'All POS/accounting integrations',
+            'Budget tracking & variance analysis',
+            'Theoretical vs actual reporting',
+            'Menu engineering analysis',
+            'Priority phone support',
+            'API access',
+          ],
+        },
+      ],
+      hrAddon: {
+        pricePerLocation: 79,
+        description: 'HR Management Add-on - Employee scheduling, time tracking, payroll, and document management',
+        features: [
+          'Employee scheduling & time tracking',
+          'Digital document management',
+          'Payroll processing & pay stubs',
+          'Performance reviews & evaluations',
+          'Time-off request management',
+          'Task assignment & completion tracking',
+          'Internal messaging system',
+          'HR analytics & reporting',
+        ],
+      },
+      stripeEnabled: isStripeEnabled,
+    });
   });
 
   app.get('/api/subscriptions/current', isAuthenticated, async (req, res) => {
@@ -103,15 +122,15 @@ export function registerBillingRoutes(app: Express): void {
       // Tenant-aware: only count THIS owner's locations, never other tenants'
       const hrAddonLocations = allLocations.filter((loc: any) => loc.ownerId === userId && loc.hrAddonEnabled).length;
       res.json({
-        id: user.squareSubscriptionId || user.id,
+        id: user.stripeSubscriptionId || user.id,
         plan: user.subscriptionPlan || 'free',
         status: user.subscriptionStatus || 'inactive',
         nextBillingDate: user.subscriptionEndDate?.toISOString(),
         totalAmount: calculateSubscriptionTotal(user.subscriptionPlan, hrAddonLocations),
         hrAddonLocations,
+        stripeCustomerId: user.stripeCustomerId,
+        stripeSubscriptionId: user.stripeSubscriptionId,
         createdAt: user.createdAt?.toISOString(),
-        squareCustomerId: user.squareCustomerId,
-        squareSubscriptionId: user.squareSubscriptionId,
       });
     } catch (error: any) {
       console.error('Error fetching current subscription:', error);
@@ -119,124 +138,6 @@ export function registerBillingRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/subscriptions/upgrade', isAuthenticated, async (req, res) => {
-    try {
-      const userId = req.user!.id;
-      const user = await storage.getUser(userId);
-      if (user?.role !== 'owner')
-        return res.status(403).json({ message: 'Access denied. Only business owners can upgrade subscriptions.' });
-      if (!squareSubscriptionService.isEnabled())
-        return res.status(503).json({ message: 'Square subscription service not configured', error: 'Please configure SQUARE_ACCESS_TOKEN and SQUARE_APPLICATION_ID environment variables' });
-      const { plan, hrAddonLocations = 0 } = req.body;
-      if (!user) return res.status(404).json({ message: 'User not found' });
-      if (!plan || !['free', 'professional'].includes(plan))
-        return res.status(400).json({ message: 'Valid plan required (free or professional)' });
-      if (plan === 'free') {
-        await storage.updateUserSubscription(userId, { subscriptionPlan: 'free', subscriptionStatus: 'active' });
-        return res.json({ success: true, message: 'Successfully downgraded to free plan' });
-      }
-      let squareCustomerId = user.squareCustomerId;
-      if (!squareCustomerId) {
-        squareCustomerId = await squareSubscriptionService.createCustomer(user.email!, user.firstName || undefined, user.lastName || undefined);
-        await storage.createSquareCustomer(userId, squareCustomerId);
-      }
-      const subscriptionResult = await squareSubscriptionService.createSubscription(squareCustomerId, plan, hrAddonLocations);
-      await storage.updateUserSubscription(userId, {
-        subscriptionPlan: plan as 'professional',
-        subscriptionStatus: 'active',
-        squareSubscriptionId: subscriptionResult.subscriptionId,
-        subscriptionEndDate: subscriptionResult.nextBillingDate ? new Date(subscriptionResult.nextBillingDate) : undefined,
-        ocrCreditsLimit: plan === 'professional' ? 999 : 5,
-      });
-      res.json({ success: true, message: 'Successfully upgraded subscription', subscription: subscriptionResult });
-    } catch (error: any) {
-      console.error('Error upgrading subscription:', error);
-      res.status(500).json({ message: 'Failed to upgrade subscription', error: error.message });
-    }
-  });
-
-  app.post('/api/subscriptions/create', isAuthenticated, async (req, res) => {
-    try {
-      if (!squareSubscriptionService.isEnabled())
-        return res.status(503).json({ message: 'Square subscription service not configured', error: 'Please configure SQUARE_ACCESS_TOKEN and SQUARE_APPLICATION_ID environment variables' });
-      const validatedData = createSubscriptionSchema.parse(req.body);
-      const { email, plan, hrAddonLocations = 0 } = validatedData;
-      const userId = req.user!.id;
-      const currentUser = await storage.getUser(userId);
-      if (!currentUser) return res.status(404).json({ message: 'User not found' });
-      if (currentUser.role !== 'owner')
-        return res.status(403).json({ message: 'Access denied. Only business owners can create subscriptions.' });
-      let squareCustomerId = currentUser.squareCustomerId;
-      if (!squareCustomerId) {
-        squareCustomerId = await squareSubscriptionService.createCustomer(email, currentUser.firstName || undefined, currentUser.lastName || undefined);
-        await storage.createSquareCustomer(userId, squareCustomerId);
-      }
-      const subscriptionResult = await squareSubscriptionService.createSubscription(squareCustomerId, plan, hrAddonLocations);
-      await storage.updateUserSubscription(userId, {
-        subscriptionPlan: plan, subscriptionStatus: 'active', squareCustomerId,
-        squareSubscriptionId: subscriptionResult.subscriptionId,
-        subscriptionEndDate: new Date(subscriptionResult.nextBillingDate || Date.now() + 30 * 24 * 60 * 60 * 1000),
-        hrAddonEnabled: hrAddonLocations > 0,
-        ocrCreditsLimit: plan === 'professional' || plan === 'enterprise' ? 999 : 5,
-      });
-      res.json({ success: true, subscription: subscriptionResult, message: 'Subscription created successfully' });
-    } catch (error: any) {
-      console.error('Error creating Square subscription:', error);
-      if (error.name === 'ZodError') return res.status(400).json({ message: 'Invalid request data', errors: error.errors });
-      res.status(500).json({ message: 'Failed to create subscription', error: error.message });
-    }
-  });
-
-  app.post('/api/subscriptions/webhook', async (req, res) => {
-    try {
-      if (!squareSubscriptionService.isEnabled())
-        return res.status(503).json({ message: 'Square subscription service not configured' });
-      const signature = req.headers['x-square-signature'] as string;
-      const payload = JSON.stringify(req.body);
-      if (!squareSubscriptionService.verifyWebhookSignature(payload, signature)) {
-        console.error('Invalid Square webhook signature');
-        return res.status(401).json({ message: 'Invalid webhook signature' });
-      }
-      const validatedWebhook = squareWebhookSchema.parse(req.body);
-      const { type, data } = validatedWebhook;
-      if (type.includes('subscription')) {
-        const subscriptionObject = data.object;
-        const squareSubscriptionId = subscriptionObject.id;
-        const userResults = await db.select().from(users).where(eq(users.squareSubscriptionId, squareSubscriptionId));
-        const user = userResults[0];
-        if (!user) {
-          console.log('No user found for Square subscription:', squareSubscriptionId);
-          return res.status(200).json({ message: 'Webhook processed (user not found)' });
-        }
-        let newStatus: 'active' | 'inactive' | 'cancelled' | 'past_due' = 'active';
-        if (type.includes('deactivated') || type.includes('canceled')) newStatus = 'cancelled';
-        else if (type.includes('paused')) newStatus = 'inactive';
-        else if (type.includes('activated') || type.includes('renewed')) newStatus = 'active';
-        await storage.updateUserSubscription(user.id, {
-          subscriptionStatus: newStatus,
-          subscriptionEndDate: subscriptionObject.next_billing_date ? new Date(subscriptionObject.next_billing_date) : undefined,
-        });
-      }
-      res.status(200).json({ message: 'Webhook processed successfully' });
-    } catch (error: any) {
-      console.error('Error processing Square webhook:', error);
-      res.status(500).json({ message: 'Failed to process webhook', error: error.message });
-    }
-  });
-
-  app.get('/api/subscriptions/portal', isAuthenticated, async (req, res) => {
-    try {
-      if (!squareSubscriptionService.isEnabled())
-        return res.status(503).json({ message: 'Square subscription service not configured' });
-      const user = await storage.getSubscriptionByUser(req.user!.id);
-      if (!user?.squareCustomerId) return res.status(404).json({ message: 'No Square customer found for user' });
-      const portalUrl = await squareSubscriptionService.getCustomerPortalUrl(user.squareCustomerId);
-      res.json({ portalUrl, message: 'Portal URL generated successfully' });
-    } catch (error: any) {
-      console.error('Error generating subscription portal URL:', error);
-      res.status(500).json({ message: 'Failed to generate portal URL', error: error.message });
-    }
-  });
 
   app.post('/api/subscriptions/cancel', isAuthenticated, async (req, res) => {
     try {
@@ -318,8 +219,8 @@ export function registerBillingRoutes(app: Express): void {
     try {
       const userId = req.user!.id;
       const { plan } = req.body;
-      if (!['professional', 'enterprise'].includes(plan))
-        return res.status(400).json({ message: 'Invalid plan. Must be professional or enterprise.' });
+      if (plan !== 'professional')
+        return res.status(400).json({ message: 'Invalid plan. Must be professional.' });
       if (!isStripeEnabled)
         return res.status(503).json({ message: 'Stripe billing is not yet configured. Please contact support.', configured: false });
       const user = await storage.getUser(userId);
@@ -375,7 +276,7 @@ export function registerBillingRoutes(app: Express): void {
           const { userId, plan } = session.metadata || {};
           if (userId && plan) {
             await storage.updateUserSubscription(userId, {
-              subscriptionPlan: plan as 'professional' | 'enterprise',
+              subscriptionPlan: plan as 'professional',
               subscriptionStatus: 'active',
               stripeCustomerId: session.customer,
               stripeSubscriptionId: session.subscription,
@@ -389,9 +290,8 @@ export function registerBillingRoutes(app: Express): void {
           const { userId } = sub.metadata || {};
           const mappedStatus = mapStripeStatusToPlan(sub.status);
           const priceId: string = sub.items?.data?.[0]?.price?.id;
-          let plan: 'professional' | 'enterprise' | undefined;
+          let plan: 'professional' | undefined;
           if (priceId === process.env.STRIPE_PRICE_PROFESSIONAL) plan = 'professional';
-          if (priceId === process.env.STRIPE_PRICE_ENTERPRISE) plan = 'enterprise';
           if (userId) {
             await storage.updateUserSubscription(userId, {
               ...(plan ? { subscriptionPlan: plan, ocrCreditsLimit: 999 } : {}),
