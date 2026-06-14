@@ -6,7 +6,7 @@ description: How this project is built/deployed on Railway — the exact working
 ## Working config (do NOT change without strong reason)
 - Builder: **NIXPACKS** (the Railway dashboard is set to Nixpacks; a custom Dockerfile gets ignored and only adds conflicting signals — do not add one)
 - `railway.json`: builder NIXPACKS, buildCommand `npm run build`, startCommand `npm run start`
-- `nixpacks.toml` install: `NODE_ENV=development npm install --cache /tmp/npm-cache --no-fund --no-audit`
+- `nixpacks.toml` install: `NODE_ENV=development NPM_CONFIG_PRODUCTION=false npm install --include=dev --cache /tmp/npm-cache --no-fund --no-audit` (the `NPM_CONFIG_PRODUCTION=false --include=dev` is load-bearing — see root cause below)
 - `nixpacks.toml` build: explicit binary paths `/app/node_modules/.bin/vite build && /app/node_modules/.bin/esbuild ...`
 
 ## The REAL root cause of `sh: vite: not found` (confirmed from build logs)
