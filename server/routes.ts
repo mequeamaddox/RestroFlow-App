@@ -897,6 +897,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/cost-alerts', isAuthenticated, async (req, res) => {
     try {
       const { location } = req.query;
+      if (location && !await assertLocationAccess(req, res, location as string)) return;
       const alerts = await storage.getCostAlerts(location as string);
       res.json(alerts);
     } catch (error) {
@@ -919,6 +920,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/cost-trends', isAuthenticated, async (req, res) => {
     try {
       const { range, location } = req.query;
+      if (location && !await assertLocationAccess(req, res, location as string)) return;
       const trends = await storage.getCostTrends(range as string, location as string);
       res.json(trends);
     } catch (error) {
@@ -930,6 +932,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/budget-tracking', isAuthenticated, async (req, res) => {
     try {
       const { location } = req.query;
+      if (location && !await assertLocationAccess(req, res, location as string)) return;
       const tracking = await storage.getBudgetTracking(location as string);
       res.json(tracking);
     } catch (error) {
@@ -942,6 +945,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/business-intelligence/daily-pnl', isAuthenticated, requirePlan('professional'), async (req, res) => {
     try {
       const { range, location } = req.query;
+      if (location && !await assertLocationAccess(req, res, location as string)) return;
       const pnl = await storage.getDailyPnL(range as string, location as string);
       res.json(pnl);
     } catch (error) {
@@ -953,6 +957,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/business-intelligence/kpis', isAuthenticated, requirePlan('professional'), async (req, res) => {
     try {
       const { range, location } = req.query;
+      if (location && !await assertLocationAccess(req, res, location as string)) return;
       const kpis = await storage.getKPIMetrics(range as string, location as string);
       res.json(kpis);
     } catch (error) {
@@ -964,6 +969,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/business-intelligence/profitability', isAuthenticated, requirePlan('professional'), async (req, res) => {
     try {
       const { range, location } = req.query;
+      if (location && !await assertLocationAccess(req, res, location as string)) return;
       const analysis = await storage.getProfitabilityAnalysis(range as string, location as string);
       res.json(analysis);
     } catch (error) {
@@ -975,6 +981,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/business-intelligence/menu-performance', isAuthenticated, requirePlan('professional'), async (req, res) => {
     try {
       const { range, location } = req.query;
+      if (location && !await assertLocationAccess(req, res, location as string)) return;
       const performance = await storage.getMenuPerformance(range as string, location as string);
       res.json(performance);
     } catch (error) {
@@ -986,6 +993,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/business-intelligence/cost-analysis', isAuthenticated, requirePlan('professional'), async (req, res) => {
     try {
       const { range, location } = req.query;
+      if (location && !await assertLocationAccess(req, res, location as string)) return;
       const analysis = await storage.getCostAnalysis(range as string, location as string);
       res.json(analysis);
     } catch (error) {
@@ -2215,7 +2223,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.post('/api/waste', isAuthenticated, async (req, res) => {
+  app.post('/api/waste', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const wasteData = insertWasteEntrySchema.parse({
         ...req.body,
@@ -2281,7 +2289,7 @@ print(json.dumps(rows))
   });
 
   // Universal POS Integration Routes
-  app.get("/api/pos/integrations", isAuthenticated, async (req, res) => {
+  app.get("/api/pos/integrations", isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       const integrations = await storage.getPosIntegrations(locationId);
@@ -2292,7 +2300,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.post("/api/pos/integrations", isAuthenticated, async (req, res) => {
+  app.post("/api/pos/integrations", isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const integrationData = insertPosIntegrationSchema.parse(req.body);
       const integration = await storage.createPosIntegration(integrationData);
@@ -2358,12 +2366,9 @@ print(json.dumps(rows))
   });
 
   // POS Menu Items & Recipe Mapping
-  app.get("/api/pos/menu-items/unmapped", isAuthenticated, async (req, res) => {
+  app.get("/api/pos/menu-items/unmapped", isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
-      if (!locationId) {
-        return res.status(400).json({ message: "locationId is required" });
-      }
       const menuItems = await storage.getUnmappedMenuItems(locationId);
       res.json(menuItems);
     } catch (error) {
@@ -2978,7 +2983,8 @@ print(json.dumps(rows))
   app.get('/api/employees', isAuthenticated, async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
-      const employees = await storage.getEmployees();
+      if (locationId && !await assertLocationAccess(req, res, locationId)) return;
+      const employees = await storage.getEmployees(locationId);
       res.json(employees);
     } catch (error) {
       console.error('Error fetching employees:', error);
@@ -3599,7 +3605,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.post('/api/hr/payroll/pay-periods', isAuthenticated, async (req, res) => {
+  app.post('/api/hr/payroll/pay-periods', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const payPeriod = await storage.createPayPeriod(req.body);
       res.status(201).json(payPeriod);
@@ -3609,7 +3615,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.post('/api/hr/payroll/pay-periods/:id/calculate', isAuthenticated, async (req, res) => {
+  app.post('/api/hr/payroll/pay-periods/:id/calculate', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const paystubs = await storage.calculatePayroll(req.params.id);
       res.json(paystubs);
@@ -3619,7 +3625,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.post('/api/hr/payroll/pay-periods/:id/recalculate', isAuthenticated, async (req, res) => {
+  app.post('/api/hr/payroll/pay-periods/:id/recalculate', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const paystubs = await storage.recalculatePayroll(req.params.id);
       res.json(paystubs);
@@ -3629,7 +3635,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.post('/api/hr/payroll/pay-periods/:id/approve', isAuthenticated, async (req, res) => {
+  app.post('/api/hr/payroll/pay-periods/:id/approve', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const payPeriodId = req.params.id;
       const payPeriod = await storage.approvePayroll(payPeriodId, req.user!.id);
@@ -3641,7 +3647,7 @@ print(json.dumps(rows))
   });
 
   // Generate PDFs for approved payroll (on demand)
-  app.post('/api/hr/payroll/pay-periods/:id/generate-pdfs', isAuthenticated, async (req, res) => {
+  app.post('/api/hr/payroll/pay-periods/:id/generate-pdfs', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const payPeriodId = req.params.id;
       
@@ -3992,7 +3998,8 @@ print(json.dumps(rows))
   app.get('/api/hr/messages', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
-      const messages = await storage.getMessages();
+      if (locationId && !await assertLocationAccess(req, res, locationId)) return;
+      const messages = await storage.getMessages(locationId);
       res.json(messages);
     } catch (error) {
       console.error('Error fetching messages:', error);
@@ -4000,7 +4007,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.post('/api/hr/messages', isAuthenticated, async (req, res) => {
+  app.post('/api/hr/messages', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       // Get user ID from authenticated request
       const userId = req.user!.id;
@@ -4023,6 +4030,7 @@ print(json.dumps(rows))
   app.get('/api/activities', isAuthenticated, async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
+      if (locationId && !await assertLocationAccess(req, res, locationId)) return;
       // Return recent activities from various operations
       const activities: any[] = [];
       
@@ -4083,6 +4091,7 @@ print(json.dumps(rows))
   app.get('/api/analytics/realtime', isAuthenticated, requirePlan('professional'), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
+      if (locationId && !await assertLocationAccess(req, res, locationId)) return;
       
       // Disable caching for real-time data
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -4118,6 +4127,7 @@ print(json.dumps(rows))
   app.get('/api/analytics/sales-trend', isAuthenticated, requirePlan('professional'), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
+      if (locationId && !await assertLocationAccess(req, res, locationId)) return;
       const timeRange = req.query.timeRange as string || '7d';
       
       // Determine days to show based on timeRange
@@ -4178,6 +4188,7 @@ print(json.dumps(rows))
   app.get('/api/waste/summary', isAuthenticated, async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
+      if (locationId && !await assertLocationAccess(req, res, locationId)) return;
       
       // Get waste data from database
       const wasteStats = await db
@@ -4317,9 +4328,10 @@ print(json.dumps(rows))
   });
 
   // Document Requirements Management API
-  app.get("/api/hr/document-requirements", isAuthenticated, async (req, res) => {
+  app.get("/api/hr/document-requirements", isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const { locationId, positionId } = req.query;
+      if (locationId && !await assertLocationAccess(req, res, locationId as string)) return;
       const requirements = await storage.getDocumentRequirements(
         locationId as string,
         positionId as string
@@ -4331,7 +4343,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.post("/api/hr/document-requirements", isAuthenticated, async (req, res) => {
+  app.post("/api/hr/document-requirements", isAuthenticated, requireHRAccess, requireLocationAccess(), async (req, res) => {
     try {
       const requirement = await storage.createDocumentRequirement(req.body);
       res.status(201).json(requirement);
@@ -4342,9 +4354,10 @@ print(json.dumps(rows))
   });
 
   // Onboarding Templates Management API
-  app.get("/api/hr/onboarding/templates", isAuthenticated, async (req, res) => {
+  app.get("/api/hr/onboarding/templates", isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const { locationId, positionId } = req.query;
+      if (locationId && !await assertLocationAccess(req, res, locationId as string)) return;
       const templates = await storage.getOnboardingTemplates(
         locationId as string,
         positionId as string
@@ -4356,7 +4369,7 @@ print(json.dumps(rows))
     }
   });
 
-  app.post("/api/hr/onboarding/templates", isAuthenticated, async (req, res) => {
+  app.post("/api/hr/onboarding/templates", isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const userId = req.user!.id;
       const templateData = {
@@ -5071,7 +5084,7 @@ print(json.dumps(rows))
   // Payroll API Routes
   
   // Get payroll periods
-  app.get("/api/payroll-periods", isAuthenticated, async (req, res) => {
+  app.get("/api/payroll-periods", isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const { locationId } = req.query;
       const periods = await storage.getPayrollPeriods(locationId as string);
@@ -5541,7 +5554,7 @@ print(json.dumps(rows))
   // Sales Integration API endpoints
 
   // Record a sales transaction with automatic inventory deduction
-  app.post('/api/sales/transactions', isAuthenticated, async (req, res) => {
+  app.post('/api/sales/transactions', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const { 
         locationId, 
@@ -5577,6 +5590,7 @@ print(json.dumps(rows))
   app.get('/api/sales/transactions/:locationId', isAuthenticated, async (req, res) => {
     try {
       const { locationId } = req.params;
+      if (!await assertLocationAccess(req, res, locationId)) return;
       const limit = parseInt(req.query.limit as string) || 50;
 
       const transactions = await storage.getSalesTransactions(locationId, limit);
@@ -5591,6 +5605,7 @@ print(json.dumps(rows))
   app.get('/api/sales/analytics/:locationId', isAuthenticated, async (req, res) => {
     try {
       const { locationId } = req.params;
+      if (!await assertLocationAccess(req, res, locationId)) return;
 
       // Get sales transactions for the period
       const transactions = await storage.getSalesTransactions(locationId, 1000);

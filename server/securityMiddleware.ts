@@ -235,7 +235,7 @@ export async function assertLocationAccess(req: any, res: Response, locationId: 
 export function requireLocationAccess(locationId?: string) {
   return async (req: any, res: Response, next: NextFunction) => {
     try {
-      const targetLocationId = locationId || req.params.locationId || (req.query.locationId as string) || req.body?.locationId;
+      const targetLocationId = locationId || req.params.locationId || (req.query.locationId as string) || (req.query.location as string) || req.body?.locationId;
 
       if (!targetLocationId) {
         return res.status(400).json({ message: 'Location ID required' });

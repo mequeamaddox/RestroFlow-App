@@ -409,7 +409,7 @@ export interface IStorage {
   createTimeEntry(entryData: any): Promise<TimeEntry>;
 
   // HR Message operations
-  getMessages(): Promise<Message[]>;
+  getMessages(locationId?: string): Promise<Message[]>;
   createMessage(message: InsertMessage): Promise<Message>;
   markMessageAsRead(messageId: string, userId: string): Promise<void>;
   
@@ -3173,7 +3173,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   // HR Message operations
-  async getMessages(): Promise<Message[]> {
+  async getMessages(locationId?: string): Promise<Message[]> {
+    if (locationId) {
+      return await db.select().from(messages)
+        .where(eq(messages.locationId, locationId))
+        .orderBy(desc(messages.createdAt));
+    }
     return await db.select().from(messages).orderBy(desc(messages.createdAt));
   }
 
