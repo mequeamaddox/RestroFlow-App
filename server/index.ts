@@ -1,3 +1,15 @@
+import * as Sentry from "@sentry/node";
+
+// Must be initialised before any other imports so Sentry can instrument them.
+// Silently no-ops when SENTRY_DSN is absent (dev / CI environments).
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV || "development",
+  tracesSampleRate: 0.1,
+  // Suppress the "no DSN" warning in development
+  ...(process.env.SENTRY_DSN ? {} : { enabled: false }),
+});
+
 import { clerkMiddleware } from './clerkAuth';
 import { locationContextMiddleware } from './locationContext';
 import { runStartupMigrations } from './startup-migrations';
@@ -11,26 +23,26 @@ import { startSpotOnSchedulers } from "./jobs/spoton.scheduler";
 import { startAnalyticsScheduler } from "./jobs/analyticsScheduler";
 import { startCloverScheduler } from "./jobs/clover.scheduler";
 
-// Global error handlers to prevent crashes
+// Global error handlers — report to Sentry before deciding whether to keep the process alive
 process.on('uncaughtException', (error) => {
+  Sentry.captureException(error);
   console.error('Uncaught Exception:', error);
-  // Don't exit the process, just log the error
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  // Don't exit the process, just log the error
+process.on('unhandledRejection', (reason) => {
+  Sentry.captureException(reason);
+  console.error('Unhandled Rejection:', reason);
 });
 
 const app = express();
 
-// Configure trust proxy for Replit environment (fix rate limiting warning)
+// Configure trust proxy for Railway/Replit environment (fix rate limiting warning)
 app.set('trust proxy', 1);
 
 // Apply enterprise security middleware
 app.use(securityHeaders);
 app.use('/api/', apiLimiter);
-// Capture raw body for Stripe webhook signature verification
+// Capture raw body for webhook signature verification
 app.use(express.json({
   verify: (req: any, _res, buf) => {
     req.rawBody = buf;
@@ -43,7 +55,6 @@ app.use(clerkMiddleware({
   secretKey: process.env.CLERK_SECRET_KEY,
 }));
 app.use(locationContextMiddleware);
-// Enable cookie parsing for session management
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -81,26 +92,22 @@ app.use((req, res, next) => {
 
   const server = await registerRoutes(app);
 
+  // Sentry error handler must come AFTER all routes and BEFORE the custom error handler
+  // so it captures exceptions before we send the response to the client.
+  Sentry.setupExpressErrorHandler(app);
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
-
     res.status(status).json({ message });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
   server.listen({
     port,
