@@ -1,5 +1,4 @@
 - [npm registry override](npm-registry-override.md) — Replit env var forces package firewall; use --registry=https://registry.npmjs.org/ CLI flag, never rely on .npmrc alone
-- [nixpacks devDep install](nixpacks-devdep.md) — Railway Docker sets NODE_ENV=production; use --include=dev flag, not NODE_ENV=development prefix, to guarantee devDependencies install
 - [POS queue architecture](pos-queue-architecture.md) — SpotOn uses webhook-first + Postgres job queue (pos_event_queue); no Redis; staggered fallback polling only when lastWebhookAt is stale
 - [startup migrations](startup-migrations.md) — Two parallel migration files must stay in sync: server/startup-migrations.ts (dev, runs on tsx start) and scripts/migrate.mjs (prod, runs before npm start)
-- [Railway deployment setup](railway-deploy.md) — use Dockerfile builder (not Nixpacks); npm ci requires lockfile in sync; explicit binary paths in build stage.
+- [Railway deployment setup](railway-deploy.md) — Nixpacks (no Dockerfile); the real fix is `--cache /tmp/npm-cache` (avoids npm crash) + NODE_ENV=development npm install + explicit .bin paths; keep uv.lock deleted.
