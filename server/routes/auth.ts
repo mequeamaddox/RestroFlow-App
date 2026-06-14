@@ -31,17 +31,25 @@ export function registerAuthRoutes(app: Express): void {
           const firstName = clerkUser.firstName || '';
           const lastName = clerkUser.lastName || '';
 
-          if (email) user = await storage.getUserByEmail(email);
+          const existingByEmail = email ? await storage.getUserByEmail(email) : undefined;
 
-          if (!user) {
-            await storage.upsertUser({ id: userId, email, firstName, lastName, role: 'owner' });
-            user = await storage.getUser(userId);
+          // IMPORTANT: use upsertUser's RETURN value — never re-fetch by Clerk userId.
+          // An account matched by email keeps its ORIGINAL id, which will NOT equal the
+          // current Clerk userId after a Clerk app/key change. Re-fetching by userId then
+          // returns null and surfaces a false "User not found" on an otherwise valid login.
+          if (!existingByEmail) {
+            user = await storage.upsertUser({ id: userId, email, firstName, lastName, role: 'owner' });
           } else {
-            await storage.upsertUser({ id: userId, email: user.email || email, firstName: user.firstName || firstName, lastName: user.lastName || lastName, role: user.role || 'owner' });
-            user = await storage.getUser(userId);
+            user = await storage.upsertUser({
+              id: userId,
+              email: existingByEmail.email || email,
+              firstName: existingByEmail.firstName || firstName,
+              lastName: existingByEmail.lastName || lastName,
+              role: existingByEmail.role || 'owner',
+            });
           }
         } catch (clerkErr) {
-          console.error('Could not fetch Clerk user:', clerkErr);
+          console.error('❌ /api/auth/me provisioning failed:', clerkErr instanceof Error ? clerkErr.message : clerkErr);
           return res.status(401).json({ ok: false, message: 'User not found' });
         }
       }

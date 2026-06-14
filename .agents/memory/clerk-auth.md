@@ -24,5 +24,11 @@ App uses Clerk (`@clerk/express` backend, `@clerk/clerk-react` frontend). Two en
 **Fix:** force a clean / no-cache rebuild on the host so the new publishable key is re-baked into the client bundle. Rotating the env var alone is not enough.
 **Why:** build-time env baking is invisible at runtime — the running server has the new secret, but the browser bundle still carries the old public key.
 
+## Failure mode 4: keys correct + token verifies, but /api/auth/me returns 401 "User not found"
+**Symptom:** `🔐 [Clerk]` log shows matching live/live same-instance keys, `getAuth(req).userId` is present (so it's NOT "Not authenticated"), yet `/api/auth/me` returns `{"ok":false,"message":"User not found"}` for every request.
+**Cause:** swapping Clerk apps/keys gives the user a NEW Clerk userId, but their existing DB row is matched by EMAIL and keeps its ORIGINAL id (upsertUser never changes id). Any code that re-fetches the user by the Clerk `userId` after upsert gets null → false "User not found".
+**Fix:** resolve the user by email (or use upsertUser's RETURN value) — never re-fetch by Clerk userId. `requireAuth` already does email-first resolution and sets `req.user.id` = DB row id; `/api/auth/me` must follow the same pattern.
+**Why:** the DB row id and the Clerk userId permanently diverge after an app/key swap; email is the stable identity key. No id migration is needed because the whole app scopes by the DB row id via requireAuth.
+
 ## Startup self-check
 `logClerkKeyDiagnostics()` (server/clerkAuth.ts, called once in server/index.ts before clerkMiddleware) logs `🔐 [Clerk] frontend instance="..." publishableKey=live secretKey=live` and warns on live/test mismatch. Safe — never logs secret values. Read this line in Railway logs to confirm prod has matching, same-instance keys.
