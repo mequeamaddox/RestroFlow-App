@@ -30,7 +30,6 @@ export default function EmployeeSettings() {
   });
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
     newPassword: '',
     confirmPassword: ''
   });
@@ -79,15 +78,15 @@ export default function EmployeeSettings() {
   };
 
   const changePasswordMutation = useMutation({
-    mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
+    mutationFn: async (data: { newPassword: string }) => {
       return apiRequest('PUT', `/api/employees/${(user as any)?.id}/password`, data);
     },
     onSuccess: () => {
       setIsChangingPassword(false);
-      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setPasswordData({ newPassword: '', confirmPassword: '' });
       toast({
         title: "Password Changed",
-        description: "Your password has been updated successfully. Please log in with your new password.",
+        description: "Your password has been updated successfully.",
       });
     },
     onError: (error: any) => {
@@ -103,29 +102,26 @@ export default function EmployeeSettings() {
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       toast({
         title: "Error",
-        description: "New passwords do not match",
+        description: "Passwords do not match",
         variant: "destructive"
       });
       return;
     }
-    
+
     if (passwordData.newPassword.length < 8) {
       toast({
-        title: "Error", 
+        title: "Error",
         description: "Password must be at least 8 characters long",
         variant: "destructive"
       });
       return;
     }
 
-    changePasswordMutation.mutate({
-      currentPassword: passwordData.currentPassword,
-      newPassword: passwordData.newPassword
-    });
+    changePasswordMutation.mutate({ newPassword: passwordData.newPassword });
   };
 
   const handleCancelPasswordChange = () => {
-    setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    setPasswordData({ newPassword: '', confirmPassword: '' });
     setIsChangingPassword(false);
   };
 
@@ -342,10 +338,10 @@ export default function EmployeeSettings() {
               <div className="space-y-2">
                 <Label className="text-base">Password</Label>
                 <p className="text-sm text-slate-400">
-                  Last changed: Never (using temporary password)
+                  Managed securely via Clerk authentication
                 </p>
               </div>
-              <Button 
+              <Button
                 onClick={() => setIsChangingPassword(true)}
                 className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white"
                 data-testid="button-changePassword"
@@ -355,18 +351,6 @@ export default function EmployeeSettings() {
             </>
           ) : (
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="currentPassword">Current Password</Label>
-                <Input
-                  id="currentPassword"
-                  type="password"
-                  value={passwordData.currentPassword}
-                  onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
-                  placeholder="Enter current password"
-                  className="bg-slate-700 border-slate-600 text-white"
-                  data-testid="input-currentPassword"
-                />
-              </div>
               <div className="space-y-2">
                 <Label htmlFor="newPassword">New Password</Label>
                 <Input
