@@ -1,6 +1,7 @@
 import { clerkMiddleware } from './clerkAuth';
 import { locationContextMiddleware } from './locationContext';
 import { runStartupMigrations } from './startup-migrations';
+import { validateObjectStorageConfig } from './objectStorage';
 import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
@@ -76,6 +77,7 @@ app.use((req, res, next) => {
 
 (async () => {
   await runStartupMigrations();
+  validateObjectStorageConfig();
 
   const server = await registerRoutes(app);
 
