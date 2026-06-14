@@ -9,9 +9,16 @@ description: How this project is built/deployed on Railway — the exact working
 - `nixpacks.toml` install: `NODE_ENV=development npm install --cache /tmp/npm-cache --no-fund --no-audit`
 - `nixpacks.toml` build: explicit binary paths `/app/node_modules/.bin/vite build && /app/node_modules/.bin/esbuild ...`
 
-## The two things that actually matter
-1. **`--cache /tmp/npm-cache`** is the real fix for `npm error Exit handler never called!`. The crash comes from Docker's shared `--mount=type=cache` on `/root/.npm`; pointing npm at a fresh `/tmp/npm-cache` avoids it. Removing this flag reintroduces the crash.
-2. **`NODE_ENV=development` + explicit `.bin/` paths** guarantee vite/esbuild (devDeps) are installed and found, regardless of Railway injecting NODE_ENV=production. Fixes `sh: vite: not found`.
+## The REAL root cause of `sh: vite: not found` (confirmed from build logs)
+The Railway service has a **production config in its env vars** (NODE_ENV=production and/or NPM_CONFIG_PRODUCTION=true). npm honors this as `production=true` (you'll see `npm warn config production Use --omit=dev instead` in the log) and **skips ALL devDependencies**. vite + esbuild are devDeps → not installed → build fails with `vite: not found` (exit 127).
+- A bare `NODE_ENV=development` prefix on the install command is NOT enough — npm's `production`/`NPM_CONFIG_PRODUCTION` setting overrides it.
+- **Fix that works:** install command must be `NODE_ENV=development NPM_CONFIG_PRODUCTION=false npm install --include=dev --cache /tmp/npm-cache --no-fund --no-audit`. The `NPM_CONFIG_PRODUCTION=false` + `--include=dev` force devDeps in regardless of the ambient production env var.
+
+## Build command precedence
+`railway.json` buildCommand (`npm run build`) OVERRIDES nixpacks.toml `[phases.build]`. So the build actually runs the package.json script `vite build && esbuild ...`. Once devDeps are installed, vite is on PATH (Nixpacks appends `/app/node_modules/.bin` to PATH). The explicit `.bin/` paths in nixpacks `[phases.build]` are effectively dead config — the install phase is what matters.
+
+## About `--cache /tmp/npm-cache` and "Exit handler never called!"
+`--cache /tmp/npm-cache` is kept, but it does NOT fully suppress the `npm error Exit handler never called!` message (Nixpacks still mounts `/root/.npm` as a cache). That message turned out to be **non-fatal noise** — the build proceeded past install. The fatal error was always `vite: not found`, caused by the production config above.
 
 ## Do NOT do these (all tried, all broke the build)
 - `npm ci` instead of `npm install` — fails hard whenever package-lock.json drifts from package.json
