@@ -2,10 +2,10 @@
 nixPkgs = ["nodejs_20", "python3"]
 
 [phases.install]
-cmds = ["NODE_ENV=development npm install"]
+cmds = ["NODE_ENV=development npm ci"]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = ["/app/node_modules/.bin/vite build && /app/node_modules/.bin/esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist"]
 
 [start]
 cmd = "node scripts/migrate.mjs && npm run start"
