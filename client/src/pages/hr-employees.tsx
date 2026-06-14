@@ -163,30 +163,6 @@ export default function HREmployees() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     
-    // Password validation for new employees
-    if (!editingEmployee) {
-      const password = formData.get('password') as string;
-      const confirmPassword = formData.get('confirmPassword') as string;
-      
-      if (password !== confirmPassword) {
-        toast({ 
-          title: "Error", 
-          description: "Passwords do not match", 
-          variant: "destructive" 
-        });
-        return;
-      }
-      
-      if (password.length < 6) {
-        toast({ 
-          title: "Error", 
-          description: "Password must be at least 6 characters long", 
-          variant: "destructive" 
-        });
-        return;
-      }
-    }
-    
     const employeeData = {
       firstName: formData.get('firstName'),
       lastName: formData.get('lastName'),
@@ -198,9 +174,6 @@ export default function HREmployees() {
       hireDate: formData.get('hireDate') as string || new Date().toISOString().split('T')[0],
       status: formData.get('status') || 'active',
       notes: formData.get('notes'),
-      ...((!editingEmployee && formData.get('password')) && { 
-        password: formData.get('password') 
-      })
     };
 
     if (editingEmployee) {
@@ -319,29 +292,11 @@ export default function HREmployees() {
                   </div>
                   
                   {!editingEmployee && (
-                    <>
-                      <div className="space-y-2">
-                        <Label htmlFor="password">Password</Label>
-                        <Input
-                          id="password"
-                          name="password"
-                          type="password"
-                          placeholder="Enter temporary password"
-                          required
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label htmlFor="confirmPassword">Confirm Password</Label>
-                        <Input
-                          id="confirmPassword"
-                          name="confirmPassword"
-                          type="password"
-                          placeholder="Confirm password"
-                          required
-                        />
-                      </div>
-                    </>
+                    <div className="rounded-lg bg-blue-900/20 border border-blue-700/50 p-3">
+                      <p className="text-sm text-blue-300">
+                        A one-time activation link will be emailed to the employee. They'll use it to sign in and set their own password — no temporary password is created.
+                      </p>
+                    </div>
                   )}
                   
                   <div className="space-y-2">

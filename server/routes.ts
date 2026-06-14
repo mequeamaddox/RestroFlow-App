@@ -3030,15 +3030,17 @@ print(json.dumps(rows))
       // Always create a user account for the employee (required for login)
       if (employee.email) {
         try {
-          // Generate a temporary password for the employee
-          const tempPassword = 'TEMP1234!';
-          
           console.log('👤 Creating Clerk user for employee:', employee.email);
+
+          // Generate a cryptographically random password — never stored, never revealed.
+          // The employee will sign in via the one-time magic link sent below.
+          const { randomBytes } = await import('crypto');
+          const randomPassword = randomBytes(32).toString('base64url') + 'Aa1!';
 
           // Create Clerk user account
           const clerkUser = await clerkClient.users.createUser({
             emailAddress: [employee.email],
-            password: tempPassword,
+            password: randomPassword,
             firstName: employee.firstName,
             lastName: employee.lastName,
           });
@@ -3063,8 +3065,21 @@ print(json.dumps(rows))
           });
 
           console.log('✅ Clerk user and local user account created successfully');
+
+          // Generate a one-time sign-in token (3-day expiry) so the employee
+          // never needs to know a password to access their account for the first time.
+          let loginUrl = `${req.protocol}://${req.get('host')}`;
+          try {
+            const signInToken = await clerkClient.signInTokens.createSignInToken({
+              userId,
+              expiresInSeconds: 60 * 60 * 24 * 3, // 3 days
+            });
+            loginUrl = `${req.protocol}://${req.get('host')}?__clerk_ticket=${signInToken.token}`;
+          } catch (tokenError) {
+            console.error('⚠️ Could not generate sign-in token, falling back to plain login URL:', tokenError);
+          }
           
-          // Send welcome email with login credentials
+          // Send welcome email with ONE-TIME login link — no password in the email
           console.log('📧 Attempting to send welcome email to:', employee.email);
           try {
             const { sendEmail } = await import('./email');
@@ -3072,25 +3087,22 @@ print(json.dumps(rows))
             const emailParams = {
               to: employee.email,
               from: 'mequeamaddox@gmail.com',
-              subject: 'Welcome to RestroFlow - Your Account Details',
+              subject: 'Welcome to RestroFlow - Activate Your Account',
               html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                   <h2 style="color: #1f2937; text-align: center;">Welcome to RestroFlow!</h2>
                   <p>Hi ${employee.firstName},</p>
-                  <p>Your employee account has been created successfully. Here are your login credentials:</p>
-                  
-                  <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                    <h3 style="margin-top: 0; color: #374151;">Login Information</h3>
-                    <p><strong>Email:</strong> ${employee.email}</p>
-                    <p><strong>Temporary Password:</strong> ${tempPassword}</p>
-                    <p><small style="color: #6b7280;">Please change this password after your first login</small></p>
-                  </div>
+                  <p>Your employee account has been created. Click the button below to sign in and set up your password — this link is valid for 3 days.</p>
                   
                   <div style="text-align: center; margin: 30px 0;">
-                    <a href="${req.protocol}://${req.get('host')}" style="background-color: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Access RestroFlow</a>
+                    <a href="${loginUrl}" style="background-color: #f97316; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-size: 16px; font-weight: bold;">Activate My Account</a>
                   </div>
-                  
-                  <p>Your onboarding documents will be sent to you shortly. If you have any questions, please contact your manager.</p>
+
+                  <p style="color: #6b7280; font-size: 14px;">If the button doesn't work, copy and paste this link into your browser:</p>
+                  <p style="word-break: break-all; font-size: 13px; color: #374151;">${loginUrl}</p>
+
+                  <p>After signing in, go to <strong>Settings → Privacy & Security</strong> to set your own password.</p>
+                  <p>If you have any questions, contact your manager.</p>
                   <p>Best regards,<br>The RestroFlow Team</p>
                 </div>
               `
@@ -3104,13 +3116,12 @@ print(json.dumps(rows))
             console.error('❌ Full email error stack:', emailError instanceof Error ? emailError.stack : String(emailError));
           }
           
-          // Return success with login instructions
+          // Return success — no credentials in the response body
           return res.status(201).json({
             ...employee,
             loginInstructions: {
               email: employee.email,
-              tempPassword: tempPassword,
-              message: 'Employee can log in with temporary password: TEMP1234!'
+              message: 'Welcome email with one-time login link sent to employee.'
             }
           });
           
