@@ -177,9 +177,9 @@ export default function EmployeeMessages() {
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'urgent': return 'bg-red-100 text-red-800 border-red-200';
-      case 'high': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'normal': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'urgent': return 'bg-red-900/30 text-red-400 border border-red-800';
+      case 'high': return 'bg-orange-900/30 text-orange-400 border border-orange-800';
+      case 'normal': return 'bg-blue-900/30 text-blue-400 border border-blue-800';
       case 'low': return 'bg-accent text-foreground border-border';
       default: return 'bg-accent text-foreground border-border';
     }
@@ -237,43 +237,43 @@ export default function EmployeeMessages() {
               <MessageCircle className="h-8 w-8 text-blue-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Total Messages</p>
-                <p className="text-2xl font-bold text-blue-700">{stats.total}</p>
+                <p className="text-2xl font-bold text-blue-400">{stats.total}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+        <Card className="bg-gradient-to-br from-orange-900/30 to-orange-900/10 border-orange-800/50">
           <CardContent className="p-6">
             <div className="flex items-center">
-              <Mail className="h-8 w-8 text-orange-600" />
+              <Mail className="h-8 w-8 text-orange-400" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Unread</p>
-                <p className="text-2xl font-bold text-orange-700">{stats.unread}</p>
+                <p className="text-2xl font-bold text-orange-400">{stats.unread}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+        <Card className="bg-gradient-to-br from-green-900/30 to-green-900/10 border-green-800/50">
           <CardContent className="p-6">
             <div className="flex items-center">
-              <Send className="h-8 w-8 text-green-600" />
+              <Send className="h-8 w-8 text-green-400" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Sent</p>
-                <p className="text-2xl font-bold text-green-700">{stats.sent}</p>
+                <p className="text-2xl font-bold text-green-400">{stats.sent}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+        <Card className="bg-gradient-to-br from-purple-900/30 to-purple-900/10 border-purple-800/50">
           <CardContent className="p-6">
             <div className="flex items-center">
-              <Megaphone className="h-8 w-8 text-purple-600" />
+              <Megaphone className="h-8 w-8 text-purple-400" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Announcements</p>
-                <p className="text-2xl font-bold text-purple-700">{stats.announcements}</p>
+                <p className="text-2xl font-bold text-purple-400">{stats.announcements}</p>
               </div>
             </div>
           </CardContent>
@@ -351,7 +351,7 @@ export default function EmployeeMessages() {
                   key={message.id}
                   onClick={() => handleViewMessage(message)}
                   className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md ${
-                    !message.isRead ? 'bg-blue-50 border-blue-200' : 'hover:bg-accent'
+                    !message.isRead ? 'bg-blue-900/20 border-blue-700/50' : 'hover:bg-accent'
                   } ${selectedMessage?.id === message.id ? 'ring-2 ring-blue-500' : ''}`}
                   data-testid={`message-item-${message.id}`}
                 >

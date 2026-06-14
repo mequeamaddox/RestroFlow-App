@@ -126,9 +126,9 @@ export default function InventoryTable({ items, isLoading, showPagination = fals
     if (quantity <= reorderLevel) {
       return <Badge variant="destructive">Low Stock</Badge>;
     } else if (quantity <= reorderLevel * 1.5) {
-      return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Medium Stock</Badge>;
+      return <Badge variant="secondary" className="bg-yellow-900/30 text-yellow-400 border border-yellow-800">Medium Stock</Badge>;
     } else {
-      return <Badge variant="secondary" className="bg-green-100 text-green-800">In Stock</Badge>;
+      return <Badge variant="secondary" className="bg-green-900/30 text-green-400 border border-green-800">In Stock</Badge>;
     }
   };
 

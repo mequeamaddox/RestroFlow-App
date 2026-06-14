@@ -176,9 +176,9 @@ export function EmployeeAccountManager() {
           <CardContent>
             <div className="space-y-2">
               {createdEmployees.map((email, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                <div key={index} className="flex items-center justify-between p-3 bg-green-900/30 rounded-lg">
                   <span className="font-medium">{email}</span>
-                  <Badge variant="outline" className="bg-green-100 text-green-700">
+                  <Badge variant="outline" className="bg-green-900/30 text-green-400 border-green-800">
                     Account Created
                   </Badge>
                 </div>

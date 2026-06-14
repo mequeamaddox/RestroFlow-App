@@ -103,18 +103,18 @@ export default function HRTasks() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return 'bg-accent text-foreground';
-      case 'in-progress': return 'bg-blue-100 text-blue-800';
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'overdue': return 'bg-red-100 text-red-800';
+      case 'in-progress': return 'bg-blue-900/30 text-blue-400 border border-blue-800';
+      case 'completed': return 'bg-green-900/30 text-green-400 border border-green-800';
+      case 'overdue': return 'bg-red-900/30 text-red-400 border border-red-800';
       default: return 'bg-accent text-foreground';
     }
   };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      case 'low': return 'bg-green-100 text-green-800';
+      case 'high': return 'bg-red-900/30 text-red-400 border border-red-800';
+      case 'medium': return 'bg-yellow-900/30 text-yellow-400 border border-yellow-800';
+      case 'low': return 'bg-green-900/30 text-green-400 border border-green-800';
       default: return 'bg-accent text-foreground';
     }
   };
@@ -276,8 +276,8 @@ export default function HRTasks() {
                   <p className="text-sm text-muted-foreground">In Progress</p>
                   <p className="text-2xl font-bold">{getTasksByStatus('in-progress')}</p>
                 </div>
-                <div className="bg-blue-100 p-2 rounded-full">
-                  <User className="h-4 w-4 text-blue-600" />
+                <div className="bg-blue-900/30 p-2 rounded-full">
+                  <User className="h-4 w-4 text-blue-400" />
                 </div>
               </div>
             </CardContent>
@@ -290,8 +290,8 @@ export default function HRTasks() {
                   <p className="text-sm text-muted-foreground">Completed</p>
                   <p className="text-2xl font-bold">{getTasksByStatus('completed')}</p>
                 </div>
-                <div className="bg-green-100 p-2 rounded-full">
-                  <CheckSquare className="h-4 w-4 text-green-600" />
+                <div className="bg-green-900/30 p-2 rounded-full">
+                  <CheckSquare className="h-4 w-4 text-green-400" />
                 </div>
               </div>
             </CardContent>
@@ -304,8 +304,8 @@ export default function HRTasks() {
                   <p className="text-sm text-muted-foreground">Overdue</p>
                   <p className="text-2xl font-bold">{getTasksByStatus('overdue')}</p>
                 </div>
-                <div className="bg-red-100 p-2 rounded-full">
-                  <AlertCircle className="h-4 w-4 text-red-600" />
+                <div className="bg-red-900/30 p-2 rounded-full">
+                  <AlertCircle className="h-4 w-4 text-red-400" />
                 </div>
               </div>
             </CardContent>
@@ -427,7 +427,7 @@ export default function HRTasks() {
                   )}
                   {task.status === 'completed' && (
                     <div className="flex-1 text-center py-1">
-                      <Badge className="bg-green-100 text-green-800">
+                      <Badge className="bg-green-900/30 text-green-400 border border-green-800">
                         <CheckSquare className="h-4 w-4 mr-1" />
                         Completed
                       </Badge>

@@ -37,14 +37,14 @@ export default function BarcodeTest() {
             </Button>
 
             {scannedBarcode && (
-              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+              <div className="p-4 bg-green-900/20 border border-green-700/50 rounded-lg">
                 <div className="flex items-center">
-                  <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                  <CheckCircle className="h-5 w-5 text-green-400 mr-2" />
                   <div>
-                    <p className="text-sm font-medium text-green-800">
+                    <p className="text-sm font-medium text-green-300">
                       Scanned Successfully!
                     </p>
-                    <p className="text-sm text-green-600 font-mono">
+                    <p className="text-sm text-green-400 font-mono">
                       {scannedBarcode}
                     </p>
                   </div>
@@ -72,11 +72,11 @@ export default function BarcodeTest() {
             </div>
 
             {inputBarcode && (
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm font-medium text-blue-800">
+              <div className="p-4 bg-blue-900/20 border border-blue-700/50 rounded-lg">
+                <p className="text-sm font-medium text-blue-300">
                   Current Value:
                 </p>
-                <p className="text-sm text-blue-600 font-mono">
+                <p className="text-sm text-blue-400 font-mono">
                   {inputBarcode}
                 </p>
               </div>

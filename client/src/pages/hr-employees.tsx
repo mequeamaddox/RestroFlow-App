@@ -212,9 +212,9 @@ export default function HREmployees() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'inactive': return 'bg-yellow-100 text-yellow-800';
-      case 'terminated': return 'bg-red-100 text-red-800';
+      case 'active': return 'bg-green-900/30 text-green-400 border border-green-800';
+      case 'inactive': return 'bg-yellow-900/30 text-yellow-400 border border-yellow-800';
+      case 'terminated': return 'bg-red-900/30 text-red-400 border border-red-800';
       default: return 'bg-accent text-foreground';
     }
   };
@@ -425,7 +425,7 @@ export default function HREmployees() {
                 </div>
                 </div>
                 
-                <div className="p-6 border-t bg-gray-50">
+                <div className="p-6 border-t border-slate-700 bg-slate-800">
                   <DialogFooter>
                     <Button type="submit" disabled={createEmployeeMutation.isPending || updateEmployeeMutation.isPending}>
                       {editingEmployee ? 'Update Employee' : 'Add Employee'}

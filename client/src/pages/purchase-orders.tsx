@@ -381,10 +381,10 @@ export default function PurchaseOrders() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft': return 'bg-accent text-foreground';
-      case 'sent': return 'bg-blue-100 text-blue-800';
-      case 'confirmed': return 'bg-yellow-100 text-yellow-800';
-      case 'delivered': return 'bg-green-100 text-green-800';
-      case 'cancelled': return 'bg-red-100 text-red-800';
+      case 'sent': return 'bg-blue-900/30 text-blue-400 border border-blue-800';
+      case 'confirmed': return 'bg-yellow-900/30 text-yellow-400 border border-yellow-800';
+      case 'delivered': return 'bg-green-900/30 text-green-400 border border-green-800';
+      case 'cancelled': return 'bg-red-900/30 text-red-400 border border-red-800';
       default: return 'bg-accent text-foreground';
     }
   };
@@ -597,8 +597,8 @@ export default function PurchaseOrders() {
                         <label className="block text-xs font-medium text-gray-300 mb-1">
                           Line Total
                         </label>
-                        <div className="h-10 px-3 py-2 bg-green-50 border border-green-200 rounded-md flex items-center justify-center">
-                          <span className="text-sm font-bold text-green-700">
+                        <div className="h-10 px-3 py-2 bg-green-900/20 border border-green-700/50 rounded-md flex items-center justify-center">
+                          <span className="text-sm font-bold text-green-400">
                             ${getCurrentItemTotal().toFixed(2)}
                           </span>
                         </div>
@@ -650,7 +650,7 @@ export default function PurchaseOrders() {
                   {lineItems.length > 0 && (
                     <div className="border rounded-lg overflow-hidden">
                       <Table>
-                        <TableHeader className="bg-gray-50">
+                        <TableHeader className="bg-slate-800">
                           <TableRow>
                             <TableHead className="font-semibold">Item</TableHead>
                             <TableHead className="text-center">Quantity</TableHead>
@@ -696,9 +696,9 @@ export default function PurchaseOrders() {
                                 <TableCell className="text-center">
                                   <div className="flex flex-col">
                                     <span className="font-medium">{percentOfTotal.toFixed(1)}%</span>
-                                    <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                                    <div className="w-full bg-slate-700 rounded-full h-1.5 mt-1">
                                       <div 
-                                        className="bg-blue-600 h-1.5 rounded-full" 
+                                        className="bg-blue-500 h-1.5 rounded-full" 
                                         style={{ width: `${Math.min(percentOfTotal, 100)}%` }}
                                       ></div>
                                     </div>
@@ -711,7 +711,7 @@ export default function PurchaseOrders() {
                                     size="sm"
                                     onClick={() => removeLineItem(index)}
                                     data-testid={`button-remove-item-${index}`}
-                                    className="hover:bg-red-50 hover:text-red-600"
+                                    className="hover:bg-red-900/20 hover:text-red-400"
                                   >
                                     <X className="h-4 w-4" />
                                   </Button>
@@ -764,10 +764,10 @@ export default function PurchaseOrders() {
                           
                           {/* Cost Insights */}
                           {lineItems.length > 0 && (
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-3">
                               <div className="flex items-center space-x-2 mb-2">
-                                <DollarSign className="h-4 w-4 text-blue-600" />
-                                <span className="text-sm font-medium text-blue-800">Cost Insights</span>
+                                <DollarSign className="h-4 w-4 text-blue-400" />
+                                <span className="text-sm font-medium text-blue-300">Cost Insights</span>
                               </div>
                               <div className="grid grid-cols-2 gap-3 text-xs">
                                 {(() => {
@@ -1022,13 +1022,13 @@ export default function PurchaseOrders() {
 
       {/* Low Stock Items Quick Actions */}
       {lowStockItems.length > 0 && (
-        <Card className="border-orange-200 bg-orange-50">
+        <Card className="border-orange-800/50 bg-orange-900/20">
           <CardHeader className="pb-3">
             <div className="flex items-center space-x-2">
-              <AlertTriangle className="h-5 w-5 text-orange-600" />
-              <CardTitle className="text-orange-800">Low Stock Items ({lowStockItems.length})</CardTitle>
+              <AlertTriangle className="h-5 w-5 text-orange-400" />
+              <CardTitle className="text-orange-300">Low Stock Items ({lowStockItems.length})</CardTitle>
             </div>
-            <p className="text-sm text-orange-700">
+            <p className="text-sm text-orange-400">
               These items are running low and may need reordering
             </p>
           </CardHeader>
@@ -1082,7 +1082,7 @@ export default function PurchaseOrders() {
                       });
                     });
                   }}
-                  className="text-orange-700 border-orange-300 hover:bg-orange-100"
+                  className="text-orange-400 border-orange-700 hover:bg-orange-900/20"
                   data-testid="button-create-pos-from-low-stock"
                 >
                   <ShoppingCart className="h-4 w-4 mr-1" />
@@ -1092,7 +1092,7 @@ export default function PurchaseOrders() {
                   variant="outline" 
                   size="sm"
                   onClick={() => window.location.href = '/inventory'}
-                  className="text-orange-700 border-orange-300 hover:bg-orange-100"
+                  className="text-orange-400 border-orange-700 hover:bg-orange-900/20"
                 >
                   <Eye className="h-4 w-4 mr-1" />
                   View All

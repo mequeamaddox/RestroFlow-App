@@ -450,7 +450,7 @@ export default function HRTimeClock() {
                     key={employee.id}
                     className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${
                       selectedEmployeeId === employee.id 
-                        ? 'border-blue-500 bg-blue-50' 
+                        ? 'border-blue-500 bg-blue-900/20' 
                         : 'hover:bg-accent'
                     }`}
                     onClick={() => setSelectedEmployeeId(employee.id)}

@@ -171,8 +171,8 @@ export default function HRPaycheckSettings() {
                     flex flex-col items-center p-6 border-2 rounded-lg cursor-pointer transition-all
                     hover:shadow-md hover:border-blue-300
                     ${selectedLayout === option.id 
-                      ? 'border-blue-500 bg-blue-50 shadow-md' 
-                      : 'border-border bg-white'
+                      ? 'border-blue-500 bg-blue-900/20 shadow-md' 
+                      : 'border-border bg-card'
                     }
                     ${option.disabled ? 'opacity-50 cursor-not-allowed' : ''}
                   `}
@@ -481,8 +481,8 @@ export default function HRPaycheckSettings() {
       </Card>
 
       {!canManage && (
-        <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <p className="text-sm text-yellow-800">
+        <div className="mt-6 p-4 bg-yellow-900/20 border border-yellow-800/40 rounded-lg">
+          <p className="text-sm text-yellow-400">
             <strong>Note:</strong> You need management permissions to modify paycheck settings.
           </p>
         </div>

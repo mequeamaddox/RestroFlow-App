@@ -122,21 +122,21 @@ export default function EmployeeDashboard() {
 
   const getDocumentStatusColor = (status: string) => {
     switch (status) {
-      case 'approved': return 'bg-green-100 text-green-800 border-green-200';
-      case 'completed': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'in_progress': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'approved': return 'bg-green-900/30 text-green-400 border border-green-800';
+      case 'completed': return 'bg-blue-900/30 text-blue-400 border border-blue-800';
+      case 'in_progress': return 'bg-yellow-900/30 text-yellow-400 border border-yellow-800';
       case 'assigned': return 'bg-accent text-foreground border-border';
-      case 'rejected': return 'bg-red-100 text-red-800 border-red-200';
+      case 'rejected': return 'bg-red-900/30 text-red-400 border border-red-800';
       default: return 'bg-accent text-foreground border-border';
     }
   };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'urgent': return 'bg-red-100 text-red-800 border-red-200';
-      case 'high': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'low': return 'bg-green-100 text-green-800 border-green-200';
+      case 'urgent': return 'bg-red-900/30 text-red-400 border border-red-800';
+      case 'high': return 'bg-orange-900/30 text-orange-400 border border-orange-800';
+      case 'medium': return 'bg-yellow-900/30 text-yellow-400 border border-yellow-800';
+      case 'low': return 'bg-green-900/30 text-green-400 border border-green-800';
       default: return 'bg-accent text-foreground border-border';
     }
   };
@@ -170,7 +170,7 @@ export default function EmployeeDashboard() {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200">
+        <Card className="bg-gradient-to-br from-red-900/30 to-red-900/10 border-red-800/50">
           <CardContent className="p-6">
             <div className="flex items-center">
               <div className="p-2 bg-red-500 rounded-lg">
@@ -178,7 +178,7 @@ export default function EmployeeDashboard() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Pending Documents</p>
-                <p className="text-2xl font-bold text-red-700">{pendingDocuments.length}</p>
+                <p className="text-2xl font-bold text-red-400">{pendingDocuments.length}</p>
               </div>
             </div>
             {overdueDocs.length > 0 && (
@@ -190,7 +190,7 @@ export default function EmployeeDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+        <Card className="bg-gradient-to-br from-orange-900/30 to-orange-900/10 border-orange-800/50">
           <CardContent className="p-6">
             <div className="flex items-center">
               <div className="p-2 bg-orange-500 rounded-lg">
@@ -198,13 +198,13 @@ export default function EmployeeDashboard() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Today's Tasks</p>
-                <p className="text-2xl font-bold text-orange-700">{todayTasks.length}</p>
+                <p className="text-2xl font-bold text-orange-400">{todayTasks.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+        <Card className="bg-gradient-to-br from-blue-900/30 to-blue-900/10 border-blue-800/50">
           <CardContent className="p-6">
             <div className="flex items-center">
               <div className="p-2 bg-blue-500 rounded-lg">
@@ -212,13 +212,13 @@ export default function EmployeeDashboard() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Upcoming Shifts</p>
-                <p className="text-2xl font-bold text-blue-700">{upcomingShifts.length}</p>
+                <p className="text-2xl font-bold text-blue-400">{upcomingShifts.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+        <Card className="bg-gradient-to-br from-green-900/30 to-green-900/10 border-green-800/50">
           <CardContent className="p-6">
             <div className="flex items-center">
               <div className="p-2 bg-green-500 rounded-lg">
@@ -226,7 +226,7 @@ export default function EmployeeDashboard() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Unread Messages</p>
-                <p className="text-2xl font-bold text-green-700">{unreadMessages}</p>
+                <p className="text-2xl font-bold text-green-400">{unreadMessages}</p>
               </div>
             </div>
           </CardContent>
@@ -292,12 +292,12 @@ export default function EmployeeDashboard() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {overdueDocs.length > 0 && (
-                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="p-4 bg-red-900/30 border border-red-700/50 rounded-lg">
                     <div className="flex items-center gap-2 mb-2">
-                      <AlertTriangle className="h-5 w-5 text-red-600" />
-                      <span className="font-medium text-red-800">Overdue Documents</span>
+                      <AlertTriangle className="h-5 w-5 text-red-400" />
+                      <span className="font-medium text-red-300">Overdue Documents</span>
                     </div>
-                    <p className="text-sm text-red-700 mb-3">
+                    <p className="text-sm text-red-400 mb-3">
                       You have {overdueDocs.length} document(s) past their deadline
                     </p>
                     <Link href="/employee/documents">
@@ -307,12 +307,12 @@ export default function EmployeeDashboard() {
                 )}
 
                 {todayTasks.length > 0 && (
-                  <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                  <div className="p-4 bg-orange-900/20 border border-orange-700/50 rounded-lg">
                     <div className="flex items-center gap-2 mb-2">
-                      <Clock className="h-5 w-5 text-orange-600" />
-                      <span className="font-medium text-orange-800">Today's Tasks</span>
+                      <Clock className="h-5 w-5 text-orange-400" />
+                      <span className="font-medium text-orange-300">Today's Tasks</span>
                     </div>
-                    <p className="text-sm text-orange-700 mb-3">
+                    <p className="text-sm text-orange-400 mb-3">
                       {todayTasks.length} task(s) due today
                     </p>
                     <Link href="/employee/tasks">
@@ -322,12 +322,12 @@ export default function EmployeeDashboard() {
                 )}
 
                 {unreadMessages > 0 && (
-                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="p-4 bg-blue-900/20 border border-blue-700/50 rounded-lg">
                     <div className="flex items-center gap-2 mb-2">
-                      <MessageCircle className="h-5 w-5 text-blue-600" />
-                      <span className="font-medium text-blue-800">New Messages</span>
+                      <MessageCircle className="h-5 w-5 text-blue-400" />
+                      <span className="font-medium text-blue-300">New Messages</span>
                     </div>
-                    <p className="text-sm text-blue-700 mb-3">
+                    <p className="text-sm text-blue-400 mb-3">
                       {unreadMessages} unread message(s)
                     </p>
                     <Link href="/employee/messages">
@@ -511,7 +511,7 @@ export default function EmployeeDashboard() {
               ) : (
                 <div className="space-y-3">
                   {recentMessages.slice(0, 5).map((message) => (
-                    <div key={message.id} className={`p-4 border rounded-lg ${!message.isRead ? 'bg-blue-50 border-blue-200' : 'hover:bg-accent'}`}>
+                    <div key={message.id} className={`p-4 border rounded-lg ${!message.isRead ? 'bg-blue-900/20 border-blue-700/50' : 'hover:bg-accent'}`}>
                       <div className="flex items-start justify-between mb-2">
                         <div>
                           <p className="font-medium">

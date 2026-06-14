@@ -128,11 +128,11 @@ export default function HRTimeOff() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-yellow-900/30 text-yellow-400 border border-yellow-800';
       case 'approved':
-        return 'bg-green-100 text-green-800';
+        return 'bg-green-900/30 text-green-400 border border-green-800';
       case 'rejected':
-        return 'bg-red-100 text-red-800';
+        return 'bg-red-900/30 text-red-400 border border-red-800';
       default:
         return 'bg-accent text-foreground';
     }
@@ -446,7 +446,7 @@ export default function HRTimeOff() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-green-600 border-green-600 hover:bg-green-50"
+                            className="text-green-400 border-green-700 hover:bg-green-900/20"
                             onClick={() => updateRequestStatusMutation.mutate({ 
                               id: request.id, 
                               status: 'approved' 
@@ -458,7 +458,7 @@ export default function HRTimeOff() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-red-600 border-red-600 hover:bg-red-50"
+                            className="text-red-400 border-red-700 hover:bg-red-900/20"
                             onClick={() => updateRequestStatusMutation.mutate({ 
                               id: request.id, 
                               status: 'rejected' 

@@ -144,10 +144,10 @@ Employee: ${user?.email || 'Unknown'}
           <p className="text-muted-foreground">Access recipe instructions and prep sheets for kitchen use</p>
         </div>
         <div className="flex gap-2">
-          <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+          <Badge variant="secondary" className="bg-blue-900/30 text-blue-400 border border-blue-800">
             {assignments.length} Assigned Recipes
           </Badge>
-          <Badge variant="secondary" className="bg-green-100 text-green-800">
+          <Badge variant="secondary" className="bg-green-900/30 text-green-400 border border-green-800">
             {assignments.filter(a => a.status === 'completed').length} Completed
           </Badge>
         </div>
@@ -186,12 +186,12 @@ Employee: ${user?.email || 'Unknown'}
             const getStatusBadge = (status: string) => {
               switch (status) {
                 case 'completed':
-                  return <Badge className="bg-green-100 text-green-800"><CheckCircle className="h-3 w-3 mr-1" />Completed</Badge>;
+                  return <Badge className="bg-green-900/30 text-green-400 border border-green-800"><CheckCircle className="h-3 w-3 mr-1" />Completed</Badge>;
                 case 'in-progress':
-                  return <Badge className="bg-blue-100 text-blue-800">In Progress</Badge>;
+                  return <Badge className="bg-blue-900/30 text-blue-400 border border-blue-800">In Progress</Badge>;
                 case 'assigned':
                 default:
-                  return <Badge className="bg-yellow-100 text-yellow-800">Assigned</Badge>;
+                  return <Badge className="bg-yellow-900/30 text-yellow-400 border border-yellow-800">Assigned</Badge>;
               }
             };
             
@@ -231,7 +231,7 @@ Employee: ${user?.email || 'Unknown'}
                   <p className="text-sm text-muted-foreground line-clamp-2">{recipe.description}</p>
                 )}
                 {assignment.notes && (
-                  <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded mt-2">
+                  <p className="text-xs text-blue-400 bg-blue-900/20 p-2 rounded mt-2">
                     📝 {assignment.notes}
                   </p>
                 )}
@@ -394,7 +394,7 @@ Employee: ${user?.email || 'Unknown'}
               {selectedRecipe.costPerServing && (
                 <div>
                   <h3 className="text-lg font-semibold mb-3">Cost Information</h3>
-                  <div className="bg-blue-50 p-4 rounded-lg">
+                  <div className="bg-blue-900/20 border border-blue-800/40 p-4 rounded-lg">
                     <p>Cost per serving: <span className="font-semibold">${selectedRecipe.costPerServing.toFixed(2)}</span></p>
                   </div>
                 </div>

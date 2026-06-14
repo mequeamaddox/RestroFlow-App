@@ -183,19 +183,19 @@ export default function HRDocumentsPage() {
 
   const getDocumentStatusColor = (status: string | null) => {
     switch (status) {
-      case 'approved': return 'bg-green-100 text-green-800';
-      case 'uploaded': return 'bg-blue-100 text-blue-800';
-      case 'required': return 'bg-red-100 text-red-800';
-      case 'rejected': return 'bg-orange-100 text-orange-800';
+      case 'approved': return 'bg-green-900/30 text-green-400 border border-green-800';
+      case 'uploaded': return 'bg-blue-900/30 text-blue-400 border border-blue-800';
+      case 'required': return 'bg-red-900/30 text-red-400 border border-red-800';
+      case 'rejected': return 'bg-orange-900/30 text-orange-400 border border-orange-800';
       default: return 'bg-accent text-foreground';
     }
   };
 
   const getOnboardingStatusColor = (status: string | null) => {
     switch (status) {
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'in-progress': return 'bg-blue-100 text-blue-800';
-      case 'overdue': return 'bg-red-100 text-red-800';
+      case 'completed': return 'bg-green-900/30 text-green-400 border border-green-800';
+      case 'in-progress': return 'bg-blue-900/30 text-blue-400 border border-blue-800';
+      case 'overdue': return 'bg-red-900/30 text-red-400 border border-red-800';
       case 'not-started': return 'bg-accent text-foreground';
       default: return 'bg-accent text-foreground';
     }

@@ -286,8 +286,8 @@ export default function HRTaxSettings() {
               </p>
             </div>
 
-            <div className="bg-yellow-50 p-3 rounded-lg">
-              <Label htmlFor="stateUnemploymentRate" className="font-medium text-yellow-800">
+            <div className="bg-yellow-900/20 p-3 rounded-lg border border-yellow-800/40">
+              <Label htmlFor="stateUnemploymentRate" className="font-medium text-yellow-400">
                 SUTA Rate (State Unemployment) (%)
               </Label>
               <Input
@@ -299,7 +299,7 @@ export default function HRTaxSettings() {
                 placeholder="2.7"
                 className="mt-1"
               />
-              <p className="text-xs text-yellow-700 mt-1">
+              <p className="text-xs text-yellow-400/70 mt-1">
                 Current: {(parseFloat(formData.stateUnemploymentRate) * 100).toFixed(3)}% 
                 (SC default: 2.7%, varies by experience rating)
               </p>
@@ -372,34 +372,34 @@ export default function HRTaxSettings() {
 
               {/* Employer Portion */}
               <div className="space-y-4">
-                <h4 className="font-medium text-red-900 border-b pb-2 border-red-200">Employer Costs</h4>
+                <h4 className="font-medium text-red-300 border-b pb-2 border-red-800/40">Employer Costs</h4>
                 
-                <div className="bg-red-50 p-3 rounded-lg">
-                  <Label className="text-red-800 font-medium">Social Security (Employer Match)</Label>
-                  <p className="text-lg font-bold text-red-900 mt-1">
+                <div className="bg-red-900/20 p-3 rounded-lg border border-red-800/40">
+                  <Label className="text-red-300 font-medium">Social Security (Employer Match)</Label>
+                  <p className="text-lg font-bold text-red-400 mt-1">
                     {(parseFloat(formData.socialSecurityRate) * 100).toFixed(2)}%
                   </p>
-                  <p className="text-xs text-red-700 mt-1">
+                  <p className="text-xs text-red-400/70 mt-1">
                     You pay matching {(parseFloat(formData.socialSecurityRate) * 100).toFixed(2)}% on top of wages
                   </p>
                 </div>
 
-                <div className="bg-red-50 p-3 rounded-lg">
-                  <Label className="text-red-800 font-medium">Medicare (Employer Match)</Label>
-                  <p className="text-lg font-bold text-red-900 mt-1">
+                <div className="bg-red-900/20 p-3 rounded-lg border border-red-800/40">
+                  <Label className="text-red-300 font-medium">Medicare (Employer Match)</Label>
+                  <p className="text-lg font-bold text-red-400 mt-1">
                     {(parseFloat(formData.medicareRate) * 100).toFixed(2)}%
                   </p>
-                  <p className="text-xs text-red-700 mt-1">
+                  <p className="text-xs text-red-400/70 mt-1">
                     You pay matching {(parseFloat(formData.medicareRate) * 100).toFixed(2)}% on top of wages
                   </p>
                 </div>
 
-                <div className="bg-yellow-50 p-3 rounded-lg">
-                  <Label className="text-yellow-800 font-medium">SUTA (State Unemployment)</Label>
-                  <p className="text-lg font-bold text-yellow-900 mt-1">
+                <div className="bg-yellow-900/20 p-3 rounded-lg border border-yellow-800/40">
+                  <Label className="text-yellow-300 font-medium">SUTA (State Unemployment)</Label>
+                  <p className="text-lg font-bold text-yellow-400 mt-1">
                     {(parseFloat(formData.stateUnemploymentRate) * 100).toFixed(3)}%
                   </p>
-                  <p className="text-xs text-yellow-700 mt-1">
+                  <p className="text-xs text-yellow-400/70 mt-1">
                     100% employer cost - employees don't pay SUTA
                   </p>
                 </div>
@@ -410,13 +410,13 @@ export default function HRTaxSettings() {
 
             {/* Employer-Only Taxes */}
             <div className="space-y-4">
-              <h4 className="font-medium text-red-900">Additional Employer-Only Taxes</h4>
+              <h4 className="font-medium text-red-300">Additional Employer-Only Taxes</h4>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-red-50 p-3 rounded-lg">
-                  <Label className="text-red-800 font-medium">FUTA (Federal Unemployment)</Label>
-                  <p className="text-lg font-bold text-red-900 mt-1">0.600%</p>
-                  <p className="text-xs text-red-700 mt-1">
+                <div className="bg-red-900/20 p-3 rounded-lg border border-red-800/40">
+                  <Label className="text-red-300 font-medium">FUTA (Federal Unemployment)</Label>
+                  <p className="text-lg font-bold text-red-400 mt-1">0.600%</p>
+                  <p className="text-xs text-red-400/70 mt-1">
                     On first $7,000 per employee per year
                   </p>
                 </div>
@@ -430,9 +430,9 @@ export default function HRTaxSettings() {
                     value={parseFloat(formData.workersCompRate) * 100}
                     onChange={(e) => handleInputChange('workersCompRate', (parseFloat(e.target.value) / 100).toString())}
                     placeholder="0.5"
-                    className="bg-red-50"
+                    className="bg-red-900/20 border-red-800/40"
                   />
-                  <p className="text-xs text-red-700 mt-1">
+                  <p className="text-xs text-red-400/70 mt-1">
                     100% employer cost - varies by industry
                   </p>
                 </div>

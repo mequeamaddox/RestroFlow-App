@@ -57,11 +57,11 @@ export default function LowStockAlerts({ items, isLoading }: LowStockAlertsProps
     const ratio = quantity / reorderLevel;
     
     if (ratio <= 0.5) {
-      return { level: 'critical', color: 'bg-red-50 border-red-200', badge: 'bg-red-100 text-red-800' };
+      return { level: 'critical', color: 'bg-red-900/20 border-red-800/50', badge: 'bg-red-900/30 text-red-400 border border-red-800' };
     } else if (ratio <= 1) {
-      return { level: 'low', color: 'bg-yellow-50 border-yellow-200', badge: 'bg-yellow-100 text-yellow-800' };
+      return { level: 'low', color: 'bg-yellow-900/20 border-yellow-800/50', badge: 'bg-yellow-900/30 text-yellow-400 border border-yellow-800' };
     }
-    return { level: 'medium', color: 'bg-orange-50 border-orange-200', badge: 'bg-orange-100 text-orange-800' };
+    return { level: 'medium', color: 'bg-orange-900/20 border-orange-800/50', badge: 'bg-orange-900/30 text-orange-400 border border-orange-800' };
   };
 
   return (

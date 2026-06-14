@@ -127,14 +127,14 @@ export default function WasteTracking() {
 
   const getReasonColor = (reason: string) => {
     switch (reason) {
-      case 'expired': return 'bg-red-100 text-red-800';
-      case 'spoiled': return 'bg-orange-100 text-orange-800';
-      case 'damaged': return 'bg-yellow-100 text-yellow-800';
-      case 'overproduction': return 'bg-blue-100 text-blue-800';
-      case 'preparation_error': return 'bg-purple-100 text-purple-800';
-      case 'plate_waste': return 'bg-pink-100 text-pink-800';
-      case 'kitchen_waste': return 'bg-indigo-100 text-indigo-800';
-      case 'trim_waste': return 'bg-green-100 text-green-800';
+      case 'expired': return 'bg-red-900/30 text-red-400 border border-red-800';
+      case 'spoiled': return 'bg-orange-900/30 text-orange-400 border border-orange-800';
+      case 'damaged': return 'bg-yellow-900/30 text-yellow-400 border border-yellow-800';
+      case 'overproduction': return 'bg-blue-900/30 text-blue-400 border border-blue-800';
+      case 'preparation_error': return 'bg-purple-900/30 text-purple-400 border border-purple-800';
+      case 'plate_waste': return 'bg-pink-900/30 text-pink-400 border border-pink-800';
+      case 'kitchen_waste': return 'bg-indigo-900/30 text-indigo-400 border border-indigo-800';
+      case 'trim_waste': return 'bg-green-900/30 text-green-400 border border-green-800';
       default: return 'bg-accent text-foreground';
     }
   };
@@ -277,9 +277,9 @@ export default function WasteTracking() {
       </div>
 
       {/* Waste Categories Info */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <h3 className="font-medium text-blue-900 mb-2">Waste Categories Explained</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-blue-800">
+      <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4 mb-6">
+        <h3 className="font-medium text-blue-300 mb-2">Waste Categories Explained</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-blue-400">
           <div><strong>Plate Waste:</strong> Food served to customers but not eaten</div>
           <div><strong>Kitchen Waste:</strong> Food wasted during cooking process</div>
           <div><strong>Trim Waste:</strong> Natural waste from food prep (peels, bones, etc.)</div>
@@ -387,8 +387,8 @@ export default function WasteTracking() {
               {filteredEntries.map((entry) => (
                 <div key={entry.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent">
                   <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                      <Trash2 className="h-6 w-6 text-red-600" />
+                    <div className="w-12 h-12 bg-red-900/30 rounded-lg flex items-center justify-center">
+                      <Trash2 className="h-6 w-6 text-red-400" />
                     </div>
                     <div>
                       <div className="font-medium">{entry.inventoryItem.name}</div>

@@ -150,13 +150,13 @@ export default function EmployeeDocuments() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'approved': return 'bg-green-100 text-green-800 border-green-200';
-      case 'uploaded': return 'bg-cyan-100 text-cyan-800 border-cyan-200';
-      case 'signed': return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'completed': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'in_progress': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'approved': return 'bg-green-900/30 text-green-400 border border-green-800';
+      case 'uploaded': return 'bg-cyan-900/30 text-cyan-400 border border-cyan-800';
+      case 'signed': return 'bg-purple-900/30 text-purple-400 border border-purple-800';
+      case 'completed': return 'bg-blue-900/30 text-blue-400 border border-blue-800';
+      case 'in_progress': return 'bg-yellow-900/30 text-yellow-400 border border-yellow-800';
       case 'assigned': return 'bg-accent text-foreground border-border';
-      case 'rejected': return 'bg-red-100 text-red-800 border-red-200';
+      case 'rejected': return 'bg-red-900/30 text-red-400 border border-red-800';
       default: return 'bg-accent text-foreground border-border';
     }
   };
@@ -220,49 +220,49 @@ export default function EmployeeDocuments() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+        <Card className="bg-gradient-to-br from-blue-900/30 to-blue-900/10 border-blue-800/50">
           <CardContent className="p-6">
             <div className="flex items-center">
-              <FileText className="h-8 w-8 text-blue-600" />
+              <FileText className="h-8 w-8 text-blue-400" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Total Documents</p>
-                <p className="text-2xl font-bold text-blue-700">{stats.total}</p>
+                <p className="text-2xl font-bold text-blue-400">{stats.total}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+        <Card className="bg-gradient-to-br from-orange-900/30 to-orange-900/10 border-orange-800/50">
           <CardContent className="p-6">
             <div className="flex items-center">
-              <Clock className="h-8 w-8 text-orange-600" />
+              <Clock className="h-8 w-8 text-orange-400" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Pending</p>
-                <p className="text-2xl font-bold text-orange-700">{stats.pending}</p>
+                <p className="text-2xl font-bold text-orange-400">{stats.pending}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+        <Card className="bg-gradient-to-br from-green-900/30 to-green-900/10 border-green-800/50">
           <CardContent className="p-6">
             <div className="flex items-center">
-              <CheckCircle className="h-8 w-8 text-green-600" />
+              <CheckCircle className="h-8 w-8 text-green-400" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Completed</p>
-                <p className="text-2xl font-bold text-green-700">{stats.completed}</p>
+                <p className="text-2xl font-bold text-green-400">{stats.completed}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200">
+        <Card className="bg-gradient-to-br from-red-900/30 to-red-900/10 border-red-800/50">
           <CardContent className="p-6">
             <div className="flex items-center">
-              <AlertTriangle className="h-8 w-8 text-red-600" />
+              <AlertTriangle className="h-8 w-8 text-red-400" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Overdue</p>
-                <p className="text-2xl font-bold text-red-700">{stats.overdue}</p>
+                <p className="text-2xl font-bold text-red-400">{stats.overdue}</p>
               </div>
             </div>
           </CardContent>
@@ -394,7 +394,7 @@ export default function EmployeeDocuments() {
                     const isOverdue = doc.deadline && new Date(doc.deadline) < new Date() && !['completed', 'approved'].includes(doc.status);
                     
                     return (
-                      <div key={doc.id} className={`border rounded-lg p-6 hover:shadow-md transition-shadow ${isOverdue ? 'border-red-200 bg-red-50' : ''}`}>
+                      <div key={doc.id} className={`border rounded-lg p-6 hover:shadow-md transition-shadow ${isOverdue ? 'border-red-800/50 bg-red-900/20' : ''}`}>
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-2">
@@ -429,8 +429,8 @@ export default function EmployeeDocuments() {
                             </div>
 
                             {doc.notes && (
-                              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
-                                <p className="text-sm text-blue-800">
+                              <div className="mt-3 p-3 bg-blue-900/30 border border-blue-700/50 rounded">
+                                <p className="text-sm text-blue-300">
                                   <strong>Instructions:</strong> {doc.notes}
                                 </p>
                               </div>
@@ -438,10 +438,10 @@ export default function EmployeeDocuments() {
 
                             {doc.feedback && (
                               <div className={`mt-3 p-3 border rounded ${
-                                doc.status === 'rejected' ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'
+                                doc.status === 'rejected' ? 'bg-red-900/30 border-red-700/50' : 'bg-green-900/30 border-green-700/50'
                               }`}>
                                 <p className={`text-sm ${
-                                  doc.status === 'rejected' ? 'text-red-800' : 'text-green-800'
+                                  doc.status === 'rejected' ? 'text-red-400' : 'text-green-400'
                                 }`}>
                                   <strong>Feedback:</strong> {doc.feedback}
                                 </p>
@@ -524,9 +524,9 @@ export default function EmployeeDocuments() {
           </DialogHeader>
           {selectedDocument && (
             <div className="space-y-4">
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded">
-                <p className="font-medium text-blue-900">{selectedDocument.template?.name || 'Document'}</p>
-                <p className="text-sm text-blue-700">Complete your digital signature to finalize this document.</p>
+              <div className="p-4 bg-blue-900/30 border border-blue-700/50 rounded">
+                <p className="font-medium text-blue-300">{selectedDocument.template?.name || 'Document'}</p>
+                <p className="text-sm text-blue-400">Complete your digital signature to finalize this document.</p>
               </div>
               
               <div className="border-2 border-dashed border-border rounded-lg p-4">
@@ -639,8 +639,8 @@ export default function EmployeeDocuments() {
               {selectedDocument.notes && (
                 <div>
                   <p className="font-medium text-muted-foreground mb-2">Instructions</p>
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded">
-                    <p className="text-blue-800">{selectedDocument.notes}</p>
+                  <div className="p-3 bg-blue-900/30 border border-blue-700/50 rounded">
+                    <p className="text-blue-300">{selectedDocument.notes}</p>
                   </div>
                 </div>
               )}
@@ -649,9 +649,9 @@ export default function EmployeeDocuments() {
                 <div>
                   <p className="font-medium text-muted-foreground mb-2">Feedback</p>
                   <div className={`p-3 border rounded ${
-                    selectedDocument.status === 'rejected' ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'
+                    selectedDocument.status === 'rejected' ? 'bg-red-900/30 border-red-700/50' : 'bg-green-900/30 border-green-700/50'
                   }`}>
-                    <p className={selectedDocument.status === 'rejected' ? 'text-red-800' : 'text-green-800'}>
+                    <p className={selectedDocument.status === 'rejected' ? 'text-red-400' : 'text-green-400'}>
                       {selectedDocument.feedback}
                     </p>
                   </div>

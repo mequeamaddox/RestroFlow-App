@@ -27,12 +27,12 @@ export default function RecentActivity() {
 
   const getActivityIcon = (type: string) => {
     switch (type) {
-      case 'inventory': return { icon: Plus, color: 'text-green-600', bg: 'bg-green-100' };
-      case 'recipe': return { icon: FileText, color: 'text-blue-600', bg: 'bg-blue-100' };
-      case 'purchase_order': return { icon: ShoppingCart, color: 'text-orange-600', bg: 'bg-orange-100' };
-      case 'invoice': return { icon: FileText, color: 'text-purple-600', bg: 'bg-purple-100' };
-      case 'waste': return { icon: Trash2, color: 'text-red-600', bg: 'bg-red-100' };
-      default: return { icon: Edit, color: 'text-muted-foreground', bg: 'bg-gray-100' };
+      case 'inventory': return { icon: Plus, color: 'text-green-400', bg: 'bg-green-900/30' };
+      case 'recipe': return { icon: FileText, color: 'text-blue-400', bg: 'bg-blue-900/30' };
+      case 'purchase_order': return { icon: ShoppingCart, color: 'text-orange-400', bg: 'bg-orange-900/30' };
+      case 'invoice': return { icon: FileText, color: 'text-purple-400', bg: 'bg-purple-900/30' };
+      case 'waste': return { icon: Trash2, color: 'text-red-400', bg: 'bg-red-900/30' };
+      default: return { icon: Edit, color: 'text-muted-foreground', bg: 'bg-accent' };
     }
   };
 

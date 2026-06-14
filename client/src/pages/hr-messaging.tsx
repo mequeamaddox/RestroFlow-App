@@ -176,21 +176,21 @@ export default function HRMessaging() {
 
   const getCategoryColor = (category: string) => {
     switch (category) {
-      case 'document': return 'bg-blue-100 text-blue-800';
-      case 'form': return 'bg-green-100 text-green-800';
-      case 'recipe': return 'bg-orange-100 text-orange-800';
-      case 'policy': return 'bg-red-100 text-red-800';
-      case 'manual': return 'bg-purple-100 text-purple-800';
+      case 'document': return 'bg-blue-900/30 text-blue-400 border border-blue-800';
+      case 'form': return 'bg-green-900/30 text-green-400 border border-green-800';
+      case 'recipe': return 'bg-orange-900/30 text-orange-400 border border-orange-800';
+      case 'policy': return 'bg-red-900/30 text-red-400 border border-red-800';
+      case 'manual': return 'bg-purple-900/30 text-purple-400 border border-purple-800';
       default: return 'bg-accent text-foreground';
     }
   };
 
   const getMessageTypeColor = (messageType: string) => {
     switch (messageType) {
-      case 'announcement': return 'bg-blue-100 text-blue-800';
-      case 'direct': return 'bg-green-100 text-green-800';
-      case 'department': return 'bg-purple-100 text-purple-800';
-      case 'urgent': return 'bg-red-100 text-red-800';
+      case 'announcement': return 'bg-blue-900/30 text-blue-400 border border-blue-800';
+      case 'direct': return 'bg-green-900/30 text-green-400 border border-green-800';
+      case 'department': return 'bg-purple-900/30 text-purple-400 border border-purple-800';
+      case 'urgent': return 'bg-red-900/30 text-red-400 border border-red-800';
       default: return 'bg-accent text-foreground';
     }
   };
@@ -405,8 +405,8 @@ export default function HRMessaging() {
                   <p className="text-sm text-muted-foreground">Announcements</p>
                   <p className="text-2xl font-bold">{getMessagesByType('announcement')}</p>
                 </div>
-                <div className="bg-blue-100 p-2 rounded-full">
-                  <Megaphone className="h-4 w-4 text-blue-600" />
+                <div className="bg-blue-900/30 p-2 rounded-full">
+                  <Megaphone className="h-4 w-4 text-blue-400" />
                 </div>
               </div>
             </CardContent>
@@ -419,8 +419,8 @@ export default function HRMessaging() {
                   <p className="text-sm text-muted-foreground">Direct Messages</p>
                   <p className="text-2xl font-bold">{getMessagesByType('direct')}</p>
                 </div>
-                <div className="bg-green-100 p-2 rounded-full">
-                  <MessageSquare className="h-4 w-4 text-green-600" />
+                <div className="bg-green-900/30 p-2 rounded-full">
+                  <MessageSquare className="h-4 w-4 text-green-400" />
                 </div>
               </div>
             </CardContent>
@@ -433,8 +433,8 @@ export default function HRMessaging() {
                   <p className="text-sm text-muted-foreground">Department Messages</p>
                   <p className="text-2xl font-bold">{getMessagesByType('department')}</p>
                 </div>
-                <div className="bg-purple-100 p-2 rounded-full">
-                  <Users className="h-4 w-4 text-purple-600" />
+                <div className="bg-purple-900/30 p-2 rounded-full">
+                  <Users className="h-4 w-4 text-purple-400" />
                 </div>
               </div>
             </CardContent>
@@ -447,8 +447,8 @@ export default function HRMessaging() {
                   <p className="text-sm text-muted-foreground">Urgent Messages</p>
                   <p className="text-2xl font-bold">{getMessagesByType('urgent')}</p>
                 </div>
-                <div className="bg-red-100 p-2 rounded-full">
-                  <Bell className="h-4 w-4 text-red-600" />
+                <div className="bg-red-900/30 p-2 rounded-full">
+                  <Bell className="h-4 w-4 text-red-400" />
                 </div>
               </div>
             </CardContent>

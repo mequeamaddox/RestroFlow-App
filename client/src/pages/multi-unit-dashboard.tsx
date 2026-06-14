@@ -222,7 +222,7 @@ export default function MultiUnitDashboard() {
                 ) : (
                   <div className="grid gap-4">
                     {stockLevels?.map((item: StockLevel) => (
-                      <Card key={item.id} className={`${item.isLowStock ? 'border-red-200 bg-red-50' : ''}`}>
+                      <Card key={item.id} className={`${item.isLowStock ? 'border-red-800/50 bg-red-900/20' : ''}`}>
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between">
                             <div className="flex-1">

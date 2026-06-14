@@ -169,9 +169,9 @@ export default function Settings() {
   const getLocationTypeColor = (type: string) => {
     switch (type) {
       case "restaurant":
-        return "bg-blue-100 text-blue-800";
+        return "bg-blue-900/30 text-blue-400 border border-blue-800";
       case "bar":
-        return "bg-purple-100 text-purple-800";
+        return "bg-purple-900/30 text-purple-400 border border-purple-800";
       case "warehouse":
         return "bg-accent text-foreground";
       default:

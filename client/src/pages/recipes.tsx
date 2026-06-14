@@ -1098,7 +1098,7 @@ export default function Recipes() {
                           <Button 
                             variant="outline" 
                             size="sm"
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
                             data-testid={`button-delete-${recipe.id}`}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1128,7 +1128,7 @@ export default function Recipes() {
                       <Button 
                         variant="outline" 
                         size="sm" 
-                        className="flex-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        className="flex-1 text-blue-400 hover:text-blue-300 hover:bg-blue-900/20"
                         onClick={async () => await generateBuildSheet(recipe)}
                         data-testid={`button-build-sheet-${recipe.id}`}
                       >
@@ -1138,7 +1138,7 @@ export default function Recipes() {
                       <Button 
                         variant="outline" 
                         size="sm" 
-                        className="flex-1 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                        className="flex-1 text-purple-400 hover:text-purple-300 hover:bg-purple-900/20"
                         onClick={async () => await generateCostSheet(recipe)}
                         data-testid={`button-cost-sheet-${recipe.id}`}
                       >
@@ -1151,7 +1151,7 @@ export default function Recipes() {
                       <Button 
                         variant="outline" 
                         size="sm" 
-                        className="flex-1 text-green-600 hover:text-green-700 hover:bg-green-50"
+                        className="flex-1 text-green-400 hover:text-green-300 hover:bg-green-900/20"
                         onClick={() => {
                           setSelectedRecipe(recipe);
                           setIsAssignDialogOpen(true);
@@ -1202,7 +1202,7 @@ export default function Recipes() {
                             });
                           }
                         }}
-                        buttonClassName="flex-1 text-green-600 hover:text-green-700 hover:bg-green-50"
+                        buttonClassName="flex-1 text-green-400 hover:text-green-300 hover:bg-green-900/20"
                       >
                         <Camera className="h-4 w-4 mr-1" />
                         {recipe.imageUrl ? 'Update Photo' : 'Add Photo'}

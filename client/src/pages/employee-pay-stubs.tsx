@@ -131,9 +131,9 @@ export default function EmployeePayStubs() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'paid':
-        return <Badge className="bg-green-100 text-green-800 border-green-200">Paid</Badge>;
+        return <Badge className="bg-green-900/30 text-green-400 border border-green-800">Paid</Badge>;
       case 'calculated':
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Ready</Badge>;
+        return <Badge className="bg-blue-900/30 text-blue-400 border border-blue-800">Ready</Badge>;
       case 'draft':
         return <Badge className="bg-accent text-foreground border-border">Processing</Badge>;
       default:

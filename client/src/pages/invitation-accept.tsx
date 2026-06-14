@@ -83,9 +83,9 @@
 
     const getRoleBadge = (role: string) => {
       const colors: Record<string, string> = {
-        owner: 'bg-purple-100 text-purple-800',
-        manager: 'bg-blue-100 text-blue-800',
-        team_lead: 'bg-green-100 text-green-800',
+        owner: 'bg-purple-900/30 text-purple-400 border border-purple-800',
+        manager: 'bg-blue-900/30 text-blue-400 border border-blue-800',
+        team_lead: 'bg-green-900/30 text-green-400 border border-green-800',
         employee: 'bg-accent text-foreground',
       };
       return (

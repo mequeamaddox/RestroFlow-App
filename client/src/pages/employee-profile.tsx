@@ -196,8 +196,8 @@ export default function EmployeePage() {
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'active': return 'bg-green-900/30 text-green-400 border border-green-800';
+      case 'pending': return 'bg-yellow-900/30 text-yellow-400 border border-yellow-800';
       case 'inactive': return 'bg-accent text-foreground';
       default: return 'bg-accent text-foreground';
     }
@@ -479,7 +479,7 @@ export default function EmployeePage() {
                   <span className="text-sm text-muted-foreground">Completed:</span>
                   <span className="text-sm">{formatDate(onboardingData.completedAt)}</span>
                 </div>
-                <Badge className="bg-green-100 text-green-800">
+                <Badge className="bg-green-900/30 text-green-400 border border-green-800">
                   Onboarding Complete
                 </Badge>
               </div>
@@ -500,12 +500,12 @@ export default function EmployeePage() {
               <div className="space-y-4">
                 <h4 className="font-medium text-foreground">Employment Timeline</h4>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                  <div className="flex items-center justify-between p-3 bg-green-900/20 rounded-lg">
                     <div>
-                      <p className="text-sm font-medium text-green-900">Current Position</p>
-                      <p className="text-xs text-green-700">{employee.position?.title || employee.position}</p>
+                      <p className="text-sm font-medium text-green-300">Current Position</p>
+                      <p className="text-xs text-green-400">{employee.position?.title || employee.position}</p>
                     </div>
-                    <Badge className="bg-green-100 text-green-800">Active</Badge>
+                    <Badge className="bg-green-900/30 text-green-400 border border-green-800">Active</Badge>
                   </div>
                   <div className="text-xs text-muted-foreground">
                     Started: {formatDate(employee.hireDate)}

@@ -10,10 +10,10 @@ interface HRUpgradePromptProps {
 export function HRUpgradePrompt({ locationName }: HRUpgradePromptProps) {
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <Card className="border-orange-200 bg-gradient-to-br from-orange-50 to-amber-50">
+      <Card className="border-orange-800/50 bg-gradient-to-br from-orange-900/20 to-amber-900/20">
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
-            <Badge variant="secondary" className="bg-orange-100 text-orange-800 border-orange-200">
+            <Badge variant="secondary" className="bg-orange-900/30 text-orange-400 border border-orange-700">
               <Zap className="w-3 h-3 mr-1" />
               HR Add-on Required
             </Badge>
@@ -31,8 +31,8 @@ export function HRUpgradePrompt({ locationName }: HRUpgradePromptProps) {
           <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-4">
               <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg bg-orange-100">
-                  <Users className="w-5 h-5 text-orange-600" />
+                <div className="p-2 rounded-lg bg-orange-900/30">
+                  <Users className="w-5 h-5 text-orange-400" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-foreground">Employee Directory</h3>
@@ -41,8 +41,8 @@ export function HRUpgradePrompt({ locationName }: HRUpgradePromptProps) {
               </div>
               
               <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg bg-blue-100">
-                  <Clock className="w-5 h-5 text-blue-600" />
+                <div className="p-2 rounded-lg bg-blue-900/30">
+                  <Clock className="w-5 h-5 text-blue-400" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-foreground">Time Clock & Scheduling</h3>
@@ -53,8 +53,8 @@ export function HRUpgradePrompt({ locationName }: HRUpgradePromptProps) {
             
             <div className="space-y-4">
               <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg bg-green-100">
-                  <MessageSquare className="w-5 h-5 text-green-600" />
+                <div className="p-2 rounded-lg bg-green-900/30">
+                  <MessageSquare className="w-5 h-5 text-green-400" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-foreground">Team Communication</h3>
@@ -63,8 +63,8 @@ export function HRUpgradePrompt({ locationName }: HRUpgradePromptProps) {
               </div>
               
               <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg bg-purple-100">
-                  <DollarSign className="w-5 h-5 text-purple-600" />
+                <div className="p-2 rounded-lg bg-purple-900/30">
+                  <DollarSign className="w-5 h-5 text-purple-400" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-foreground">Payroll Management</h3>
