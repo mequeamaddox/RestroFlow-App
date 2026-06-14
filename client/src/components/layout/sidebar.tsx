@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation as useWouterLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import { useClerk } from "@clerk/clerk-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "@/contexts/LocationContext";
@@ -108,6 +109,7 @@ export default function Sidebar({ isMobileMenuOpen = false, setIsMobileMenuOpen 
   const [currentPath] = useWouterLocation();
   const [internalMobileMenuOpen, setInternalMobileMenuOpen] = useState(false);
   const { user } = useAuth();
+  const { signOut } = useClerk();
   const { currentLocation, setCurrentLocation, locations, isLoading } = useLocation();
   const { hasPermission } = usePermissions();
   
@@ -451,7 +453,7 @@ export default function Sidebar({ isMobileMenuOpen = false, setIsMobileMenuOpen 
               onClick={async () => {
                 try {
                   // Sign out from Clerk
-                  await signOut(auth);
+                  await signOut();
                   
                   // Clear backend session cookie
                   await fetch('/api/auth/logout', {
