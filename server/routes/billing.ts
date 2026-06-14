@@ -108,7 +108,8 @@ export function registerBillingRoutes(app: Express): void {
         return res.status(403).json({ message: 'Access denied. Only business owners can access subscription information.' });
       if (!user) return res.status(404).json({ message: 'User not found' });
       const allLocations = await storage.getLocations();
-      const hrAddonLocations = allLocations.filter((loc: any) => loc.hrAddonEnabled).length;
+      // Tenant-aware: only count THIS owner's locations, never other tenants'
+      const hrAddonLocations = allLocations.filter((loc: any) => loc.ownerId === userId && loc.hrAddonEnabled).length;
       res.json({
         id: user.squareSubscriptionId || user.id,
         plan: user.subscriptionPlan || 'free',

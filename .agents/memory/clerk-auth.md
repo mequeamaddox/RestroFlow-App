@@ -18,3 +18,11 @@ App uses Clerk (`@clerk/express` backend, `@clerk/clerk-react` frontend). Two en
 **Fix for preview testing:** use the Clerk app's DEVELOPMENT instance keys (`pk_test_`/`sk_test_`) in the Replit **development** environment scope, while keeping the live keys for production. Test instances allow localhost and arbitrary origins.
 
 **How to apply:** `pk_live_`+`sk_live_` = production-only; for the Replit preview you need `pk_test_`+`sk_test_` from the same app. Check the decoded instance domain + the live/test prefix before assuming a key problem.
+
+## Failure mode 3: keys updated but prod still 401s — stale build serves OLD publishable key
+**Cause:** `VITE_*` vars are baked into the frontend bundle at BUILD time, not read at runtime. After rotating `VITE_CLERK_PUBLISHABLE_KEY`, a host (Railway) that reuses a CACHED build still ships the old key in the JS bundle → mismatches the new secret → 401.
+**Fix:** force a clean / no-cache rebuild on the host so the new publishable key is re-baked into the client bundle. Rotating the env var alone is not enough.
+**Why:** build-time env baking is invisible at runtime — the running server has the new secret, but the browser bundle still carries the old public key.
+
+## Startup self-check
+`logClerkKeyDiagnostics()` (server/clerkAuth.ts, called once in server/index.ts before clerkMiddleware) logs `🔐 [Clerk] frontend instance="..." publishableKey=live secretKey=live` and warns on live/test mismatch. Safe — never logs secret values. Read this line in Railway logs to confirm prod has matching, same-instance keys.

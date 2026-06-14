@@ -195,6 +195,50 @@ export async function requireAuth(
 }
 
 /**
+ * Logs (at startup) which Clerk instance the configured keys belong to and warns
+ * loudly if the publishable and secret keys are from different instance types
+ * (e.g. one live + one test) — the #1 cause of 401 / "user not found" logins.
+ * Never prints secret values, only key-type prefixes and the (public) instance domain.
+ */
+export function logClerkKeyDiagnostics(): void {
+  const pk = process.env.CLERK_PUBLISHABLE_KEY || process.env.VITE_CLERK_PUBLISHABLE_KEY || '';
+  const sk = process.env.CLERK_SECRET_KEY || '';
+
+  if (!pk || !sk) {
+    console.warn(
+      `⚠️ [Clerk] Missing key(s) — publishableKey:${pk ? 'set' : 'MISSING'} secretKey:${sk ? 'set' : 'MISSING'}. Logins will fail until both are set.`
+    );
+    return;
+  }
+
+  const keyType = (k: string) =>
+    k.startsWith('pk_live_') || k.startsWith('sk_live_')
+      ? 'live'
+      : k.startsWith('pk_test_') || k.startsWith('sk_test_')
+        ? 'test'
+        : 'unknown';
+
+  let instance = 'unknown';
+  try {
+    const encoded = pk.replace(/^pk_(live|test)_/, '');
+    instance = Buffer.from(encoded, 'base64').toString('utf8').replace(/\$+$/, '');
+  } catch {
+    /* ignore decode errors */
+  }
+
+  const pkType = keyType(pk);
+  const skType = keyType(sk);
+  console.log(`🔐 [Clerk] frontend instance="${instance}" publishableKey=${pkType} secretKey=${skType}`);
+
+  if (pkType !== skType) {
+    console.warn(
+      `⚠️ [Clerk] KEY MISMATCH: publishable key is "${pkType}" but secret key is "${skType}". ` +
+        `Both keys MUST come from the SAME Clerk application, or logins return 401 / "user not found".`
+    );
+  }
+}
+
+/**
  * Optional auth — attaches user to req if a valid session exists, otherwise continues.
  */
 export async function optionalAuth(
