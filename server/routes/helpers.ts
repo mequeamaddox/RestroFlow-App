@@ -64,9 +64,19 @@ export function mapPositionToRole(positionTitle: string | null | undefined): str
   return 'employee';
 }
 
-export function calculateSubscriptionTotal(plan: string | null, hrAddonLocations: number): number {
-  const basePlanCost = plan === 'professional' ? 179 : 0;
-  const hrAddonCost = hrAddonLocations * 79;
+// Single source of truth for subscription pricing (USD / month).
+// These must match what Square actually charges (see squareSubscriptionService.ts:
+// RestroFlow Core = $179, HR add-on = $79 per location).
+export const PLAN_BASE_PRICE: Record<string, number> = {
+  free: 0,
+  professional: 179,
+  enterprise: 199,
+};
+export const HR_ADDON_PRICE_PER_LOCATION = 79;
+
+export function calculateSubscriptionTotal(plan: string | null | undefined, hrAddonLocations: number): number {
+  const basePlanCost = PLAN_BASE_PRICE[plan || 'free'] ?? 0;
+  const hrAddonCost = hrAddonLocations * HR_ADDON_PRICE_PER_LOCATION;
   return basePlanCost + hrAddonCost;
 }
 

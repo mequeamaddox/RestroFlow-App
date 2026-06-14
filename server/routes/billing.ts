@@ -1,6 +1,6 @@
 import type { Express } from 'express';
 import { storage } from '../storage';
-import { isAuthenticated } from './helpers';
+import { isAuthenticated, calculateSubscriptionTotal } from './helpers';
 import { requireLocationAccess } from '../securityMiddleware';
 import { db } from '../db';
 import { eq } from 'drizzle-orm';
@@ -18,14 +18,6 @@ import {
   mapStripeStatusToPlan,
   type StripePlan,
 } from '../stripeService';
-
-// Helper: compute total subscription amount based on plan + HR add-on count
-function calculateSubscriptionTotal(plan: string | null | undefined, hrAddonLocations: number): number {
-  const basePrices: Record<string, number> = { free: 0, professional: 99, enterprise: 199 };
-  const base = basePrices[plan || 'free'] ?? 0;
-  const hrAddonCost = hrAddonLocations * 29;
-  return base + hrAddonCost;
-}
 
 export function registerBillingRoutes(app: Express): void {
   // ─── Sales Integration ────────────────────────────────────────────────────
