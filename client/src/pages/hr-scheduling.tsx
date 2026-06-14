@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocation } from "@/contexts/LocationContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer';
 
 const shiftFormSchema = z.object({
   employeeId: z.string().min(1, "Employee is required"),
@@ -272,8 +273,141 @@ export default function HRScheduling() {
     setSelectedDate(current.toISOString().split('T')[0]);
   };
 
-  const generatePDF = (_includeStats: boolean) => {
-    toast({ title: "Coming Soon", description: "PDF export will be available in a future update." });
+  const generatePDF = async (includeStats: boolean) => {
+    const styles = StyleSheet.create({
+      page: { padding: 30, backgroundColor: '#ffffff' },
+      header: { marginBottom: 20, textAlign: 'center' },
+      title: { fontSize: 24, fontWeight: 'bold', marginBottom: 5 },
+      subtitle: { fontSize: 12, color: '#666', marginBottom: 3 },
+      dateRange: { fontSize: 14, marginBottom: 20 },
+      statsContainer: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 20, paddingVertical: 10, backgroundColor: '#f3f4f6', borderRadius: 5 },
+      statBox: { alignItems: 'center' },
+      statLabel: { fontSize: 10, color: '#666', marginBottom: 3 },
+      statValue: { fontSize: 18, fontWeight: 'bold' },
+      calendar: { flexDirection: 'row', border: '1pt solid #d1d5db' },
+      dayColumn: { flex: 1, borderRight: '1pt solid #d1d5db' },
+      dayHeader: { backgroundColor: '#f9fafb', padding: 8, borderBottom: '1pt solid #d1d5db', alignItems: 'center' },
+      dayName: { fontSize: 10, fontWeight: 'bold', marginBottom: 2 },
+      dayDate: { fontSize: 14, fontWeight: 'bold' },
+      dayTotal: { fontSize: 8, color: '#666', marginTop: 2 },
+      shiftContainer: { padding: 4 },
+      shift: { backgroundColor: '#e5e7eb', padding: 6, marginBottom: 4, borderRadius: 3, border: '1pt solid #d1d5db' },
+      shiftName: { fontSize: 9, fontWeight: 'bold', marginBottom: 2 },
+      shiftTime: { fontSize: 8, color: '#4b5563', marginBottom: 2 },
+      shiftDetails: { flexDirection: 'row', justifyContent: 'space-between', fontSize: 8 },
+      shiftHours: { color: '#6b7280' },
+      shiftCost: { fontWeight: 'bold' },
+      copyType: { fontSize: 10, color: '#999', marginTop: 5 },
+    });
+
+    const weekStart = new Date(weekDates[0]).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+    const weekEnd = new Date(weekDates[6]).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+    const SchedulePDF = () => (
+      <Document>
+        <Page size="A4" orientation="landscape" style={styles.page}>
+          <View style={styles.header}>
+            <Text style={styles.title}>{includeStats ? 'Weekly Schedule' : 'Staff Schedule'}</Text>
+            <Text style={styles.subtitle}>{currentLocation?.name}</Text>
+            <Text style={styles.dateRange}>{weekStart} - {weekEnd}</Text>
+            {includeStats && <Text style={styles.copyType}>Manager Copy</Text>}
+          </View>
+
+          {includeStats && (
+            <View style={styles.statsContainer}>
+              <View style={styles.statBox}>
+                <Text style={styles.statLabel}>Total Shifts</Text>
+                <Text style={styles.statValue}>{weeklyStats.totalShifts}</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statLabel}>Total Hours</Text>
+                <Text style={styles.statValue}>{weeklyStats.totalHours}h</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statLabel}>Labor Cost</Text>
+                <Text style={styles.statValue}>${weeklyStats.totalCost}</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statLabel}>Staff Scheduled</Text>
+                <Text style={styles.statValue}>{weeklyStats.uniqueEmployees}</Text>
+              </View>
+            </View>
+          )}
+
+          <View style={styles.calendar}>
+            {weekDates.map((date, index) => {
+              const dayShifts = getShiftsForDate(date);
+              const dayTotal = dayShifts.reduce((sum, shift) =>
+                sum + getShiftHours(shift.startTime, shift.endTime, shift.breakDuration), 0
+              );
+              const dayCost = includeStats ? dayShifts.reduce((sum, shift) =>
+                sum + calculateLaborCost(shift), 0
+              ) : 0;
+
+              return (
+                <View key={date} style={[styles.dayColumn, index === 6 ? { borderRight: 0 } : {}]}>
+                  <View style={styles.dayHeader}>
+                    <Text style={styles.dayName}>{dayNames[index]}</Text>
+                    <Text style={styles.dayDate}>{new Date(date).getDate()}</Text>
+                    {includeStats && dayTotal > 0 && (
+                      <>
+                        <Text style={styles.dayTotal}>{dayTotal.toFixed(0)}h</Text>
+                        {dayCost > 0 && (
+                          <Text style={styles.dayTotal}>${dayCost.toFixed(0)}</Text>
+                        )}
+                      </>
+                    )}
+                  </View>
+                  <View style={styles.shiftContainer}>
+                    {dayShifts.map((shift) => {
+                      const employee = employees.find(emp => emp.id === shift.employeeId);
+                      const hours = getShiftHours(shift.startTime, shift.endTime, shift.breakDuration);
+                      const cost = calculateLaborCost(shift);
+
+                      return (
+                        <View key={shift.id} style={styles.shift}>
+                          <Text style={styles.shiftName}>
+                            {employee?.firstName} {employee?.lastName}
+                          </Text>
+                          <Text style={styles.shiftTime}>
+                            {shift.startTime.slice(0, 5)} - {shift.endTime.slice(0, 5)}
+                          </Text>
+                          {includeStats ? (
+                            <View style={styles.shiftDetails}>
+                              <Text style={styles.shiftHours}>{hours.toFixed(1)}h</Text>
+                              {cost > 0 && <Text style={styles.shiftCost}>${cost.toFixed(0)}</Text>}
+                            </View>
+                          ) : (
+                            <View style={styles.shiftDetails}>
+                              <Text style={styles.shiftHours}>{hours.toFixed(1)}h</Text>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </Page>
+      </Document>
+    );
+
+    try {
+      const copyType = includeStats ? 'manager' : 'staff';
+      const blob = await pdf(<SchedulePDF />).toBlob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `schedule-${copyType}-${weekStart.replace(/\s/g, '-')}-${weekEnd.replace(/\s/g, '-')}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Success", description: `${copyType === 'manager' ? 'Manager' : 'Staff'} schedule PDF downloaded` });
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      toast({ title: "Error", description: "Failed to generate PDF", variant: "destructive" });
+    }
   };
 
   if (!currentLocation) {
