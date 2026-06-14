@@ -115,8 +115,12 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
-    startSpotOnSchedulers();
-    startAnalyticsScheduler();
-    startCloverScheduler();
+    if (process.env.ENABLE_SCHEDULERS === 'true') {
+      startSpotOnSchedulers();
+      startAnalyticsScheduler();
+      startCloverScheduler();
+    } else {
+      log('Schedulers disabled (set ENABLE_SCHEDULERS=true to enable)');
+    }
   });
 })();

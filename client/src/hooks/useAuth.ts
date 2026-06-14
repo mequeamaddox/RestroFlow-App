@@ -35,27 +35,15 @@ export function useAuth() {
         }
       }
 
-      // Fallback: use Clerk data directly
-      const fallback: User = {
-        id: clerkUser.id,
-        email: clerkUser.primaryEmailAddress?.emailAddress || '',
-        firstName: clerkUser.firstName || '',
-        lastName: clerkUser.lastName || '',
-        role: 'owner',
-      };
-      setUser(fallback);
-      return fallback;
+      // /api/auth/me failed — do not assume any role. Treat as unauthenticated.
+      console.warn('useAuth: /api/auth/me returned non-ok response; clearing user session');
+      setUser(null);
+      return null;
     } catch (error) {
-      console.error('Error fetching user data:', error);
-      const fallback: User = {
-        id: clerkUser.id,
-        email: clerkUser.primaryEmailAddress?.emailAddress || '',
-        firstName: clerkUser.firstName || '',
-        lastName: clerkUser.lastName || '',
-        role: 'owner',
-      };
-      setUser(fallback);
-      return fallback;
+      console.error('useAuth: failed to fetch user data:', error);
+      // Network/server error — do not assume any role.
+      setUser(null);
+      return null;
     }
   };
 

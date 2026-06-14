@@ -2,6 +2,7 @@ import type { Express } from 'express';
 import { getAuth } from '@clerk/express';
 import { storage } from '../storage';
 import { isAuthenticated, clerkClient, calculateSubscriptionTotal } from './helpers';
+import { requirePermission, Permission } from '../permissions';
 import { insertInvitationTokenSchema, invitationTokens } from '@shared/schema';
 import { InvitationEmailService } from '../invitationEmailService';
 import { db } from '../db';
@@ -84,7 +85,8 @@ export function registerAuthRoutes(app: Express): void {
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: 'User not found' });
       const allLocations = await storage.getLocations();
-      const hrAddonLocations = allLocations.filter((loc: any) => loc.hrAddonEnabled).length;
+      // Scope to this owner's locations only — prevents cross-tenant count leak
+      const hrAddonLocations = allLocations.filter((loc: any) => loc.ownerId === userId && loc.hrAddonEnabled).length;
       res.json({
         plan: user.subscriptionPlan || 'free',
         status: user.subscriptionStatus || 'inactive',
@@ -133,8 +135,8 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  // Invitation token management
-  app.get('/api/invitations', isAuthenticated, async (req, res) => {
+  // Invitation token management — requires MANAGE_EMPLOYEES permission on all mutating routes
+  app.get('/api/invitations', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
     try {
       const invitations = await db.select().from(invitationTokens).orderBy(invitationTokens.createdAt);
       res.json(invitations);
@@ -144,7 +146,7 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/invitations', isAuthenticated, async (req, res) => {
+  app.post('/api/invitations', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
     try {
       const userId = req.user!.id;
       const { email, role, locationId, expiresInHours = 72 } = req.body;
@@ -169,7 +171,7 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/invitations/:id', isAuthenticated, async (req, res) => {
+  app.get('/api/invitations/:id', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
     try {
       const [invitation] = await db.select().from(invitationTokens).where(eq(invitationTokens.id, req.params.id));
       if (!invitation) return res.status(404).json({ message: 'Invitation not found' });
@@ -180,7 +182,7 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.put('/api/invitations/:id', isAuthenticated, async (req, res) => {
+  app.put('/api/invitations/:id', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
     try {
       const [updated] = await db
         .update(invitationTokens)
@@ -194,7 +196,7 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.delete('/api/invitations/:id', isAuthenticated, async (req, res) => {
+  app.delete('/api/invitations/:id', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
     try {
       await db.delete(invitationTokens).where(eq(invitationTokens.id, req.params.id));
       res.status(204).send();
