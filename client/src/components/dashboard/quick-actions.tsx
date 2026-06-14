@@ -13,12 +13,6 @@ export default function QuickActions() {
       className: "bg-gradient-to-r from-orange-500 to-red-600 text-white hover:from-orange-600 hover:to-red-700 shadow-lg",
     },
     {
-      title: "Scan Barcode",
-      icon: ScanLine,
-      href: "#",
-      className: "bg-slate-700/50 text-orange-400 border border-orange-400/50 hover:bg-orange-400/10",
-    },
-    {
       title: "Purchase Order",
       icon: ShoppingCart,
       href: "/purchase-orders",

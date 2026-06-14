@@ -15,8 +15,6 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 import { useLocation } from "@/contexts/LocationContext";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScanLine, Camera, Calculator, AlertCircle } from "lucide-react";
-import BarcodeScanner from "@/components/barcode/barcode-scanner";
-import { useState, useEffect } from "react";
 
 interface AddItemDialogProps {
   isOpen: boolean;
@@ -768,13 +766,6 @@ export default function AddItemDialog({ isOpen, onClose, onSuccess, categories, 
           </form>
         </Form>
       </DialogContent>
-      
-      {/* Barcode Scanner */}
-      <BarcodeScanner
-        isOpen={isScannerOpen}
-        onClose={() => setIsScannerOpen(false)}
-        onScan={handleBarcodeScanned}
-      />
       
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>

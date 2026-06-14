@@ -19,7 +19,6 @@ import Vendors from "@/pages/vendors";
 import PurchaseOrders from "@/pages/purchase-orders";
 import WasteTracking from "@/pages/waste-tracking";
 import Analytics from "@/pages/analytics";
-import BarcodeTest from "@/pages/barcode-test";
 import Settings from "@/pages/settings";
 import InvoiceProcessing from "@/pages/invoice-processing";
 import HRDashboard from "@/pages/hr-dashboard";
@@ -129,7 +128,6 @@ function Router() {
                 <Route path="/waste-tracking" component={WasteTracking} />
                 <Route path="/analytics" component={Analytics} />
                 <Route path="/invoice-processing" component={InvoiceProcessing} />
-                <Route path="/barcode-test" component={BarcodeTest} />
                 <Route path="/multi-unit-dashboard" component={MultiUnitDashboard} />
                 <Route path="/subscription" component={Subscription} />
                 <Route path="/pricing" component={Pricing} />
