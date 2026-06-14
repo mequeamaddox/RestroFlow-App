@@ -2,3 +2,4 @@
 - [nixpacks devDep install](nixpacks-devdep.md) — Railway Docker sets NODE_ENV=production; use --include=dev flag, not NODE_ENV=development prefix, to guarantee devDependencies install
 - [POS queue architecture](pos-queue-architecture.md) — SpotOn uses webhook-first + Postgres job queue (pos_event_queue); no Redis; staggered fallback polling only when lastWebhookAt is stale
 - [startup migrations](startup-migrations.md) — Two parallel migration files must stay in sync: server/startup-migrations.ts (dev, runs on tsx start) and scripts/migrate.mjs (prod, runs before npm start)
+- [Railway deployment setup](railway-deploy.md) — use Dockerfile builder (not Nixpacks); npm ci requires lockfile in sync; explicit binary paths in build stage.
