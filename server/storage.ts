@@ -3598,30 +3598,15 @@ export class DatabaseStorage implements IStorage {
    * @param customDeductions - Any custom deduction amounts
    * @returns Object with calculated tax amounts
    */
-  private async calculateTaxDeductions(payPeriodId: string, grossPay: number, customDeductions: number = 0) {
-    // Get the pay period to find location
-    const period = await this.getPayrollPeriod(payPeriodId);
-    
-    // Get tax settings for this location (use defaults if not found)
-    const taxSettings = period?.locationId ? await this.getTaxSettings(period.locationId) : null;
-    const federalTaxRate = taxSettings ? parseFloat(taxSettings.federalTaxRate) : 0.08;
-    const stateTaxRate = taxSettings ? parseFloat(taxSettings.stateTaxRate) : 0.02;
-    const socialSecurityRate = taxSettings ? parseFloat(taxSettings.socialSecurityRate) : 0.062;
-    const medicareRate = taxSettings ? parseFloat(taxSettings.medicareRate) : 0.0145;
-    
-    // Calculate tax deductions using configured rates
-    const federalTax = grossPay * federalTaxRate;
-    const stateTax = grossPay * stateTaxRate;
-    const socialSecurity = grossPay * socialSecurityRate;
-    const medicare = grossPay * medicareRate;
-    const totalDeductions = federalTax + stateTax + socialSecurity + medicare + customDeductions;
-    
+  private async calculateTaxDeductions(_payPeriodId: string, _grossPay: number, customDeductions: number = 0) {
+    // Tax withholding is handled by the connected payroll provider (Gusto, ADP, QuickBooks, Paychex).
+    // We export gross pay, hours, and tip data to the provider; they calculate and remit all taxes.
     return {
-      federalTax,
-      stateTax,
-      socialSecurity,
-      medicare,
-      totalDeductions
+      federalTax: 0,
+      stateTax: 0,
+      socialSecurity: 0,
+      medicare: 0,
+      totalDeductions: customDeductions,
     };
   }
 

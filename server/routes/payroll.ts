@@ -374,36 +374,49 @@ export function registerPayrollRoutes(app: Express): void {
     }
   });
 
-  // Tax settings
-  app.get('/api/tax-settings', isAuthenticated, async (req, res) => {
+  // Payroll provider export — sends employee hours/pay data as CSV for import into Gusto, ADP, QuickBooks, Paychex, etc.
+  app.get('/api/payroll/export/:periodId', isAuthenticated, async (req, res) => {
     try {
-      const locationId = req.query.locationId as string;
-      if (!locationId) return res.status(400).json({ message: 'Location ID is required' });
-      const settings = await storage.getTaxSettings(locationId);
-      res.json(settings || null);
-    } catch (error) {
-      console.error('Error fetching tax settings:', error);
-      res.status(500).json({ message: 'Failed to fetch tax settings' });
-    }
-  });
+      const { periodId } = req.params;
+      const format = (req.query.format as string) || 'csv';
+      const paystubs = await storage.getPaystubsByPeriod(periodId);
+      if (!paystubs.length) return res.status(404).json({ message: 'No paystubs found for this period' });
 
-  app.post('/api/tax-settings', isAuthenticated, async (req, res) => {
-    try {
-      const settings = await storage.createTaxSettings(req.body);
-      res.status(201).json(settings);
-    } catch (error) {
-      console.error('Error creating tax settings:', error);
-      res.status(500).json({ message: 'Failed to create tax settings' });
-    }
-  });
+      const headers = [
+        'employee_id', 'first_name', 'last_name', 'email',
+        'regular_hours', 'overtime_hours',
+        'regular_rate', 'overtime_rate',
+        'regular_pay', 'overtime_pay',
+        'gross_pay', 'tips', 'bonuses',
+        'pay_date', 'period_start', 'period_end',
+      ];
 
-  app.put('/api/tax-settings/:id', isAuthenticated, async (req, res) => {
-    try {
-      const settings = await storage.updateTaxSettings(req.params.id, req.body);
-      res.json(settings);
+      const rows = paystubs.map((stub: any) => [
+        stub.employeeId,
+        stub.employee?.firstName || '',
+        stub.employee?.lastName || '',
+        stub.employee?.email || '',
+        parseFloat(stub.regularHours || '0').toFixed(2),
+        parseFloat(stub.overtimeHours || '0').toFixed(2),
+        parseFloat(stub.regularRate || '0').toFixed(2),
+        parseFloat(stub.overtimeRate || '0').toFixed(2),
+        parseFloat(stub.regularPay || '0').toFixed(2),
+        parseFloat(stub.overtimePay || '0').toFixed(2),
+        parseFloat(stub.grossPay || '0').toFixed(2),
+        parseFloat(stub.tips || '0').toFixed(2),
+        parseFloat(stub.bonuses || '0').toFixed(2),
+        stub.payDate || '',
+        stub.payPeriod?.startDate || '',
+        stub.payPeriod?.endDate || '',
+      ]);
+
+      const csv = [headers.join(','), ...rows.map((r: any[]) => r.map((v: any) => `"${v}"`).join(','))].join('\n');
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="payroll-${format}-${periodId}.csv"`);
+      res.send(csv);
     } catch (error) {
-      console.error('Error updating tax settings:', error);
-      res.status(500).json({ message: 'Failed to update tax settings' });
+      console.error('Error exporting payroll:', error);
+      res.status(500).json({ message: 'Failed to export payroll data' });
     }
   });
 

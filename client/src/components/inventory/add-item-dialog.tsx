@@ -116,29 +116,48 @@ export default function AddItemDialog({ isOpen, onClose, onSuccess, categories, 
     }
   }, [editingItem, currentLocation?.id, form]);
 
-  // Determine item type based on selected category
+  // Determine item type based on selected category name
   const getItemType = (categoryId: string | undefined | null): 'bar' | 'food' | 'supplies' | null => {
     if (!categoryId) return null;
     
     const category = categories.find(c => c.id === categoryId);
     if (!category) return null;
     
-    const categoryName = category.name.toLowerCase();
+    const n = category.name.toLowerCase();
     
-    // Bar/Beverage categories
-    if (['beer', 'spirits', 'wine', 'mixers', 'garnishes', 'bar tools'].some(term => categoryName.includes(term))) {
-      return 'bar';
-    }
+    // Bar/Beverage — alcoholic and non-alcoholic bar inventory
+    const barTerms = [
+      'beer', 'draft', 'keg', 'lager', 'ale', 'ipa', 'stout',
+      'wine', 'champagne', 'prosecco', 'sparkling',
+      'spirit', 'liquor', 'liqueur', 'whiskey', 'whisky', 'vodka',
+      'rum', 'tequila', 'gin', 'bourbon', 'brandy', 'cognac',
+      'mixer', 'garnish', 'bar tool', 'bar supply', 'cocktail',
+      'beverage', 'alcohol', 'bitters', 'syrup', 'cordial',
+      'non-alcoholic', 'mocktail', 'soda', 'juice', 'energy drink',
+    ];
+    if (barTerms.some(term => n.includes(term))) return 'bar';
     
-    // Food categories
-    if (['protein', 'vegetable', 'dairy', 'grain', 'starch', 'condiment', 'sauce'].some(term => categoryName.includes(term))) {
-      return 'food';
-    }
+    // Food — proteins, produce, dairy, dry goods, sauces
+    const foodTerms = [
+      'protein', 'beef', 'chicken', 'poultry', 'pork', 'lamb',
+      'seafood', 'fish', 'shrimp', 'shellfish', 'crab', 'lobster',
+      'produce', 'vegetable', 'veggie', 'fruit', 'herb', 'spice',
+      'dairy', 'cheese', 'butter', 'cream', 'milk', 'egg',
+      'grain', 'pasta', 'rice', 'bread', 'flour', 'starch',
+      'condiment', 'sauce', 'dressing', 'oil', 'vinegar',
+      'dry good', 'canned', 'frozen', 'fresh', 'baking',
+      'dessert', 'sweet', 'chocolate', 'ingredient',
+    ];
+    if (foodTerms.some(term => n.includes(term))) return 'food';
     
-    // Supplies categories
-    if (['cleaning', 'office', 'supplies'].some(term => categoryName.includes(term))) {
-      return 'supplies';
-    }
+    // Supplies — non-food operational items
+    const supplyTerms = [
+      'cleaning', 'chemical', 'sanitizer', 'detergent',
+      'office', 'admin', 'paper', 'napkin', 'towel', 'tissue',
+      'supply', 'supplies', 'packaging', 'container', 'bag', 'wrap',
+      'smallware', 'equipment', 'linen', 'uniform', 'maintenance',
+    ];
+    if (supplyTerms.some(term => n.includes(term))) return 'supplies';
     
     return null;
   };
@@ -265,6 +284,13 @@ export default function AddItemDialog({ isOpen, onClose, onSuccess, categories, 
                         )}
                       </SelectContent>
                     </Select>
+                    {itemType && (
+                      <p className="text-xs mt-1">
+                        {itemType === 'bar' && <span className="text-blue-400">🍺 Bar item detected — beverage fields will appear below</span>}
+                        {itemType === 'food' && <span className="text-green-400">🥩 Food item detected — recipe costing fields will appear below</span>}
+                        {itemType === 'supplies' && <span className="text-slate-400">📦 Supply item — no extra fields needed</span>}
+                      </p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}

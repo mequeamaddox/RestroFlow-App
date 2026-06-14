@@ -78,15 +78,12 @@ const hrNavigation = [
   { name: 'Time Off', href: '/hr/time-off', icon: Calendar },
   { name: 'Payroll', href: '/hr/payroll', icon: DollarSign },
   { name: 'Paycheck Settings', href: '/hr/paycheck-settings', icon: Settings },
-  { name: 'Tax Settings', href: '/hr/tax-settings', icon: Calculator },
+  { name: 'Payroll Providers', href: '/hr/payroll-providers', icon: Building },
   { name: 'Tasks', href: '/hr/tasks', icon: CheckSquare },
   { name: 'Messaging', href: '/hr/messaging', icon: MessageSquare },
 ];
 
-// Owner-only HR navigation
-const ownerOnlyHRNavigation = [
-  { name: 'Tax & Payroll Reports', href: '/hr/tax-payroll', icon: Shield, badge: 'OWNER' },
-];
+const ownerOnlyHRNavigation: typeof hrNavigation = [];
 
 const employeeNavigation = [
   { name: 'My Dashboard', href: '/employee/dashboard', icon: Home },

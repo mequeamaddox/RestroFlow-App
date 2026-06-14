@@ -25,7 +25,7 @@ import InvoiceProcessing from "@/pages/invoice-processing";
 import HRDashboard from "@/pages/hr-dashboard";
 import HREmployees from "@/pages/hr-employees";
 import HRAnalytics from "@/pages/hr-analytics";
-import HRTaxPayroll from "@/pages/hr-tax-payroll";
+import HRPayrollProviders from "@/pages/hr-payroll-providers";
 import HRTimeClock from "@/pages/hr-time-clock";
 import HRTasks from "@/pages/hr-tasks";
 import HRMessaging from "@/pages/hr-messaging";
@@ -33,7 +33,6 @@ import HRScheduling from "@/pages/hr-scheduling";
 import HRTimeOff from "@/pages/hr-time-off";
 import HRPayroll from "@/pages/hr-payroll";
 import HRPaycheckSettings from "@/pages/hr-paycheck-settings";
-import HRTaxSettings from "@/pages/hr-tax-settings";
 import HRDepartments from "@/pages/hr-departments";
 import HRPositions from "@/pages/hr-positions";
 import HRDocuments from "@/pages/hr-documents";
@@ -144,7 +143,7 @@ function Router() {
                 <Route path="/employees" component={HREmployees} />
                 <Route path="/employees/:id" component={EmployeeProfile} />
                 <Route path="/hr/analytics" component={HRAnalytics} />
-                <Route path="/hr/tax-payroll" component={HRTaxPayroll} />
+                <Route path="/hr/payroll-providers" component={HRPayrollProviders} />
                 <Route path="/hr/time-clock" component={HRTimeClock} />
                 <Route path="/hr/tasks" component={HRTasks} />
                 <Route path="/hr/messaging" component={HRMessaging} />
@@ -152,7 +151,6 @@ function Router() {
                 <Route path="/hr/time-off" component={HRTimeOff} />
                 <Route path="/hr/payroll" component={HRPayroll} />
         <Route path="/hr/paycheck-settings" component={HRPaycheckSettings} />
-                <Route path="/hr/tax-settings" component={HRTaxSettings} />
                 <Route path="/hr/departments" component={HRDepartments} />
                 <Route path="/hr/positions" component={HRPositions} />
                 <Route path="/hr/documents" component={HRDocuments} />

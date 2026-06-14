@@ -246,27 +246,15 @@ export function ActualPaycheck({ paycheck, settings }: ActualPaycheckProps) {
       </div>
 
       <div className="mt-4 border-t pt-4">
-        <h3 className="font-bold mb-2">DEDUCTIONS</h3>
-        <div className="grid grid-cols-4 gap-2 text-sm">
-          <div>Federal Tax</div>
-          <div className="text-right">${parseFloat(paycheck.federalTax).toFixed(2)}</div>
-          <div>Social Security</div>
-          <div className="text-right">${parseFloat(paycheck.socialSecurity).toFixed(2)}</div>
-          
-          <div>State Tax</div>
-          <div className="text-right">${parseFloat(paycheck.stateTax).toFixed(2)}</div>
-          <div>Medicare</div>
-          <div className="text-right">${parseFloat(paycheck.medicare).toFixed(2)}</div>
-          
-          <div className="col-span-2 font-bold border-t pt-2">TOTAL DEDUCTIONS</div>
-          <div className="col-span-2 font-bold border-t pt-2 text-right">${parseFloat(paycheck.totalDeductions).toFixed(2)}</div>
+        <div className="bg-blue-50 border border-blue-200 rounded p-3 text-center text-sm text-blue-700">
+          Taxes &amp; withholdings processed by your connected payroll provider
         </div>
       </div>
 
       <div className="mt-6 bg-green-50 border-2 border-green-600 p-4 rounded">
         <div className="flex justify-between items-center">
-          <div className="text-lg font-bold">NET PAY</div>
-          <div className="text-2xl font-bold text-green-700">${parseFloat(paycheck.netPay).toFixed(2)}</div>
+          <div className="text-lg font-bold">GROSS PAY</div>
+          <div className="text-2xl font-bold text-green-700">${parseFloat(paycheck.grossPay).toFixed(2)}</div>
         </div>
       </div>
     </div>
