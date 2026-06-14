@@ -2,7 +2,7 @@
 nixPkgs = ["nodejs_20", "python3"]
 
 [phases.install]
-cmds = ["NODE_ENV=development npm install --include=dev --no-fund --no-audit --maxsockets=3"]
+cmds = ["npm cache clean --force && NODE_ENV=development npm ci --include=dev --no-fund --no-audit"]
 
 [phases.build]
 cmds = ["/app/node_modules/.bin/vite build && /app/node_modules/.bin/esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist"]
