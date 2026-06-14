@@ -1,5 +1,6 @@
 import { clerkMiddleware } from './clerkAuth';
 import { locationContextMiddleware } from './locationContext';
+import { runStartupMigrations } from './startup-migrations';
 import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
@@ -74,6 +75,8 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  await runStartupMigrations();
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
