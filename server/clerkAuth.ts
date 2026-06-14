@@ -75,7 +75,7 @@ export { clerkMiddleware };
 
 // Lazy Clerk client — only instantiated when secret key is present
 function getClerkClient() {
-  const secretKey = process.env.CLERK_SECRET_KEY || process.env.VITE_CLERK_SECRET_KEY;
+  const secretKey = process.env.CLERK_SECRET_KEY;
   if (!secretKey) return null;
   return createClerkClient({ secretKey });
 }

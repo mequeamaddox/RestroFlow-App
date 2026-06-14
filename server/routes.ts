@@ -71,8 +71,7 @@ import {
 import { requirePlan } from "./billingMiddleware";
 
 const clerkClient = createClerkClient({
-  secretKey: process.env.VITE_CLERK_SECRET_KEY,
-  publishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY,
+  secretKey: process.env.CLERK_SECRET_KEY,
 });
 
 // Use Clerk-only authentication

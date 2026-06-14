@@ -40,7 +40,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(clerkMiddleware({
   publishableKey: process.env.CLERK_PUBLISHABLE_KEY || process.env.VITE_CLERK_PUBLISHABLE_KEY,
-  secretKey: process.env.CLERK_SECRET_KEY || process.env.VITE_CLERK_SECRET_KEY,
+  secretKey: process.env.CLERK_SECRET_KEY,
 }));
 app.use(locationContextMiddleware);
 // Enable cookie parsing for session management
