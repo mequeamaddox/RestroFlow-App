@@ -45,12 +45,13 @@ export function registerBillingRoutes(app: Express): void {
           price: 179,
           billingCycle: 'MONTHLY',
           popular: true,
+          locationLimit: 3,
           features: [
+            'Up to 3 locations',
             'Unlimited OCR invoice processing',
             'Advanced image OCR (scanned invoices)',
             'Support for all file types (PDF, Images)',
             'Advanced analytics dashboard',
-            'Unlimited locations',
             'All POS/accounting integrations',
             'Budget tracking & variance analysis',
             'Theoretical vs actual reporting',
@@ -62,7 +63,7 @@ export function registerBillingRoutes(app: Express): void {
       ],
       hrAddon: {
         pricePerLocation: 79,
-        description: 'HR Management Add-on - Employee scheduling, time tracking, payroll, and document management',
+        description: 'HR Management Add-on — Employee scheduling, time tracking, payroll, and document management',
         features: [
           'Employee scheduling & time tracking',
           'Digital document management',
@@ -72,6 +73,19 @@ export function registerBillingRoutes(app: Express): void {
           'Task assignment & completion tracking',
           'Internal messaging system',
           'HR analytics & reporting',
+        ],
+      },
+      barAddon: {
+        pricePerLocation: 79,
+        description: 'Bar & Beverage Add-on — Cocktail recipe costing, pour cost analysis, and liquor inventory',
+        features: [
+          'Liquor inventory tracking by oz/ml',
+          'Cocktail recipe costing',
+          'Pour cost & variance analysis',
+          'Beverage waste tracking',
+          'Happy hour pricing tools',
+          'Beverage menu management',
+          'Bar-specific analytics & reporting',
         ],
       },
       stripeEnabled: isStripeEnabled,
@@ -87,14 +101,18 @@ export function registerBillingRoutes(app: Express): void {
       if (!user) return res.status(404).json({ message: 'User not found' });
       const allLocations = await storage.getLocations();
       // Tenant-aware: only count THIS owner's locations, never other tenants'
-      const hrAddonLocations = allLocations.filter((loc: any) => loc.ownerId === userId && loc.hrAddonEnabled).length;
+      const ownedLocations = allLocations.filter((loc: any) => loc.ownerId === userId);
+      const hrAddonLocations = ownedLocations.filter((loc: any) => loc.hrAddonEnabled).length;
+      const barAddonLocations = ownedLocations.filter((loc: any) => loc.barAddonEnabled).length;
       res.json({
         id: user.stripeSubscriptionId || user.id,
         plan: user.subscriptionPlan || 'free',
         status: user.subscriptionStatus || 'inactive',
         nextBillingDate: user.subscriptionEndDate?.toISOString(),
-        totalAmount: calculateSubscriptionTotal(user.subscriptionPlan, hrAddonLocations),
+        totalAmount: calculateSubscriptionTotal(user.subscriptionPlan, hrAddonLocations, barAddonLocations),
         hrAddonLocations,
+        barAddonLocations,
+        locationCount: ownedLocations.length,
         stripeCustomerId: user.stripeCustomerId,
         stripeSubscriptionId: user.stripeSubscriptionId,
         createdAt: user.createdAt?.toISOString(),
