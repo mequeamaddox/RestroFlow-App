@@ -1847,3 +1847,12 @@ export type InsertOwnerOnboarding = z.infer<typeof insertOwnerOnboardingSchema>;
 export type OwnerOnboardingStep = typeof ownerOnboardingSteps.$inferSelect;
 export type InsertOwnerOnboardingStep = z.infer<typeof insertOwnerOnboardingStepSchema>;
 
+// Platform-level settings (key/value store for platform admins)
+export const platformSettings = pgTable("platform_settings", {
+  key: varchar("key", { length: 100 }).primaryKey(),
+  value: text("value"),
+  description: text("description"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  updatedBy: varchar("updated_by"),
+});
+

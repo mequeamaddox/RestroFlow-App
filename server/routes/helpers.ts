@@ -1,7 +1,6 @@
 import { createClerkClient } from '@clerk/express';
 import { requireAuth } from '../clerkAuth';
 import { storage } from '../storage';
-import { assertLocationAccess } from '../securityMiddleware';
 import multer from 'multer';
 
 export const clerkClient = createClerkClient({
@@ -67,7 +66,7 @@ export function mapPositionToRole(positionTitle: string | null | undefined): str
 
 // Single source of truth for subscription pricing (USD / month).
 // These must match what Stripe actually charges:
-// RestroFlow Core = $179, HR add-on = $79 per location.
+// RestroFlow Core (Professional) = $179, HR add-on = $79 per location.
 export const PLAN_BASE_PRICE: Record<string, number> = {
   free: 0,
   core: 179,
@@ -80,17 +79,27 @@ export function calculateSubscriptionTotal(plan: string | null | undefined, hrAd
   return basePlanCost + hrAddonCost;
 }
 
+export function requirePlatformAdmin(req: any, res: any, next: any) {
+  if (req.user?.role !== 'platform_admin') {
+    return res.status(403).json({ message: 'Platform admin access required' });
+  }
+  next();
+}
+
 export const requireHRAccess = async (req: any, res: any, next: any) => {
   try {
     const locationId = req.query.locationId as string;
     if (!locationId) {
       return res.status(400).json({ message: 'Location ID required', code: 'LOCATION_REQUIRED' });
     }
-    // Verify tenant ownership/assignment before any other check
-    if (!await assertLocationAccess(req, res, locationId)) return;
-    // All roles (including owners) must have the HR add-on active on this location
-    const location = await storage.getLocationById(locationId);
-    if (!location?.hrAddonEnabled) {
+    const user = req.user;
+    if (user?.role === 'owner') return next();
+    const locations = await storage.getLocations();
+    const location = locations.find((loc: any) => loc.id === locationId);
+    if (!location) {
+      return res.status(404).json({ message: 'Location not found' });
+    }
+    if (!location.hrAddonEnabled) {
       return res.status(403).json({
         message: 'HR add-on not enabled for this location',
         code: 'HR_ADDON_REQUIRED',

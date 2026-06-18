@@ -1,7 +1,7 @@
 import type { Express } from 'express';
 import { getAuth } from '@clerk/express';
 import { storage } from '../storage';
-import { isAuthenticated, clerkClient, calculateSubscriptionTotal } from './helpers';
+import { isAuthenticated, clerkClient, calculateSubscriptionTotal, requirePlatformAdmin } from './helpers';
 import { requirePermission, Permission } from '../permissions';
 import { insertInvitationTokenSchema, invitationTokens } from '@shared/schema';
 import { InvitationEmailService } from '../invitationEmailService';
@@ -66,6 +66,8 @@ export function registerAuthRoutes(app: Express): void {
           firstName: user.firstName,
           lastName: user.lastName,
           role: user.role,
+          subscriptionPlan: user.subscriptionPlan,
+          subscriptionStatus: user.subscriptionStatus,
         },
       });
     } catch (error) {
@@ -111,7 +113,7 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/user/upgrade-plan', isAuthenticated, async (req, res) => {
+  app.post('/api/user/upgrade-plan', isAuthenticated, requirePlatformAdmin, async (req, res) => {
     try {
       const userId = req.user!.id;
       const { plan, hrAddonEnabled } = req.body;

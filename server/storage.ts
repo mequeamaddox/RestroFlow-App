@@ -167,6 +167,7 @@ import {
   type InsertOwnerOnboarding,
   type OwnerOnboardingStep,
   type InsertOwnerOnboardingStep,
+  platformSettings,
 } from "@shared/schema";
 import { db } from "./db";
 import { encryptOnboardingPII, decryptOnboardingPII } from "./encryption";
@@ -458,6 +459,12 @@ export interface IStorage {
   createOwnerOnboarding(data: InsertOwnerOnboarding): Promise<OwnerOnboarding>;
   updateOwnerOnboardingStep(userId: string, stepName: string, stepData: any, status: string): Promise<OwnerOnboarding>;
   completeOwnerOnboarding(userId: string): Promise<OwnerOnboarding>;
+
+  // Platform admin operations
+  getAllUsers(): Promise<User[]>;
+  getPlatformSetting(key: string): Promise<string | null>;
+  setPlatformSetting(key: string, value: string, userId: string, description?: string): Promise<void>;
+  getAllPlatformSettings(): Promise<Record<string, { value: string | null; description: string | null; updatedAt: Date | null; updatedBy: string | null }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4579,6 +4586,26 @@ export class DatabaseStorage implements IStorage {
     }
 
     return result;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return db.select().from(users).orderBy(users.createdAt);
+  }
+
+  async getPlatformSetting(key: string): Promise<string | null> {
+    const [row] = await db.select().from(platformSettings).where(eq(platformSettings.key, key));
+    return row?.value ?? null;
+  }
+
+  async setPlatformSetting(key: string, value: string, userId: string, description?: string): Promise<void> {
+    await db.insert(platformSettings)
+      .values({ key, value, description, updatedBy: userId, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: platformSettings.key, set: { value, updatedBy: userId, updatedAt: new Date(), ...(description ? { description } : {}) } });
+  }
+
+  async getAllPlatformSettings(): Promise<Record<string, { value: string | null; description: string | null; updatedAt: Date | null; updatedBy: string | null }>> {
+    const rows = await db.select().from(platformSettings);
+    return Object.fromEntries(rows.map(r => [r.key, { value: r.value, description: r.description, updatedAt: r.updatedAt, updatedBy: r.updatedBy }]));
   }
 }
 
