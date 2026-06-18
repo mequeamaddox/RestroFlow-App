@@ -72,6 +72,52 @@ const migrations: { name: string; sql: string }[] = [
     sql: "ALTER TABLE locations ADD COLUMN IF NOT EXISTS bar_addon_enabled boolean DEFAULT false",
   },
   {
+    name: "bar_inventory_counts table",
+    sql: `CREATE TABLE IF NOT EXISTS bar_inventory_counts (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      location_id uuid NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+      counted_by varchar(255) NOT NULL,
+      count_date date NOT NULL DEFAULT CURRENT_DATE,
+      shift varchar(50) NOT NULL DEFAULT 'end_of_day',
+      notes text,
+      status varchar(50) NOT NULL DEFAULT 'draft',
+      created_at timestamp DEFAULT now(),
+      updated_at timestamp DEFAULT now()
+    )`,
+  },
+  {
+    name: "bar_inventory_count_items table",
+    sql: `CREATE TABLE IF NOT EXISTS bar_inventory_count_items (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      count_id uuid NOT NULL REFERENCES bar_inventory_counts(id) ON DELETE CASCADE,
+      inventory_item_id uuid NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+      fill_level numeric(5,4) NOT NULL DEFAULT 1,
+      quantity_ml numeric(10,2),
+      unit_cost numeric(10,4),
+      notes text,
+      created_at timestamp DEFAULT now()
+    )`,
+  },
+  {
+    name: "bar_waste_log table",
+    sql: `CREATE TABLE IF NOT EXISTS bar_waste_log (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      location_id uuid NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+      inventory_item_id uuid REFERENCES inventory_items(id),
+      menu_item_id uuid REFERENCES menu_items(id),
+      item_name varchar(255) NOT NULL,
+      quantity numeric(10,4) NOT NULL,
+      unit varchar(20) NOT NULL DEFAULT 'oz',
+      cost numeric(10,4),
+      reason varchar(50) NOT NULL,
+      notes text,
+      logged_by varchar(255) NOT NULL,
+      log_date timestamp NOT NULL DEFAULT now(),
+      shift varchar(50),
+      created_at timestamp DEFAULT now()
+    )`,
+  },
+  {
     name: "locations fk cascade — add ON DELETE CASCADE to all FKs referencing locations(id)",
     sql: `
       DO $$

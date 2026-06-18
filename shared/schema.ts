@@ -1857,3 +1857,49 @@ export const platformSettings = pgTable("platform_settings", {
   updatedBy: varchar("updated_by"),
 });
 
+// ── Bar & Beverage Add-on Tables ─────────────────────────────────────────────
+
+export const barInventoryCounts = pgTable("bar_inventory_counts", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  locationId: uuid("location_id").notNull().references(() => locations.id, { onDelete: "cascade" }),
+  countedBy: varchar("counted_by", { length: 255 }).notNull(),
+  countDate: date("count_date").notNull(),
+  shift: varchar("shift", { length: 50 }).notNull().default("end_of_day"),
+  notes: text("notes"),
+  status: varchar("status", { length: 50 }).notNull().default("draft"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const barInventoryCountItems = pgTable("bar_inventory_count_items", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  countId: uuid("count_id").notNull().references(() => barInventoryCounts.id, { onDelete: "cascade" }),
+  inventoryItemId: uuid("inventory_item_id").notNull().references(() => inventoryItems.id, { onDelete: "cascade" }),
+  fillLevel: decimal("fill_level", { precision: 5, scale: 4 }).notNull().default("1"),
+  quantityMl: decimal("quantity_ml", { precision: 10, scale: 2 }),
+  unitCost: decimal("unit_cost", { precision: 10, scale: 4 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const barWasteLog = pgTable("bar_waste_log", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  locationId: uuid("location_id").notNull().references(() => locations.id, { onDelete: "cascade" }),
+  inventoryItemId: uuid("inventory_item_id").references(() => inventoryItems.id),
+  menuItemId: uuid("menu_item_id").references(() => menuItems.id),
+  itemName: varchar("item_name", { length: 255 }).notNull(),
+  quantity: decimal("quantity", { precision: 10, scale: 4 }).notNull(),
+  unit: varchar("unit", { length: 20 }).notNull().default("oz"),
+  cost: decimal("cost", { precision: 10, scale: 4 }),
+  reason: varchar("reason", { length: 50 }).notNull(),
+  notes: text("notes"),
+  loggedBy: varchar("logged_by", { length: 255 }).notNull(),
+  logDate: timestamp("log_date").notNull().defaultNow(),
+  shift: varchar("shift", { length: 50 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type BarInventoryCount = typeof barInventoryCounts.$inferSelect;
+export type BarInventoryCountItem = typeof barInventoryCountItems.$inferSelect;
+export type BarWasteEntry = typeof barWasteLog.$inferSelect;
+

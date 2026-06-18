@@ -11,6 +11,7 @@ import { registerDocumentRoutes } from './payroll';
 import { registerBillingRoutes } from './billing';
 import { registerInvoiceRoutes } from './invoices';
 import { registerPlatformRoutes } from './platform';
+import { registerBarRoutes } from './bar';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   registerAuthRoutes(app);
@@ -24,6 +25,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerDocumentRoutes(app);
   registerBillingRoutes(app);
   registerPlatformRoutes(app);
+  registerBarRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;
