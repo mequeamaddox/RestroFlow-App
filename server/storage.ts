@@ -3698,7 +3698,17 @@ export class DatabaseStorage implements IStorage {
     overdueOnboarding: number;
     averageCompletionDays: number;
   }> {
-    const allOnboarding = await this.getEmployeeOnboarding();
+    let allOnboarding: EmployeeOnboarding[];
+    if (locationId) {
+      const rows = await db
+        .select({ onboarding: employeeOnboarding })
+        .from(employeeOnboarding)
+        .innerJoin(employees, eq(employeeOnboarding.employeeId, employees.id))
+        .where(eq(employees.locationId, locationId));
+      allOnboarding = rows.map(r => r.onboarding);
+    } else {
+      allOnboarding = await this.getEmployeeOnboarding();
+    }
     const activeOnboarding = allOnboarding.filter(o => o.status === 'in-progress');
     
     const now = new Date();

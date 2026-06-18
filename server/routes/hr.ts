@@ -5,7 +5,7 @@ import { requireLocationAccess, assertLocationAccess } from '../securityMiddlewa
 import { requirePermission, requireAnyPermission, Permission } from '../permissions';
 import { teamResources, insertTeamResourceSchema } from '@shared/schema';
 import { db } from '../db';
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc, sql, or, isNull } from 'drizzle-orm';
 
 
 export function registerHRRoutes(app: Express): void {
@@ -572,9 +572,12 @@ export function registerHRRoutes(app: Express): void {
   });
 
   // Team Resources
-  app.get('/api/hr/team-resources', isAuthenticated, requireHRAccess, async (_req, res) => {
+  app.get('/api/hr/team-resources', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      const resources = await db.select().from(teamResources).orderBy(desc(teamResources.uploadedAt));
+      const locationId = req.query.locationId as string;
+      const resources = await db.select().from(teamResources)
+        .where(or(eq(teamResources.locationId, locationId), isNull(teamResources.locationId)))
+        .orderBy(desc(teamResources.uploadedAt));
       res.json(resources);
     } catch (error) {
       console.error('Error fetching team resources:', error);
@@ -890,6 +893,9 @@ export function registerHRRoutes(app: Express): void {
   // Recipe assignments (build sheets)
   app.get('/api/employees/:employeeId/recipe-assignments', isAuthenticated, async (req, res) => {
     try {
+      const employee = await storage.getEmployee(req.params.employeeId);
+      if (!employee) return res.status(404).json({ error: 'Employee not found' });
+      if (employee.locationId && !await assertLocationAccess(req, res, employee.locationId)) return;
       const assignments = await storage.getRecipeAssignmentsForEmployee(req.params.employeeId);
       res.json(assignments);
     } catch (error) {

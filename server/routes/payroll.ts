@@ -6,6 +6,9 @@ import { assertLocationAccess } from '../securityMiddleware';
 export function registerDocumentRoutes(app: Express): void {
   app.get('/api/employees/:employeeId/time-off-requests', isAuthenticated, async (req, res) => {
     try {
+      const employee = await storage.getEmployee(req.params.employeeId);
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (employee.locationId && !await assertLocationAccess(req, res, employee.locationId)) return;
       const requests = await storage.getEmployeeTimeOffRequests(req.params.employeeId);
       res.json(requests);
     } catch (error) {
@@ -51,7 +54,19 @@ export function registerDocumentRoutes(app: Express): void {
     try {
       const employee = await storage.getEmployee(req.params.employeeId);
       if (!employee) return res.status(404).json({ message: 'Employee not found' });
-      if (employee.locationId && !await assertLocationAccess(req, res, employee.locationId)) return;
+      if (employee.locationId) {
+        const userId = req.user!.id;
+        const userRole = req.user!.role;
+        let hasAccess = false;
+        if (userRole === 'owner') {
+          const loc = await storage.getLocationById(employee.locationId);
+          hasAccess = !!(loc && loc.ownerId === userId);
+        } else {
+          const perms = await storage.getUserPermissions(userId);
+          hasAccess = perms.some((p: any) => p.locationId === employee.locationId && p.isActive);
+        }
+        if (!hasAccess) return res.status(404).json({ message: 'Employee not found' });
+      }
       const documents = await storage.getEmployeeDocuments(req.params.employeeId);
       const transformedDocuments = documents.map((doc: any) => ({
         id: doc.id, templateId: doc.templateId || null, status: doc.status, deadline: doc.expiresAt || null,
@@ -87,7 +102,7 @@ export function registerDocumentRoutes(app: Express): void {
     }
   });
 
-  app.put('/api/employee-documents/:id/status', async (req, res) => {
+  app.put('/api/employee-documents/:id/status', isAuthenticated, async (req, res) => {
     try {
       const { status } = req.body;
       const updateData: any = { status };
@@ -102,7 +117,7 @@ export function registerDocumentRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/employee-documents/:id/signature', async (req, res) => {
+  app.post('/api/employee-documents/:id/signature', isAuthenticated, async (req, res) => {
     try {
       const { signatureData, signedName, employeeId } = req.body;
       const signature = await storage.createEmployeeSignature({ documentAssignmentId: req.params.id, employeeId, signatureData, signedName, ipAddress: req.ip, userAgent: req.get('User-Agent') });
@@ -124,7 +139,7 @@ export function registerDocumentRoutes(app: Express): void {
     }
   });
 
-  app.put('/api/employee-documents/:id/start', async (req, res) => {
+  app.put('/api/employee-documents/:id/start', isAuthenticated, async (req, res) => {
     try {
       const assignment = await storage.updateDocumentAssignment(req.params.id, { status: 'viewed' });
       res.json(assignment);
@@ -144,7 +159,7 @@ export function registerDocumentRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/employee-documents/:id/upload', async (req, res) => {
+  app.post('/api/employee-documents/:id/upload', isAuthenticated, async (req, res) => {
     try {
       const assignment = await storage.updateDocumentAssignment(req.params.id, { status: 'completed', completedAt: new Date() });
       res.json(assignment);
@@ -154,7 +169,7 @@ export function registerDocumentRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/document-templates/:id/fields', async (req, res) => {
+  app.get('/api/document-templates/:id/fields', isAuthenticated, async (req, res) => {
     try {
       const fields = await storage.getDocumentFormFields(req.params.id);
       res.json(fields);
@@ -164,7 +179,7 @@ export function registerDocumentRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/employee-documents/:id/responses', async (req, res) => {
+  app.get('/api/employee-documents/:id/responses', isAuthenticated, async (req, res) => {
     try {
       const responses = await storage.getDocumentFormResponses(req.params.id);
       res.json(responses);
@@ -174,7 +189,7 @@ export function registerDocumentRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/employee-documents/:id/responses', async (req, res) => {
+  app.post('/api/employee-documents/:id/responses', isAuthenticated, async (req, res) => {
     try {
       const { fieldId, fieldValue } = req.body;
       const response = await storage.saveDocumentFormResponse({ assignmentId: req.params.id, fieldId, fieldValue });
@@ -185,7 +200,7 @@ export function registerDocumentRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/employee-documents/:id/complete', async (req, res) => {
+  app.post('/api/employee-documents/:id/complete', isAuthenticated, async (req, res) => {
     try {
       const assignment = await storage.updateDocumentAssignment(req.params.id, { status: 'completed', completedAt: new Date() });
       res.json(assignment);
