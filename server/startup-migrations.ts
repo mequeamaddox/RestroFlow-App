@@ -71,6 +71,35 @@ const migrations: { name: string; sql: string }[] = [
     name: "locations.bar_addon_enabled",
     sql: "ALTER TABLE locations ADD COLUMN IF NOT EXISTS bar_addon_enabled boolean DEFAULT false",
   },
+  {
+    name: "locations fk cascade — add ON DELETE CASCADE to all FKs referencing locations(id)",
+    sql: `
+      DO $$
+      DECLARE r RECORD;
+      BEGIN
+        FOR r IN
+          SELECT tc.constraint_name, tc.table_name, kcu.column_name
+          FROM information_schema.table_constraints AS tc
+          JOIN information_schema.key_column_usage AS kcu
+            ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+          JOIN information_schema.referential_constraints AS rc
+            ON tc.constraint_name = rc.constraint_name AND tc.table_schema = rc.constraint_schema
+          JOIN information_schema.key_column_usage AS ccu
+            ON rc.unique_constraint_name = ccu.constraint_name AND rc.unique_constraint_schema = ccu.table_schema
+          WHERE tc.constraint_type = 'FOREIGN KEY'
+            AND ccu.table_name = 'locations'
+            AND ccu.column_name = 'id'
+            AND rc.delete_rule <> 'CASCADE'
+        LOOP
+          EXECUTE format('ALTER TABLE %I DROP CONSTRAINT %I', r.table_name, r.constraint_name);
+          EXECUTE format(
+            'ALTER TABLE %I ADD CONSTRAINT %I FOREIGN KEY (%I) REFERENCES locations(id) ON DELETE CASCADE',
+            r.table_name, r.constraint_name, r.column_name
+          );
+        END LOOP;
+      END $$
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {
