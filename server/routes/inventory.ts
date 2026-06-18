@@ -216,6 +216,7 @@ export function registerInventoryRoutes(app: Express): void {
   app.post('/api/inventory', isAuthenticated, async (req, res) => {
     try {
       const itemData = insertInventoryItemSchema.parse(req.body);
+      if (itemData.locationId && !await assertLocationAccess(req, res, itemData.locationId)) return;
       const item = await storage.createInventoryItem(itemData);
       await storage.createInventoryTransaction({
         inventoryItemId: item.id,
@@ -265,6 +266,7 @@ export function registerInventoryRoutes(app: Express): void {
       const vendorId = req.body.vendorId;
       const userId = req.user!.id;
       if (!locationId) return res.status(400).json({ message: 'Location ID is required' });
+      if (!await assertLocationAccess(req, res, locationId)) return;
       if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
 
       const results: any[] = [];
@@ -549,6 +551,9 @@ print(json.dumps(rows))
 
   app.get('/api/purchase-orders/:id/items', isAuthenticated, async (req, res) => {
     try {
+      const order = await storage.getPurchaseOrder(req.params.id);
+      if (!order) return res.status(404).json({ message: 'Purchase order not found' });
+      if (order.locationId && !await assertLocationAccess(req, res, order.locationId)) return;
       const items = await storage.getPurchaseOrderItems(req.params.id);
       res.json(items);
     } catch (error) {
@@ -560,6 +565,9 @@ print(json.dumps(rows))
   app.post('/api/purchase-order-items', isAuthenticated, async (req, res) => {
     try {
       const itemData = insertPurchaseOrderItemSchema.parse(req.body);
+      const order = await storage.getPurchaseOrder(itemData.purchaseOrderId);
+      if (!order) return res.status(404).json({ message: 'Purchase order not found' });
+      if (order.locationId && !await assertLocationAccess(req, res, order.locationId)) return;
       const item = await storage.addPurchaseOrderItem(itemData);
       res.status(201).json(item);
     } catch (error) {
@@ -641,6 +649,7 @@ print(json.dumps(rows))
   app.post('/api/transactions', isAuthenticated, async (req, res) => {
     try {
       const transactionData = insertInventoryTransactionSchema.parse({ ...req.body, createdBy: req.user!.id });
+      if (transactionData.locationId && !await assertLocationAccess(req, res, transactionData.locationId)) return;
       const transaction = await storage.createInventoryTransaction(transactionData);
       res.status(201).json(transaction);
     } catch (error) {

@@ -2,7 +2,6 @@ import type { Express } from 'express';
 import { storage } from '../storage';
 import { isAuthenticated } from './helpers';
 import { requireLocationAccess, assertLocationAccess } from '../securityMiddleware';
-import { requirePermission, Permission } from '../permissions';
 import { insertRecipeSchema, insertMenuItemSchema, insertMenuItemIngredientSchema } from '@shared/schema';
 import { varianceService } from '../varianceService';
 import { ObjectStorageService } from '../objectStorage';
@@ -35,6 +34,7 @@ export function registerRecipeRoutes(app: Express): void {
     try {
       const { ingredients, ...recipeData } = req.body;
       const parsedRecipeData = insertRecipeSchema.parse(recipeData);
+      if (parsedRecipeData.locationId && !await assertLocationAccess(req, res, parsedRecipeData.locationId)) return;
       if (ingredients && ingredients.length > 0) {
         const recipe = await storage.createRecipeWithIngredients({
           ...parsedRecipeData,
@@ -55,6 +55,9 @@ export function registerRecipeRoutes(app: Express): void {
     try {
       const { id } = req.params;
       const { ingredients, ...recipeData } = req.body;
+      const existing = await storage.getRecipe(id);
+      if (!existing) return res.status(404).json({ message: 'Recipe not found' });
+      if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
       const recipe = await storage.updateRecipe(id, insertRecipeSchema.partial().parse(recipeData));
       if (ingredients !== undefined) {
         await storage.deleteRecipeIngredients(id);
@@ -71,6 +74,9 @@ export function registerRecipeRoutes(app: Express): void {
 
   app.delete('/api/recipes/:id', isAuthenticated, async (req, res) => {
     try {
+      const existing = await storage.getRecipe(req.params.id);
+      if (!existing) return res.status(404).json({ message: 'Recipe not found' });
+      if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
       await storage.deleteRecipe(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -84,6 +90,9 @@ export function registerRecipeRoutes(app: Express): void {
     try {
       const { imageUrl } = req.body;
       if (!imageUrl) return res.status(400).json({ error: 'imageUrl is required' });
+      const existing = await storage.getRecipe(req.params.id);
+      if (!existing) return res.status(404).json({ message: 'Recipe not found' });
+      if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
       const objectStorageService = new ObjectStorageService();
       const objectPath = objectStorageService.normalizeObjectEntityPath(imageUrl);
       const updatedRecipe = await storage.updateRecipe(req.params.id, { imageUrl: objectPath });
@@ -107,7 +116,9 @@ export function registerRecipeRoutes(app: Express): void {
 
   app.post('/api/menu-items', isAuthenticated, async (req, res) => {
     try {
-      const menuItem = await storage.createMenuItem(insertMenuItemSchema.parse(req.body));
+      const menuItemData = insertMenuItemSchema.parse(req.body);
+      if (menuItemData.locationId && !await assertLocationAccess(req, res, menuItemData.locationId)) return;
+      const menuItem = await storage.createMenuItem(menuItemData);
       res.status(201).json(menuItem);
     } catch (error) {
       console.error('Error creating menu item:', error);
@@ -216,34 +227,4 @@ export function registerRecipeRoutes(app: Express): void {
     }
   });
 
-  // Recipe Assignments
-  app.get('/api/employees/:employeeId/recipe-assignments', isAuthenticated, async (req, res) => {
-    try {
-      const assignments = await storage.getRecipeAssignmentsForEmployee(req.params.employeeId);
-      res.json(assignments);
-    } catch (error) {
-      console.error('Error fetching recipe assignments:', error);
-      res.status(500).json({ error: 'Failed to fetch recipe assignments' });
-    }
-  });
-
-  app.post('/api/recipe-assignments', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
-    try {
-      const assignment = await storage.createRecipeAssignment(req.body);
-      res.json(assignment);
-    } catch (error) {
-      console.error('Error creating recipe assignment:', error);
-      res.status(500).json({ error: 'Failed to create recipe assignment' });
-    }
-  });
-
-  app.put('/api/recipe-assignments/:id/status', isAuthenticated, async (req, res) => {
-    try {
-      const assignment = await storage.updateRecipeAssignmentStatus(req.params.id, req.body.status);
-      res.json(assignment);
-    } catch (error) {
-      console.error('Error updating recipe assignment status:', error);
-      res.status(500).json({ error: 'Failed to update assignment status' });
-    }
-  });
 }
