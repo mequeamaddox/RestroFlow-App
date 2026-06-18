@@ -67,6 +67,16 @@ const migrations = [
     name: "subscription_plan enum: professional -> core",
     sql: `DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'professional' AND enumtypid = 'subscription_plan'::regtype) THEN ALTER TYPE subscription_plan RENAME VALUE 'professional' TO 'core'; END IF; END $$`,
   },
+  {
+    name: "platform_settings table",
+    sql: `CREATE TABLE IF NOT EXISTS platform_settings (
+      key varchar(100) PRIMARY KEY,
+      value text,
+      description text,
+      updated_at timestamp DEFAULT now(),
+      updated_by varchar
+    )`,
+  },
 ];
 
 async function run() {

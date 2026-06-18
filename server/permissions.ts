@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 
 // Restaurant role hierarchy and permissions
 export enum RestaurantRole {
+  PLATFORM_ADMIN = "platform_admin",
   OWNER = "owner",
   GM = "gm", // General Manager
   FOH_MANAGER = "foh_manager", // Front of House Manager
@@ -55,6 +56,7 @@ export enum Permission {
 
 // Role-based permission matrix
 export const ROLE_PERMISSIONS: Record<RestaurantRole, Permission[]> = {
+  [RestaurantRole.PLATFORM_ADMIN]: [], // platform_admin bypasses at the function level
   [RestaurantRole.OWNER]: [
     // Full access to everything
     Permission.VIEW_ALL_EMPLOYEES,
@@ -185,6 +187,7 @@ export const ROLE_PERMISSIONS: Record<RestaurantRole, Permission[]> = {
 
 // Utility function to check if user has permission
 export function hasPermission(userRole: string, permission: Permission): boolean {
+  if (userRole === 'platform_admin') return true;
   const role = userRole as RestaurantRole;
   return ROLE_PERMISSIONS[role]?.includes(permission) || false;
 }
@@ -203,26 +206,28 @@ export function hasAllPermissions(userRole: string, permissions: Permission[]): 
 export function requirePermission(permission: Permission) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const user = (req as any).user;
-    
+
     if (!user) {
       return res.status(401).json({ message: "Unauthorized - No user session" });
     }
-    
+
     try {
       // Import storage to get user role from database
       const { storage } = await import('./storage');
       const userId = user.id;
       const dbUser = await storage.getUser(userId);
       const userRole = dbUser?.role || 'employee';
-      
+
+      if (userRole === 'platform_admin') return next();
+
       if (!hasPermission(userRole, permission)) {
-        return res.status(403).json({ 
+        return res.status(403).json({
           message: "Forbidden - Insufficient permissions",
           required: permission,
           userRole
         });
       }
-      
+
       next();
     } catch (error) {
       console.error('Error checking permissions:', error);
@@ -277,6 +282,7 @@ export const ROLE_HIERARCHY: Record<RestaurantRole, number> = {
   [RestaurantRole.FOH_MANAGER]: 3,
   [RestaurantRole.GM]: 4,
   [RestaurantRole.OWNER]: 5,
+  [RestaurantRole.PLATFORM_ADMIN]: 10,
 };
 
 // Check if user can manage another user based on hierarchy

@@ -108,7 +108,8 @@ export default function Sidebar({ isMobileMenuOpen = false, setIsMobileMenuOpen 
   // Get employee profile data for position title
   const userId = (user as any)?.id || (user as any)?.claims?.sub;
   const isEmployee = (user as any)?.role === 'employee';
-  const isOwner = (user as any)?.role === 'owner';
+  const isPlatformAdmin = (user as any)?.role === 'platform_admin';
+  const isOwner = (user as any)?.role === 'owner' || isPlatformAdmin;
   const { data: employeeProfile } = useQuery({
     queryKey: [`/api/employees/${userId}/profile`],
     enabled: !!userId && isEmployee,
@@ -350,6 +351,41 @@ export default function Sidebar({ isMobileMenuOpen = false, setIsMobileMenuOpen 
                               {(item as any).badge}
                             </span>
                           )}
+                        </div>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
+          {/* Platform Admin Section */}
+          {isPlatformAdmin && (
+            <div className="mb-6">
+              <div className="px-6 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-3 w-3 text-red-400" />
+                  <span className="text-red-400">Platform Admin</span>
+                </div>
+              </div>
+              <ul className="space-y-1">
+                {[{ name: 'Platform Settings', href: '/platform/settings', icon: Shield }].map((item) => {
+                  const isActive = currentPath === item.href;
+                  const Icon = item.icon;
+                  return (
+                    <li key={item.name}>
+                      <Link href={item.href}>
+                        <div
+                          className={cn(
+                            "flex items-center px-6 py-3 text-slate-300 hover:bg-slate-700/50 hover:text-white transition-all duration-200 cursor-pointer rounded-r-2xl mr-4",
+                            isActive && "bg-gradient-to-r from-red-500/20 to-pink-500/20 border-r-4 border-red-400 text-white"
+                          )}
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          <Icon className="h-5 w-5 mr-3" />
+                          <span className="flex-1">{item.name}</span>
+                          <span className="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-red-500/20 text-red-400">ADMIN</span>
                         </div>
                       </Link>
                     </li>

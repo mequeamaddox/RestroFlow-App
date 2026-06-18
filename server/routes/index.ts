@@ -7,9 +7,10 @@ import { registerInventoryRoutes } from './inventory';
 import { registerRecipeRoutes } from './recipes';
 import { registerPosRoutes } from './pos';
 import { registerHRRoutes } from './hr';
-import { registerDocumentRoutes } from './payroll';
+import { registerPayrollRoutes } from './payroll';
 import { registerBillingRoutes } from './billing';
 import { registerInvoiceRoutes } from './invoices';
+import { registerPlatformRoutes } from './platform';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   registerAuthRoutes(app);
@@ -20,8 +21,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerRecipeRoutes(app);
   registerPosRoutes(app);
   registerHRRoutes(app);
-  registerDocumentRoutes(app);
+  registerPayrollRoutes(app);
   registerBillingRoutes(app);
+  registerPlatformRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;

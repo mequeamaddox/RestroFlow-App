@@ -24,6 +24,9 @@ export function requirePlan(minPlan: Plan) {
 
     try {
       const user = await storage.getUser(userId);
+
+      if ((user?.role as string) === 'platform_admin') return next();
+
       const plan = (user?.subscriptionPlan as Plan) || 'free';
 
       // Step 1 — plan tier check

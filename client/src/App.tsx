@@ -50,6 +50,7 @@ import MultiUnitDashboard from "@/pages/multi-unit-dashboard";
 import BluetoothScalePrototype from "@/pages/bluetooth-scale-prototype";
 import BeverageCost from "@/pages/beveragecost";
 import BeverageMenu from "@/pages/beveragemenu";
+import PlatformSettings from "@/pages/platform-settings";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import MobileBottomNav from "@/components/layout/mobile-bottom-nav";
@@ -157,6 +158,8 @@ function Router() {
                 <Route path="/employee/schedule" component={EmployeeSchedule} />
                 <Route path="/employee/time-off" component={EmployeeTimeOff} />
                 <Route path="/employee/settings" component={EmployeeSettings} />
+                {/* Platform Admin Routes */}
+                <Route path="/platform/settings" component={PlatformSettings} />
                 <Route component={NotFound} />
               </Switch>
             </main>
