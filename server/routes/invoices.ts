@@ -132,6 +132,9 @@ export function registerInvoiceRoutes(app: Express): void {
         fs.writeFileSync(filePath, req.file.buffer);
       }
 
+      const locationId = req.body.locationId;
+      if (!locationId) throw new Error('Location ID is required to save invoice');
+
       const parsedData = OCRService.parseInvoiceFromText(ocrResult.text);
 
       if (!parsedData.vendorName || parsedData.vendorName === 'Unknown Vendor') {
@@ -140,7 +143,7 @@ export function registerInvoiceRoutes(app: Express): void {
 
       let vendorId = null;
       if (parsedData.vendorName && parsedData.vendorName !== 'Unknown Vendor') {
-        const vendors = await storage.getVendors();
+        const vendors = await storage.getVendors(locationId);
         const existingVendor = vendors.find((v: any) =>
           v.name.toLowerCase().includes(parsedData.vendorName.toLowerCase()) ||
           parsedData.vendorName.toLowerCase().includes(v.name.toLowerCase())
@@ -155,8 +158,6 @@ export function registerInvoiceRoutes(app: Express): void {
             });
           }
         } else {
-          const locationId = req.body.locationId;
-          if (!locationId) throw new Error('Location ID is required to create vendor');
           const newVendor = await storage.createVendor({
             name: parsedData.vendorName,
             contactPerson: null,
@@ -176,9 +177,6 @@ export function registerInvoiceRoutes(app: Express): void {
 
       const taxAmount = parsedData.total - parsedData.subtotal;
       const calculatedTax = taxAmount >= 0 ? taxAmount : 0;
-
-      const locationId = req.body.locationId;
-      if (!locationId) throw new Error('Location ID is required to save invoice');
 
       const invoiceData = {
         invoiceNumber: parsedData.invoiceNumber,

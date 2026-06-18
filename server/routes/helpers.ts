@@ -89,8 +89,7 @@ export const requireHRAccess = async (req: any, res: any, next: any) => {
     // Verify tenant ownership/assignment before any other check
     if (!await assertLocationAccess(req, res, locationId)) return;
     // All roles (including owners) must have the HR add-on active on this location
-    const locations = await storage.getLocations();
-    const location = locations.find((loc: any) => loc.id === locationId);
+    const location = await storage.getLocationById(locationId);
     if (!location?.hrAddonEnabled) {
       return res.status(403).json({
         message: 'HR add-on not enabled for this location',

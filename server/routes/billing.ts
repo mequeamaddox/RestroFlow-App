@@ -33,40 +33,6 @@ export function registerBillingRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/sales/transactions/:locationId', isAuthenticated, async (req, res) => {
-    try {
-      const { locationId } = req.params;
-      const limit = parseInt(req.query.limit as string) || 50;
-      const transactions = await storage.getSalesTransactions(locationId, limit);
-      res.json(transactions);
-    } catch (error) {
-      console.error('Error fetching sales transactions:', error);
-      res.status(500).json({ message: 'Failed to fetch sales transactions' });
-    }
-  });
-
-  app.get('/api/sales/analytics/:locationId', isAuthenticated, async (req, res) => {
-    try {
-      const { locationId } = req.params;
-      const transactions = await storage.getSalesTransactions(locationId, 1000);
-      const totalRevenue = transactions.reduce((sum: number, t: any) => sum + parseFloat(t.totalAmount), 0);
-      const totalTransactions = transactions.length;
-      const averageTransaction = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
-      const stockLevels = await storage.getRemainingStockLevels(locationId);
-      const totalInventoryValue = stockLevels.reduce((sum: number, item: any) => sum + item.totalValue, 0);
-      const lowStockItems = stockLevels.filter((item: any) => item.isLowStock);
-      res.json({
-        salesSummary: { totalRevenue, totalTransactions, averageTransaction },
-        inventorySummary: { totalInventoryValue, totalItems: stockLevels.length, lowStockItems: lowStockItems.length },
-        stockLevels,
-        recentTransactions: transactions.slice(0, 10),
-      });
-    } catch (error) {
-      console.error('Error fetching sales analytics:', error);
-      res.status(500).json({ message: 'Failed to fetch sales analytics' });
-    }
-  });
-
   // ─── Subscriptions ────────────────────────────────────────────────────────
 
   app.get('/api/subscriptions/plans', async (_req, res) => {
