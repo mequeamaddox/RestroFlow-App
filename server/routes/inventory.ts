@@ -23,7 +23,9 @@ export function registerInventoryRoutes(app: Express): void {
   // Locations
   app.get('/api/locations', isAuthenticated, async (req, res) => {
     try {
-      const locations = await storage.getLocations(req.user!.id);
+      // platform_admin sees all locations across all tenants for testing
+      const ownerId = req.user!.role === 'platform_admin' ? undefined : req.user!.id;
+      const locations = await storage.getLocations(ownerId);
       res.json(locations);
     } catch (error) {
       console.error('Error fetching locations:', error);

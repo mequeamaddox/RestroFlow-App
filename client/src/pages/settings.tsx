@@ -179,7 +179,7 @@ export default function Settings() {
     }
   };
 
-  const isOwner = (user as any)?.role === 'owner';
+  const isOwner = (user as any)?.role === 'owner' || (user as any)?.role === 'platform_admin';
 
   return (
     <div className="p-4 lg:p-6 space-y-6">

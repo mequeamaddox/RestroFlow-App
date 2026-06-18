@@ -28,7 +28,7 @@ export default function BluetoothScalePrototype() {
   const { user } = useAuth();
   
   // Owner-only access control
-  const isOwner = (user as any)?.role === 'owner';
+  const isOwner = (user as any)?.role === 'owner' || (user as any)?.role === 'platform_admin';
   
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
