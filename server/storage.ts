@@ -449,7 +449,6 @@ export interface IStorage {
   cancelInvitationToken(id: string): Promise<void>;
   expireOldInvitationTokens(): Promise<number>;
 
-  // Local authentication methods (fallback when Firebase Admin SDK is unavailable)
   createLocalAuthUser(user: InsertLocalAuthUser): Promise<LocalAuthUser>;
   getLocalAuthUser(email: string): Promise<LocalAuthUser | null>;
   verifyLocalAuthUser(email: string, password: string): Promise<LocalAuthUser | null>;
@@ -4198,7 +4197,6 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
-  // In-memory storage for local authentication users (for fallback when Firebase Admin SDK is unavailable)
   private localAuthUsers: LocalAuthUser[] = [];
   
   async createLocalAuthUser(user: InsertLocalAuthUser): Promise<LocalAuthUser> {
