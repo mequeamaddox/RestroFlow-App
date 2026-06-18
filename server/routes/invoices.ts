@@ -73,6 +73,21 @@ export function registerInvoiceRoutes(app: Express): void {
     try {
       if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
 
+      // C5: Atomically claim one OCR credit before running OCR (eliminates race condition)
+      const userId = (req as any).user!.id;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(401).json({ message: 'User not found' });
+      if ((user.subscriptionPlan || 'free') !== 'professional') {
+        const claimed = await storage.claimOcrCredit(userId);
+        if (!claimed) {
+          return res.status(402).json({
+            message: 'OCR credit limit reached. Upgrade to Professional for unlimited processing.',
+            code: 'OCR_CREDITS_EXHAUSTED',
+            upgradeUrl: '/subscription',
+          });
+        }
+      }
+
       const filename = req.file.originalname.toLowerCase();
       let vendorHint = '';
       if (filename.includes('atlantic')) vendorHint = 'Atlantic Food Service Repairs';

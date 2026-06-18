@@ -269,6 +269,11 @@ export function registerBillingRoutes(app: Express): void {
       console.error('Stripe webhook signature verification failed:', err.message);
       return res.status(400).json({ error: `Webhook Error: ${err.message}` });
     }
+    // C1: Idempotency — skip already-processed Stripe events
+    if (await storage.hasProcessedWebhook(event.id)) {
+      return res.json({ received: true });
+    }
+
     try {
       switch (event.type) {
         case 'checkout.session.completed': {
@@ -308,6 +313,12 @@ export function registerBillingRoutes(app: Express): void {
               subscriptionPlan: 'free', subscriptionStatus: 'inactive',
               stripeSubscriptionId: undefined, ocrCreditsLimit: 5,
             });
+            // C2: Disable HR addon on all locations owned by this user when subscription is cancelled
+            const allLocations = await storage.getLocations();
+            const ownedLocations = allLocations.filter((loc: any) => loc.ownerId === userId);
+            await Promise.all(ownedLocations.map((loc: any) =>
+              storage.updateLocation(loc.id, { hrAddonEnabled: false }),
+            ));
           }
           break;
         }
@@ -356,6 +367,12 @@ export function registerBillingRoutes(app: Express): void {
         default:
           console.log(`Unhandled Stripe event: ${event.type}`);
       }
+      // C1: Record event ID so retries are deduplicated
+      await storage.markWebhookProcessed(event.id, {
+        provider: 'stripe',
+        integrationId: event.type,
+        receivedAt: new Date().toISOString(),
+      });
       res.json({ received: true });
     } catch (err) {
       console.error('Stripe webhook processing error:', err);

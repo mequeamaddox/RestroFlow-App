@@ -7,7 +7,7 @@ import { registerInventoryRoutes } from './inventory';
 import { registerRecipeRoutes } from './recipes';
 import { registerPosRoutes } from './pos';
 import { registerHRRoutes } from './hr';
-import { registerPayrollRoutes } from './payroll';
+import { registerDocumentRoutes } from './payroll';
 import { registerBillingRoutes } from './billing';
 import { registerInvoiceRoutes } from './invoices';
 
@@ -20,7 +20,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerRecipeRoutes(app);
   registerPosRoutes(app);
   registerHRRoutes(app);
-  registerPayrollRoutes(app);
+  registerDocumentRoutes(app);
   registerBillingRoutes(app);
 
   const httpServer = createServer(app);

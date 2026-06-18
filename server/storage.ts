@@ -96,7 +96,6 @@ import {
   tasks,
   taskCompletions,
   messages,
-  paycheckSettings,
   messageThreads,
   performanceReviews,
   timeEntries,
@@ -124,28 +123,6 @@ import {
   type InsertPerformanceReview,
   type TimeEntry,
   type InsertTimeEntry,
-  // Payroll imports
-  payPeriods,
-  paystubs,
-  payrollDeductions,
-  employeeDeductions,
-  payrollPeriods,
-  paychecks,
-  payStubs,
-  type PayPeriod,
-  type InsertPayPeriod,
-  type Paystub,
-  type InsertPaystub,
-  type PayrollDeduction,
-  type InsertPayrollDeduction,
-  type EmployeeDeduction,
-  type InsertEmployeeDeduction,
-  type PayrollPeriod,
-  type InsertPayrollPeriod,
-  type Paycheck,
-  type InsertPaycheck,
-  type PayStub,
-  type InsertPayStub,
   type DocumentTemplate,
   type InsertDocumentTemplate,
   type EmployeeDocumentAssignment,
@@ -227,15 +204,16 @@ export interface IStorage {
   }): Promise<User>;
   getSubscriptionByUser(userId: string): Promise<User | undefined>;
   updateOcrCreditsUsed(userId: string, creditsUsed: number): Promise<User>;
+  claimOcrCredit(userId: string): Promise<boolean>;
   checkOcrAccess(userId: string): Promise<{ hasAccess: boolean; creditsRemaining: number; plan: string }>;
   resetOcrCredits(userId: string): Promise<User>;
 
   // Location operations
-  getLocations(): Promise<Location[]>;
+  getLocations(ownerId?: string): Promise<Location[]>;
   createLocation(location: InsertLocation): Promise<Location>;
 
   // Category operations
-  getCategories(): Promise<Category[]>;
+  getCategories(locationId?: string): Promise<Category[]>;
   createCategory(category: InsertCategory): Promise<Category>;
   updateCategory(id: string, category: Partial<InsertCategory>): Promise<Category>;
   deleteCategory(id: string): Promise<void>;
@@ -269,7 +247,7 @@ export interface IStorage {
   addRecipeIngredients(ingredients: InsertRecipeIngredient[]): Promise<void>;
 
   // Menu item operations
-  getMenuItems(): Promise<MenuItem[]>;
+  getMenuItems(locationId: string): Promise<MenuItem[]>;
   getMenuItem(id: string): Promise<(MenuItem & { ingredients: (MenuItemIngredient & { inventoryItem: InventoryItem })[] }) | undefined>;
   createMenuItem(menuItem: InsertMenuItem): Promise<MenuItem>;
   updateMenuItem(id: string, menuItem: Partial<InsertMenuItem>): Promise<MenuItem>;
@@ -289,7 +267,7 @@ export interface IStorage {
   // Waste tracking operations
   getWasteEntries(): Promise<(WasteEntry & { inventoryItem: InventoryItem; reporter?: User })[]>;
   createWasteEntry(entry: InsertWasteEntry): Promise<WasteEntry>;
-  getWasteStats(startDate?: Date, endDate?: Date): Promise<{ totalCost: number; totalEntries: number }>;
+  getWasteStats(startDate?: Date, endDate?: Date, locationId?: string): Promise<{ totalCost: number; totalEntries: number }>;
 
   // Inventory transaction operations
   createInventoryTransaction(transaction: InsertInventoryTransaction): Promise<InventoryTransaction>;
@@ -350,7 +328,7 @@ export interface IStorage {
 
   // Cost Monitoring & Alerts
   getCostAlerts(locationId?: string): Promise<any[]>;
-  getPriceMonitoring(timeRange: string): Promise<any[]>;
+  getPriceMonitoring(timeRange: string, locationId: string): Promise<any[]>;
   getCostTrends(timeRange: string, locationId?: string): Promise<any[]>;
   getBudgetTracking(locationId?: string): Promise<any>;
 
@@ -423,43 +401,6 @@ export interface IStorage {
   // HR Analytics
   getHRAnalytics(locationId?: string): Promise<any>;
 
-  // HR Payroll operations - Comprehensive Restaurant Payroll System
-  getPayPeriods(): Promise<PayPeriod[]>;
-  getPayPeriod(id: string): Promise<PayPeriod | undefined>;
-  createPayPeriod(payPeriod: InsertPayPeriod): Promise<PayPeriod>;
-  updatePayPeriod(id: string, payPeriod: Partial<InsertPayPeriod>): Promise<PayPeriod>;
-  deletePayPeriod(id: string): Promise<void>;
-  
-  // Advanced payroll calculation with restaurant-specific features
-  calculatePayroll(payPeriodId: string): Promise<Paystub[]>;
-  recalculatePayroll(payPeriodId: string): Promise<Paystub[]>;
-  approvePayroll(payPeriodId: string, approvedBy: string): Promise<PayPeriod>;
-  getPaystubsByPeriod(payPeriodId: string): Promise<(Paystub & { employee?: Employee })[]>;
-  
-  // Deduction management
-  getPayrollDeductions(): Promise<PayrollDeduction[]>;
-  createPayrollDeduction(deduction: InsertPayrollDeduction): Promise<PayrollDeduction>;
-  updatePayrollDeduction(id: string, deduction: Partial<InsertPayrollDeduction>): Promise<PayrollDeduction>;
-  deletePayrollDeduction(id: string): Promise<void>;
-  
-  // Employee deduction assignments
-  getEmployeeDeductions(employeeId?: string): Promise<EmployeeDeduction[]>;
-  assignDeductionToEmployee(assignment: InsertEmployeeDeduction): Promise<EmployeeDeduction>;
-  updateEmployeeDeduction(id: string, assignment: Partial<InsertEmployeeDeduction>): Promise<EmployeeDeduction>;
-  removeEmployeeDeduction(id: string): Promise<void>;
-  
-  // Enhanced payroll summary with comprehensive data
-  getPayrollSummary(locationId?: string): Promise<{ 
-    totalEmployees: number; 
-    monthlyPayroll: number; 
-    avgHourlyRate: number; 
-    laborCostPercentage: number;
-    totalTipsReported: number;
-    averageTipsPerEmployee: number;
-    complianceScore: number;
-    outstandingViolations: number;
-  }>;
-
   // Employee document and onboarding operations
   generateOnboardingToken(employeeId: string): Promise<OnboardingToken>;
   validateOnboardingToken(token: string): Promise<OnboardingToken | undefined>;
@@ -508,28 +449,6 @@ export interface IStorage {
   cancelInvitationToken(id: string): Promise<void>;
   expireOldInvitationTokens(): Promise<number>;
 
-  // Payroll operations
-  getPayrollPeriods(locationId?: string): Promise<PayrollPeriod[]>;
-  createPayrollPeriod(period: InsertPayrollPeriod): Promise<PayrollPeriod>;
-  getPayrollPeriod(id: string): Promise<PayrollPeriod | undefined>;
-  updatePayrollPeriod(id: string, period: Partial<PayrollPeriod>): Promise<PayrollPeriod>;
-  getPaychecks(payrollPeriodId: string): Promise<(Paycheck & { employee: Employee })[]>;
-  createPaycheck(paycheck: InsertPaycheck): Promise<Paycheck>;
-  updatePaycheck(id: string, paycheck: Partial<Paycheck>): Promise<Paycheck>;
-  getEmployeePayStubs(employeeId: string): Promise<PayStub[]>;
-  createPayStub(payStub: InsertPayStub): Promise<PayStub>;
-  markPayStubViewed(payStubId: string): Promise<void>;
-  getTimeEntries(employeeId: string, startDate: string, endDate: string): Promise<TimeEntry[]>;
-  calculatePayrollHoursFromTimeEntries(payrollPeriodId: string): Promise<{ employeeId: string; regularHours: number; overtimeHours: number; totalHours: number; employee?: Employee }[]>;
-  recalculatePayPeriodTotals(payrollPeriodId: string): Promise<void>;
-  getPaycheckSettings(): Promise<any>;
-  updatePaycheckSettings(settings: any): Promise<any>;
-  
-  // Tax settings operations
-  getTaxSettings(locationId: string): Promise<any>;
-  createTaxSettings(settings: any): Promise<any>;
-  updateTaxSettings(id: string, settings: any): Promise<any>;
-  
   // Local authentication methods (fallback when Firebase Admin SDK is unavailable)
   createLocalAuthUser(user: InsertLocalAuthUser): Promise<LocalAuthUser>;
   getLocalAuthUser(email: string): Promise<LocalAuthUser | null>;
@@ -555,7 +474,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Location operations
-  async getLocations(): Promise<Location[]> {
+  async getLocations(ownerId?: string): Promise<Location[]> {
+    if (ownerId) {
+      return await db.select().from(locations).where(eq(locations.ownerId, ownerId)).orderBy(locations.name);
+    }
     return await db.select().from(locations).orderBy(locations.name);
   }
 
@@ -673,6 +595,17 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async claimOcrCredit(userId: string): Promise<boolean> {
+    const result = await db.update(users)
+      .set({ ocrCreditsUsed: sql`ocr_credits_used + 1`, updatedAt: new Date() })
+      .where(and(
+        eq(users.id, userId),
+        sql`ocr_credits_used < ocr_credits_limit`,
+      ))
+      .returning({ id: users.id });
+    return result.length > 0;
+  }
+
   async checkOcrAccess(userId: string): Promise<{ hasAccess: boolean; creditsRemaining: number; plan: string }> {
     const user = await this.getUser(userId);
     if (!user) {
@@ -713,7 +646,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Category operations
-  async getCategories(): Promise<Category[]> {
+  async getCategories(locationId?: string): Promise<Category[]> {
+    if (locationId) {
+      return await db.select().from(categories)
+        .where(or(eq(categories.locationId, locationId), isNull(categories.locationId)))
+        .orderBy(categories.name);
+    }
     return await db.select().from(categories).orderBy(categories.name);
   }
 
@@ -1583,8 +1521,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Menu item operations
-  async getMenuItems(): Promise<MenuItem[]> {
-    return await db.select().from(menuItems).orderBy(menuItems.name);
+  async getMenuItems(locationId: string): Promise<MenuItem[]> {
+    return await db.select().from(menuItems).where(eq(menuItems.locationId, locationId)).orderBy(menuItems.name);
   }
 
   async getMenuItem(id: string): Promise<(MenuItem & { ingredients: (MenuItemIngredient & { inventoryItem: InventoryItem })[] }) | undefined> {
@@ -1728,18 +1666,19 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getWasteStats(startDate?: Date, endDate?: Date): Promise<{ totalCost: number; totalEntries: number }> {
-    let query = db.select({
+  async getWasteStats(startDate?: Date, endDate?: Date, locationId?: string): Promise<{ totalCost: number; totalEntries: number }> {
+    const conditions: any[] = [];
+    if (startDate && endDate) {
+      conditions.push(gte(wasteEntries.createdAt, startDate));
+      conditions.push(lte(wasteEntries.createdAt, endDate));
+    }
+    if (locationId) {
+      conditions.push(eq(wasteEntries.locationId, locationId));
+    }
+    const query = db.select({
       totalCost: sql<string>`COALESCE(SUM(${wasteEntries.cost}), 0)`,
       totalEntries: sql<string>`COUNT(*)`,
-    }).from(wasteEntries);
-
-    if (startDate && endDate) {
-      query = query.where(and(
-        gte(wasteEntries.createdAt, startDate),
-        lte(wasteEntries.createdAt, endDate)
-      ));
-    }
+    }).from(wasteEntries).where(conditions.length ? and(...conditions) : undefined);
 
     const [result] = await query;
     return {
@@ -1835,7 +1774,7 @@ export class DatabaseStorage implements IStorage {
     
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
-    const wasteStats = await this.getWasteStats(weekAgo, new Date());
+    const wasteStats = await this.getWasteStats(weekAgo, new Date(), locationId);
     
     // Calculate real food cost percentage from POS sales and inventory costs
     const foodCostPercentage = await this.calculateFoodCostPercentage();
@@ -2237,12 +2176,12 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getPriceMonitoring(timeRange: string): Promise<any[]> {
+  async getPriceMonitoring(timeRange: string, locationId: string): Promise<any[]> {
     try {
       // Get real price monitoring data from purchase orders and invoices
       const daysAgo = timeRange === 'week' ? 7 : timeRange === 'month' ? 30 : 90;
       const startDate = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
-      
+
       const priceHistory = await db
         .select({
           itemName: inventoryItems.name,
@@ -2252,7 +2191,7 @@ export class DatabaseStorage implements IStorage {
         })
         .from(inventoryItems)
         .leftJoin(vendors, eq(inventoryItems.vendorId, vendors.id))
-        .where(gte(inventoryItems.updatedAt, startDate))
+        .where(and(gte(inventoryItems.updatedAt, startDate), eq(inventoryItems.locationId, locationId)))
         .orderBy(desc(inventoryItems.updatedAt))
         .limit(20);
       
@@ -2283,7 +2222,7 @@ export class DatabaseStorage implements IStorage {
         : [];
       
       // Get waste data for the period
-      const wasteStats = await this.getWasteStats(startDate, new Date());
+      const wasteStats = await this.getWasteStats(startDate, new Date(), locationId);
       
       // Calculate daily aggregates from real data
       const trends = [];
@@ -2730,10 +2669,7 @@ export class DatabaseStorage implements IStorage {
   async deleteEmployee(id: string): Promise<void> {
     // Handle foreign key constraints by cleaning up related records first
     
-    // 1. Delete or update paystubs (set employee_id to null or delete if cascading is desired)
-    await db.delete(paystubs).where(eq(paystubs.employeeId, id));
-    
-    // 2. Delete time entries
+    // 1. Delete time entries
     await db.delete(timeEntries).where(eq(timeEntries.employeeId, id));
     
     // 3. Update tasks to remove employee assignment (don't delete tasks, just unassign)
@@ -3248,8 +3184,13 @@ export class DatabaseStorage implements IStorage {
 
 
   // HR Time-off Request operations
-  async getTimeOffRequests(): Promise<TimeOffRequest[]> {
-    return await db.select().from(timeOffRequests).orderBy(desc(timeOffRequests.createdAt));
+  async getTimeOffRequests(locationId: string): Promise<TimeOffRequest[]> {
+    return await db.select({ timeOffRequest: timeOffRequests })
+      .from(timeOffRequests)
+      .innerJoin(employees, eq(timeOffRequests.employeeId, employees.id))
+      .where(eq(employees.locationId, locationId))
+      .orderBy(desc(timeOffRequests.createdAt))
+      .then(rows => rows.map(r => r.timeOffRequest));
   }
 
   async getEmployeeTimeOffRequests(employeeId: string): Promise<TimeOffRequest[]> {
@@ -3542,629 +3483,6 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  // HR Payroll operations
-  async getPayPeriods(): Promise<PayPeriod[]> {
-    return await db.select().from(payPeriods).orderBy(desc(payPeriods.startDate));
-  }
-
-  async getPayPeriod(id: string): Promise<PayPeriod | undefined> {
-    const [payPeriod] = await db.select().from(payPeriods).where(eq(payPeriods.id, id));
-    return payPeriod;
-  }
-
-  async createPayPeriod(payPeriodData: InsertPayPeriod): Promise<PayPeriod> {
-    const [payPeriod] = await db
-      .insert(payPeriods)
-      .values(payPeriodData)
-      .returning();
-    return payPeriod;
-  }
-
-  async updatePayPeriod(id: string, payPeriodData: Partial<InsertPayPeriod>): Promise<PayPeriod> {
-    const [payPeriod] = await db
-      .update(payPeriods)
-      .set({ ...payPeriodData, updatedAt: new Date() })
-      .where(eq(payPeriods.id, id))
-      .returning();
-    return payPeriod;
-  }
-
-  /**
-   * Calculate tax deductions for payroll using configured tax settings
-   * @param payPeriodId - The payroll period ID to get location from
-   * @param grossPay - The gross pay amount
-   * @param customDeductions - Any custom deduction amounts
-   * @returns Object with calculated tax amounts
-   */
-  private async calculateTaxDeductions(_payPeriodId: string, _grossPay: number, customDeductions: number = 0) {
-    // Tax withholding is handled by the connected payroll provider (Gusto, ADP, QuickBooks, Paychex).
-    // We export gross pay, hours, and tip data to the provider; they calculate and remit all taxes.
-    return {
-      federalTax: 0,
-      stateTax: 0,
-      socialSecurity: 0,
-      medicare: 0,
-      totalDeductions: customDeductions,
-    };
-  }
-
-  async recalculatePayroll(payPeriodId: string): Promise<Paystub[]> {
-    // Delete existing paystubs for this pay period
-    await db.delete(paystubs).where(eq(paystubs.payPeriodId, payPeriodId));
-    
-    // Reset pay period status
-    await this.updatePayPeriod(payPeriodId, {
-      status: 'draft',
-      totalGrossPay: '0',
-      totalDeductions: '0',
-      totalNetPay: '0'
-    });
-    
-    // Recalculate
-    return this.calculatePayroll(payPeriodId);
-  }
-
-  async calculatePayroll(payPeriodId: string): Promise<Paystub[]> {
-    // Get the pay period
-    const payPeriod = await this.getPayPeriod(payPeriodId);
-    if (!payPeriod) throw new Error('Pay period not found');
-
-    // Get paycheck settings to control actual payroll processing behavior
-    const paycheckSettings = await this.getPaycheckSettings();
-    console.log('🎯 Using real paycheck settings for payroll processing:', paycheckSettings);
-    
-    // Get all active employees
-    const employees = await this.getEmployees();
-    const activeEmployees = employees.filter(emp => emp.status === 'active');
-
-    // Get manual time entries for the pay period (exclude NULL clock_in_time entries)
-    const employeeTimeEntries = await db
-      .select()
-      .from(timeEntries)
-      .where(
-        and(
-          isNotNull(timeEntries.clockInTime),
-          gte(timeEntries.clockInTime, sql`${payPeriod.startDate}::timestamp`),
-          lte(timeEntries.clockInTime, sql`${payPeriod.endDate}::timestamp + interval '1 day'`)
-        )
-      );
-
-    // Get POS timeclock entries for the pay period (calculate hours from clock_in_at and clock_out_at)
-    const posTimeclockEntries = await db
-      .select({
-        id: posTimeclocks.id,
-        employeeId: posEmployeeMappings.employeeId,
-        clockInAt: posTimeclocks.clockInAt,
-        clockOutAt: posTimeclocks.clockOutAt,
-        breakSeconds: posTimeclocks.breakSeconds
-      })
-      .from(posTimeclocks)
-      .leftJoin(posEmployees, eq(posTimeclocks.posEmployeeId, posEmployees.id))
-      .leftJoin(posEmployeeMappings, eq(posEmployees.id, posEmployeeMappings.posEmployeeId))
-      .where(
-        and(
-          isNotNull(posTimeclocks.clockInAt),
-          isNotNull(posTimeclocks.clockOutAt),
-          isNotNull(posEmployeeMappings.employeeId),
-          gte(posTimeclocks.clockInAt, sql`${payPeriod.startDate}::timestamp`),
-          lte(posTimeclocks.clockInAt, sql`${payPeriod.endDate}::timestamp + interval '1 day'`)
-        )
-      );
-
-    console.log(`📊 Payroll calculation: ${employeeTimeEntries.length} manual entries, ${posTimeclockEntries.length} POS entries`);
-
-    const paystubsToCreate: InsertPaystub[] = [];
-
-    for (const employee of activeEmployees) {
-      // Calculate hours worked for this employee from manual entries
-      const empTimeEntries = employeeTimeEntries.filter(entry => entry.employeeId === employee.id);
-      
-      // Calculate hours from POS timeclocks
-      const empPosEntries = posTimeclockEntries.filter(entry => entry.employeeId === employee.id);
-      
-      let regularHours = 0;
-      let overtimeHours = 0;
-      
-      // Add manual time entry hours
-      for (const entry of empTimeEntries) {
-        if (entry.clockOutTime && entry.totalHours) {
-          const hours = Number(entry.totalHours);
-          if (regularHours + hours <= 40) {
-            regularHours += hours;
-          } else if (regularHours < 40) {
-            const regularToAdd = 40 - regularHours;
-            regularHours = 40;
-            overtimeHours += hours - regularToAdd;
-          } else {
-            overtimeHours += hours;
-          }
-        }
-      }
-
-      // Add POS timeclock hours (calculate from clock_in_at and clock_out_at)
-      for (const entry of empPosEntries) {
-        if (entry.clockInAt && entry.clockOutAt) {
-          // Calculate total hours from timestamps
-          const clockInTime = new Date(entry.clockInAt).getTime();
-          const clockOutTime = new Date(entry.clockOutAt).getTime();
-          const breakSeconds = entry.breakSeconds || 0;
-          
-          // Calculate work milliseconds (minus break time)
-          const workMilliseconds = clockOutTime - clockInTime - (breakSeconds * 1000);
-          const hours = workMilliseconds / (1000 * 60 * 60); // Convert to hours
-          
-          if (regularHours + hours <= 40) {
-            regularHours += hours;
-          } else if (regularHours < 40) {
-            const regularToAdd = 40 - regularHours;
-            regularHours = 40;
-            overtimeHours += hours - regularToAdd;
-          } else {
-            overtimeHours += hours;
-          }
-        }
-      }
-
-      const hourlyRate = Number(employee.hourlyRate || 15);
-      const overtimeRate = hourlyRate * 1.5;
-      
-      const regularPay = regularHours * hourlyRate;
-      const overtimePay = overtimeHours * overtimeRate;
-      const grossPay = regularPay + overtimePay;
-      
-      // Calculate tax deductions using configured tax settings
-      const { federalTax, stateTax, socialSecurity, medicare, totalDeductions } = 
-        await this.calculateTaxDeductions(payPeriodId, grossPay);
-      const netPay = grossPay - totalDeductions;
-
-      // Generate real check number using settings
-      let checkNumber: number | undefined;
-      if (paycheckSettings?.showLastCheckNumber) {
-        checkNumber = (paycheckSettings.lastCheckNumber || 1000) + paystubsToCreate.length + 1;
-      }
-
-      paystubsToCreate.push({
-        payPeriodId,
-        employeeId: employee.id,
-        regularHours: regularHours.toString(),
-        overtimeHours: overtimeHours.toString(),
-        regularRate: hourlyRate.toString(),
-        overtimeRate: overtimeRate.toString(),
-        regularPay: regularPay.toString(),
-        overtimePay: overtimePay.toString(),
-        grossPay: grossPay.toString(),
-        federalTax: federalTax.toString(),
-        stateTax: stateTax.toString(),
-        socialSecurity: socialSecurity.toString(),
-        medicare: medicare.toString(),
-        totalDeductions: totalDeductions.toString(),
-        netPay: netPay.toString(),
-        status: 'calculated',
-        checkNumber: checkNumber?.toString(),
-        // Store the real settings that control how this paycheck will be displayed/printed
-        metadata: JSON.stringify({
-          displayLast4Ssn: paycheckSettings?.displayLast4Ssn || false,
-          displayBusinessName: paycheckSettings?.displayBusinessName || false,
-          displayTaxFilingName: paycheckSettings?.displayTaxFilingName || false,
-          paycheckLayout: paycheckSettings?.paycheckLayout || 'check_stub_only',
-          printSignature: paycheckSettings?.printSignature || false,
-          businessName: paycheckSettings?.businessName || 'Business Name',
-          taxFilingName: paycheckSettings?.taxFilingName || 'Tax Filing Name'
-        })
-      });
-    }
-
-    // Insert all paystubs
-    const createdPaystubs = await db
-      .insert(paystubs)
-      .values(paystubsToCreate)
-      .returning();
-
-    // Update the last check number in settings after processing payroll
-    if (paycheckSettings?.showLastCheckNumber && paystubsToCreate.length > 0) {
-      const lastCheckUsed = (paycheckSettings.lastCheckNumber || 1000) + paystubsToCreate.length;
-      await this.updatePaycheckSettings({ lastCheckNumber: lastCheckUsed });
-      console.log('✅ Updated last check number to:', lastCheckUsed);
-    }
-
-    // Update pay period totals
-    const totalGrossPay = paystubsToCreate.reduce((sum, stub) => sum + Number(stub.grossPay), 0);
-    const totalDeductions = paystubsToCreate.reduce((sum, stub) => sum + Number(stub.totalDeductions), 0);
-    const totalNetPay = paystubsToCreate.reduce((sum, stub) => sum + Number(stub.netPay), 0);
-
-    await this.updatePayPeriod(payPeriodId, {
-      status: 'calculated',
-      totalGrossPay: totalGrossPay.toString(),
-      totalDeductions: totalDeductions.toString(),
-      totalNetPay: totalNetPay.toString()
-    });
-
-    return createdPaystubs;
-  }
-
-  async approvePayroll(payPeriodId: string, approvedBy: string): Promise<PayPeriod> {
-    const [payPeriod] = await db
-      .update(payPeriods)
-      .set({
-        status: 'approved',
-        approvedBy,
-        approvedAt: new Date(),
-        updatedAt: new Date()
-      })
-      .where(eq(payPeriods.id, payPeriodId))
-      .returning();
-    return payPeriod;
-  }
-
-  async createManualPaystub(payPeriodId: string, manualData: any): Promise<Paystub> {
-    const {
-      employeeId,
-      regularHours,
-      overtimeHours,
-      regularRate,
-      bonuses,
-      tips,
-      customDeductions,
-      notes
-    } = manualData;
-
-    // Get employee details
-    const employee = await this.getEmployee(employeeId);
-    if (!employee) throw new Error('Employee not found');
-
-    // Get paycheck settings for check number generation
-    const paycheckSettings = await this.getPaycheckSettings();
-
-    // Calculate pay
-    const regHours = parseFloat(regularHours) || 0;
-    const otHours = parseFloat(overtimeHours) || 0;
-    const rate = parseFloat(regularRate) || 0;
-    const bonusAmount = parseFloat(bonuses) || 0;
-    const tipAmount = parseFloat(tips) || 0;
-    const customDeductionAmount = parseFloat(customDeductions) || 0;
-
-    const regularPay = regHours * rate;
-    const overtimePay = otHours * rate * 1.5;
-    const grossPay = regularPay + overtimePay + bonusAmount + tipAmount;
-
-    // Calculate tax deductions using configured tax settings
-    const { federalTax, stateTax, socialSecurity, medicare, totalDeductions } = 
-      await this.calculateTaxDeductions(payPeriodId, grossPay, customDeductionAmount);
-    const netPay = grossPay - totalDeductions;
-
-    // Generate check number
-    let checkNumber: number | undefined;
-    if (paycheckSettings?.showLastCheckNumber) {
-      checkNumber = (paycheckSettings.lastCheckNumber || 1000) + 1;
-      await this.updatePaycheckSettings({ lastCheckNumber: checkNumber });
-    }
-
-    // Create paystub
-    const paystubData = {
-      payPeriodId,
-      employeeId,
-      regularHours: regHours.toString(),
-      overtimeHours: otHours.toString(),
-      regularRate: rate.toString(),
-      overtimeRate: (rate * 1.5).toString(),
-      regularPay: regularPay.toString(),
-      overtimePay: overtimePay.toString(),
-      bonuses: bonusAmount.toString(),
-      tips: tipAmount.toString(),
-      grossPay: grossPay.toString(),
-      federalTax: federalTax.toString(),
-      stateTax: stateTax.toString(),
-      socialSecurity: socialSecurity.toString(),
-      medicare: medicare.toString(),
-      otherDeductions: customDeductionAmount.toString(),
-      totalDeductions: totalDeductions.toString(),
-      netPay: netPay.toString(),
-      status: 'calculated',
-      checkNumber: checkNumber?.toString(),
-      notes
-    };
-
-    const [createdPaystub] = await db
-      .insert(paystubs)
-      .values(paystubData)
-      .returning();
-
-    return createdPaystub;
-  }
-
-  async updatePaystub(paystubId: string, updateData: any): Promise<Paystub> {
-    const {
-      regularHours,
-      overtimeHours,
-      regularRate,
-      bonuses,
-      tips,
-      customDeductions,
-      notes
-    } = updateData;
-
-    // Get the existing paystub to find the payPeriodId
-    const [existingPaystub] = await db.select().from(paystubs).where(eq(paystubs.id, paystubId));
-    if (!existingPaystub) throw new Error('Paystub not found');
-
-    // Recalculate pay based on new values
-    const regHours = parseFloat(regularHours) || 0;
-    const otHours = parseFloat(overtimeHours) || 0;
-    const rate = parseFloat(regularRate) || 0;
-    const bonusAmount = parseFloat(bonuses) || 0;
-    const tipAmount = parseFloat(tips) || 0;
-    const customDeductionAmount = parseFloat(customDeductions) || 0;
-
-    const regularPay = regHours * rate;
-    const overtimePay = otHours * rate * 1.5;
-    const grossPay = regularPay + overtimePay + bonusAmount + tipAmount;
-
-    // Calculate tax deductions using configured tax settings
-    const { federalTax, stateTax, socialSecurity, medicare, totalDeductions } = 
-      await this.calculateTaxDeductions(existingPaystub.payPeriodId, grossPay, customDeductionAmount);
-    const netPay = grossPay - totalDeductions;
-
-    const updatedData = {
-      regularHours: regHours.toString(),
-      overtimeHours: otHours.toString(),
-      regularRate: rate.toString(),
-      overtimeRate: (rate * 1.5).toString(),
-      regularPay: regularPay.toString(),
-      overtimePay: overtimePay.toString(),
-      bonuses: bonusAmount.toString(),
-      tips: tipAmount.toString(),
-      grossPay: grossPay.toString(),
-      federalTax: federalTax.toString(),
-      stateTax: stateTax.toString(),
-      socialSecurity: socialSecurity.toString(),
-      medicare: medicare.toString(),
-      otherDeductions: customDeductionAmount.toString(),
-      totalDeductions: totalDeductions.toString(),
-      netPay: netPay.toString(),
-      notes,
-      updatedAt: new Date()
-    };
-
-    const [updatedPaystub] = await db
-      .update(paystubs)
-      .set(updatedData)
-      .where(eq(paystubs.id, paystubId))
-      .returning();
-
-    return updatedPaystub;
-  }
-
-  async getEmployeePayStubs(employeeId: string, year: number): Promise<any[]> {
-    const startDate = new Date(year, 0, 1);
-    const endDate = new Date(year + 1, 0, 1);
-
-    const results = await db
-      .select({
-        paystub: paystubs,
-        payPeriod: payPeriods
-      })
-      .from(paystubs)
-      .leftJoin(payPeriods, eq(paystubs.payPeriodId, payPeriods.id))
-      .where(
-        and(
-          eq(paystubs.employeeId, employeeId),
-          gte(payPeriods.payDate, startDate),
-          lt(payPeriods.payDate, endDate)
-        )
-      )
-      .orderBy(desc(payPeriods.payDate));
-
-    return results.map(result => ({
-      ...result.paystub,
-      payPeriod: result.payPeriod
-    }));
-  }
-
-  async getEmployeePayrollSummary(employeeId: string, year: number): Promise<any> {
-    const startDate = new Date(year, 0, 1);
-    const endDate = new Date(year + 1, 0, 1);
-
-    const results = await db
-      .select({
-        paystub: paystubs,
-        payPeriod: payPeriods
-      })
-      .from(paystubs)
-      .leftJoin(payPeriods, eq(paystubs.payPeriodId, payPeriods.id))
-      .where(
-        and(
-          eq(paystubs.employeeId, employeeId),
-          gte(payPeriods.payDate, startDate),
-          lt(payPeriods.payDate, endDate),
-          eq(paystubs.status, 'calculated')
-        )
-      );
-
-    const yearToDateGross = results.reduce((sum, r) => sum + parseFloat(r.paystub.grossPay || '0'), 0);
-    const yearToDateNet = results.reduce((sum, r) => sum + parseFloat(r.paystub.netPay || '0'), 0);
-    const yearToDateTaxes = results.reduce((sum, r) => sum + parseFloat(r.paystub.totalDeductions || '0'), 0);
-    const totalHours = results.reduce((sum, r) => 
-      sum + parseFloat(r.paystub.regularHours || '0') + parseFloat(r.paystub.overtimeHours || '0'), 0
-    );
-
-    return {
-      totalGrossPay: yearToDateGross,
-      totalNetPay: yearToDateNet,
-      totalDeductions: yearToDateTaxes,
-      averageHours: results.length > 0 ? totalHours / results.length : 0,
-      yearToDateGross,
-      yearToDateNet,
-      yearToDateTaxes
-    };
-  }
-
-  async getPaystubsByPeriod(payPeriodId: string): Promise<(Paystub & { employee?: Employee })[]> {
-    const paystubResults = await db
-      .select({
-        paystub: paystubs,
-        employee: employees
-      })
-      .from(paystubs)
-      .leftJoin(employees, eq(paystubs.employeeId, employees.id))
-      .where(eq(paystubs.payPeriodId, payPeriodId));
-
-    return paystubResults.map(result => ({
-      ...result.paystub,
-      employee: result.employee || undefined
-    }));
-  }
-
-  async getPayrollDeductions(): Promise<PayrollDeduction[]> {
-    return await db.select().from(payrollDeductions).where(eq(payrollDeductions.isActive, true));
-  }
-
-  async deletePayPeriod(id: string): Promise<void> {
-    try {
-      // First delete all paystubs for this pay period
-      await db.delete(paystubs).where(eq(paystubs.payPeriodId, id));
-      
-      // Then delete the pay period
-      await db.delete(payPeriods).where(eq(payPeriods.id, id));
-    } catch (error) {
-      console.error('Error deleting pay period:', error);
-      throw error;
-    }
-  }
-
-  async getPayrollSummary(locationId?: string): Promise<{ 
-    totalEmployees: number; 
-    monthlyPayroll: number; 
-    avgHourlyRate: number; 
-    laborCostPercentage: number;
-    totalTipsReported: number;
-    averageTipsPerEmployee: number;
-    complianceScore: number;
-    outstandingViolations: number;
-  }> {
-    const employees = await this.getEmployees();
-    const activeEmployees = employees.filter(emp => emp.status === 'active');
-    
-    const totalEmployees = activeEmployees.length;
-    
-    // Get actual payroll data from calculated pay periods
-    const recentPayPeriods = await db
-      .select()
-      .from(payPeriods)
-      .where(eq(payPeriods.status, 'calculated'))
-      .orderBy(sql`${payPeriods.createdAt} DESC`)
-      .limit(4); // Last 4 pay periods for monthly estimate
-    
-    let monthlyPayroll = 0;
-    let avgHourlyRate = 15;
-    let laborCostPercentage = 30;
-    
-    if (recentPayPeriods.length > 0) {
-      // Calculate actual monthly payroll from recent pay periods
-      const totalNetPay = recentPayPeriods.reduce((sum, period) => 
-        sum + Number(period.totalNetPay || 0), 0);
-      
-      // If biweekly pay periods, multiply by 2.17 to get monthly
-      // If weekly, multiply by 4.33
-      monthlyPayroll = totalNetPay * (26 / 12); // Assuming biweekly
-      
-      // Calculate actual average hourly rate from paystubs
-      const payPeriodIds = recentPayPeriods.map(p => p.id);
-      const allPaystubs = payPeriodIds.length > 0 ? await db
-        .select()
-        .from(paystubs)
-        .where(sql`${paystubs.payPeriodId} = ANY(${payPeriodIds})`)
-        : [];
-      
-      if (allPaystubs.length > 0) {
-        const totalHours = allPaystubs.reduce((sum, stub) => 
-          sum + Number(stub.regularHours || 0) + Number(stub.overtimeHours || 0), 0);
-        const totalPay = allPaystubs.reduce((sum, stub) => 
-          sum + Number(stub.grossPay || 0), 0);
-        
-        if (totalHours > 0) {
-          avgHourlyRate = totalPay / totalHours;
-        }
-      }
-      
-      // TODO: Calculate labor cost percentage from actual sales data when POS integration active
-      laborCostPercentage = 28; // Realistic target for restaurants
-    } else {
-      // Fallback to estimates if no calculated pay periods exist
-      avgHourlyRate = activeEmployees.length > 0 
-        ? activeEmployees.reduce((sum, emp) => sum + Number(emp.hourlyRate || 15), 0) / activeEmployees.length
-        : 15;
-      monthlyPayroll = totalEmployees * avgHourlyRate * 160;
-    }
-    
-    // Enhanced metrics for comprehensive payroll
-    const totalTipsReported = monthlyPayroll * 0.15; // Estimated 15% tips
-    const averageTipsPerEmployee = totalEmployees > 0 ? totalTipsReported / totalEmployees : 0;
-    const complianceScore = 95; // High compliance score
-    const outstandingViolations = 0; // No current violations
-    
-    return {
-      totalEmployees,
-      monthlyPayroll: Math.round(monthlyPayroll * 100) / 100,
-      avgHourlyRate: Math.round(avgHourlyRate * 100) / 100,
-      laborCostPercentage: Math.round(laborCostPercentage * 100) / 100,
-      totalTipsReported: Math.round(totalTipsReported * 100) / 100,
-      averageTipsPerEmployee: Math.round(averageTipsPerEmployee * 100) / 100,
-      complianceScore,
-      outstandingViolations
-    };
-  }
-
-  // Additional comprehensive payroll methods
-  async createPayrollDeduction(deduction: InsertPayrollDeduction): Promise<PayrollDeduction> {
-    const [newDeduction] = await db
-      .insert(payrollDeductions)
-      .values(deduction)
-      .returning();
-    return newDeduction;
-  }
-
-  async updatePayrollDeduction(id: string, deduction: Partial<InsertPayrollDeduction>): Promise<PayrollDeduction> {
-    const [updatedDeduction] = await db
-      .update(payrollDeductions)
-      .set({ ...deduction, updatedAt: new Date() })
-      .where(eq(payrollDeductions.id, id))
-      .returning();
-    return updatedDeduction;
-  }
-
-  async deletePayrollDeduction(id: string): Promise<void> {
-    await db.delete(payrollDeductions).where(eq(payrollDeductions.id, id));
-  }
-
-  async getEmployeeDeductions(employeeId?: string): Promise<EmployeeDeduction[]> {
-    const query = db.select().from(employeeDeductions);
-    if (employeeId) {
-      return await query.where(eq(employeeDeductions.employeeId, employeeId));
-    }
-    return await query;
-  }
-
-  async assignDeductionToEmployee(assignment: InsertEmployeeDeduction): Promise<EmployeeDeduction> {
-    const [newAssignment] = await db
-      .insert(employeeDeductions)
-      .values(assignment)
-      .returning();
-    return newAssignment;
-  }
-
-  async updateEmployeeDeduction(id: string, assignment: Partial<InsertEmployeeDeduction>): Promise<EmployeeDeduction> {
-    const [updatedAssignment] = await db
-      .update(employeeDeductions)
-      .set({ ...assignment, updatedAt: new Date() })
-      .where(eq(employeeDeductions.id, id))
-      .returning();
-    return updatedAssignment;
-  }
-
-  async removeEmployeeDeduction(id: string): Promise<void> {
-    await db.delete(employeeDeductions).where(eq(employeeDeductions.id, id));
-  }
-
   // Employee Documents Management
   async getEmployeeDocuments(employeeId?: string): Promise<EmployeeDocument[]> {
     const query = db.select().from(employeeDocuments);
@@ -4380,7 +3698,17 @@ export class DatabaseStorage implements IStorage {
     overdueOnboarding: number;
     averageCompletionDays: number;
   }> {
-    const allOnboarding = await this.getEmployeeOnboarding();
+    let allOnboarding: EmployeeOnboarding[];
+    if (locationId) {
+      const rows = await db
+        .select({ onboarding: employeeOnboarding })
+        .from(employeeOnboarding)
+        .innerJoin(employees, eq(employeeOnboarding.employeeId, employees.id))
+        .where(eq(employees.locationId, locationId));
+      allOnboarding = rows.map(r => r.onboarding);
+    } else {
+      allOnboarding = await this.getEmployeeOnboarding();
+    }
     const activeOnboarding = allOnboarding.filter(o => o.status === 'in-progress');
     
     const now = new Date();
@@ -4870,431 +4198,6 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
-  // Payroll operations
-  async getPayrollPeriods(locationId?: string): Promise<PayrollPeriod[]> {
-    let query = db.select().from(payPeriods).orderBy(desc(payPeriods.createdAt));
-    
-    if (locationId) {
-      query = query.where(eq(payPeriods.locationId, locationId)) as any;
-    }
-    
-    return await query;
-  }
-
-  async createPayrollPeriod(period: InsertPayrollPeriod): Promise<PayrollPeriod> {
-    const [created] = await db.insert(payPeriods).values(period).returning();
-    return created;
-  }
-
-  async getPayrollPeriod(id: string): Promise<PayrollPeriod | undefined> {
-    const [period] = await db.select().from(payPeriods).where(eq(payPeriods.id, id));
-    return period;
-  }
-
-  async updatePayrollPeriod(id: string, period: Partial<PayrollPeriod>): Promise<PayrollPeriod> {
-    const [updated] = await db.update(payPeriods)
-      .set({ ...period, updatedAt: new Date() })
-      .where(eq(payPeriods.id, id))
-      .returning();
-    return updated;
-  }
-
-  async getPaychecks(payrollPeriodId: string): Promise<(Paycheck & { employee: Employee })[]> {
-    const result = await db.select({
-      paycheck: paystubs,
-      employee: employees,
-      payPeriod: payPeriods
-    })
-    .from(paystubs)
-    .innerJoin(employees, eq(paystubs.employeeId, employees.id))
-    .leftJoin(payPeriods, eq(paystubs.payPeriodId, payPeriods.id))
-    .where(eq(paystubs.payPeriodId, payrollPeriodId))
-    .orderBy(employees.lastName, employees.firstName);
-    
-    return result.map(r => ({ 
-      ...r.paycheck, 
-      employee: r.employee,
-      payPeriod: r.payPeriod ? {
-        startDate: r.payPeriod.startDate,
-        endDate: r.payPeriod.endDate
-      } : undefined,
-      payDate: r.payPeriod?.payDate
-    })) as any;
-  }
-
-  async createPaycheck(paycheck: InsertPaycheck): Promise<Paycheck> {
-    const [created] = await db.insert(paystubs).values(paycheck).returning();
-    return created;
-  }
-
-  async updatePaycheck(id: string, paycheck: Partial<Paycheck>): Promise<Paycheck> {
-    const [updated] = await db.update(paystubs)
-      .set({ ...paycheck, updatedAt: new Date() })
-      .where(eq(paystubs.id, id))
-      .returning();
-    return updated;
-  }
-
-  async recalculatePayPeriodTotals(payrollPeriodId: string): Promise<void> {
-    // Get all paychecks for this pay period
-    const paychecks = await db.select()
-      .from(paystubs)
-      .where(eq(paystubs.payPeriodId, payrollPeriodId));
-    
-    if (paychecks.length === 0) {
-      return;
-    }
-    
-    // Calculate totals
-    const totalGrossPay = paychecks.reduce((sum, paycheck) => sum + Number(paycheck.grossPay || 0), 0);
-    const totalDeductions = paychecks.reduce((sum, paycheck) => sum + Number(paycheck.totalDeductions || 0), 0);
-    const totalNetPay = paychecks.reduce((sum, paycheck) => sum + Number(paycheck.netPay || 0), 0);
-    
-    // Update the pay period with calculated totals
-    await db.update(payPeriods)
-      .set({
-        totalGrossPay: totalGrossPay.toString(),
-        totalDeductions: totalDeductions.toString(),
-        totalNetPay: totalNetPay.toString(),
-        status: 'calculated',
-        updatedAt: new Date()
-      })
-      .where(eq(payPeriods.id, payrollPeriodId));
-  }
-
-  async getEmployeePayStubs(employeeId: string): Promise<any[]> {
-    const results = await db
-      .select({
-        id: paystubs.id,
-        payPeriodId: paystubs.payPeriodId,
-        employeeId: paystubs.employeeId,
-        regularHours: paystubs.regularHours,
-        overtimeHours: paystubs.overtimeHours,
-        regularRate: paystubs.regularRate,
-        overtimeRate: paystubs.overtimeRate,
-        regularPay: paystubs.regularPay,
-        overtimePay: paystubs.overtimePay,
-        bonuses: paystubs.bonuses,
-        tips: paystubs.tips,
-        grossPay: paystubs.grossPay,
-        federalTax: paystubs.federalTax,
-        stateTax: paystubs.stateTax,
-        socialSecurity: paystubs.socialSecurity,
-        medicare: paystubs.medicare,
-        totalDeductions: paystubs.totalDeductions,
-        netPay: paystubs.netPay,
-        status: paystubs.status,
-        notes: paystubs.notes,
-        createdAt: paystubs.createdAt,
-        updatedAt: paystubs.updatedAt,
-        payDate: paystubs.createdAt, // Use createdAt as payDate for now
-        checkNumber: paystubs.id, // Use ID as check number for now
-        // Pay period information
-        payPeriod: {
-          id: payPeriods.id,
-          name: payPeriods.name,
-          startDate: payPeriods.startDate,
-          endDate: payPeriods.endDate,
-          payDate: payPeriods.payDate,
-          frequency: payPeriods.frequency,
-          status: payPeriods.status
-        },
-        // Employee information
-        employee: {
-          firstName: employees.firstName,
-          lastName: employees.lastName,
-          address: employees.address,
-          phone: employees.phone
-        }
-      })
-      .from(paystubs)
-      .leftJoin(payPeriods, eq(paystubs.payPeriodId, payPeriods.id))
-      .leftJoin(employees, eq(paystubs.employeeId, employees.id))
-      .where(eq(paystubs.employeeId, employeeId))
-      .orderBy(desc(paystubs.createdAt));
-
-    return results;
-  }
-
-  async createPayStub(payStub: InsertPayStub): Promise<PayStub> {
-    const [created] = await db.insert(paystubs).values(payStub).returning();
-    return created;
-  }
-
-  async markPayStubViewed(payStubId: string): Promise<void> {
-    await db.update(paystubs)
-      .set({ viewedAt: new Date() })
-      .where(eq(paystubs.id, payStubId));
-  }
-
-  async getTimeEntries(employeeId: string, startDate: string, endDate: string): Promise<TimeEntry[]> {
-    return await db.select()
-      .from(timeEntries)
-      .where(
-        and(
-          eq(timeEntries.employeeId, employeeId),
-          gte(timeEntries.clockInTime, startDate),
-          lte(timeEntries.clockInTime, endDate)
-        )
-      )
-      .orderBy(timeEntries.clockInTime);
-  }
-
-  async calculatePayrollHoursFromTimeEntries(payrollPeriodId: string): Promise<{ employeeId: string; regularHours: number; overtimeHours: number; totalHours: number; employee?: Employee }[]> {
-    try {
-      // First get the payroll period to know the date range
-      const payrollPeriod = await this.getPayrollPeriod(payrollPeriodId);
-      if (!payrollPeriod) {
-        throw new Error('Payroll period not found');
-      }
-
-      // Get all time entries for the period - convert date strings to Date objects
-      const startDate = new Date(payrollPeriod.startDate);
-      const endDate = new Date(payrollPeriod.endDate);
-      
-      const allTimeEntries = await db.select({
-        employeeId: timeEntries.employeeId,
-        clockInTime: timeEntries.clockInTime,
-        clockOutTime: timeEntries.clockOutTime,
-        breakStartTime: timeEntries.breakStartTime,
-        breakEndTime: timeEntries.breakEndTime,
-        totalHours: timeEntries.totalHours,
-        status: timeEntries.status,
-        employeeFirstName: employees.firstName,
-        employeeLastName: employees.lastName,
-        employeeHourlyRate: employees.hourlyRate
-      })
-      .from(timeEntries)
-      .leftJoin(employees, eq(timeEntries.employeeId, employees.id))
-      .where(
-        and(
-          gte(timeEntries.clockInTime, startDate),
-          lte(timeEntries.clockInTime, endDate),
-          eq(timeEntries.status, 'clocked-out') // Only count completed shifts
-        )
-      );
-
-      // Group by employee and calculate hours
-      const employeeHours = new Map<string, {
-        employeeId: string;
-        regularHours: number;
-        overtimeHours: number;
-        totalHours: number;
-        employee?: Employee;
-      }>();
-
-      for (const entry of allTimeEntries) {
-        if (!entry.clockOutTime) continue; // Skip incomplete entries
-
-        let workedHours = 0;
-        
-        // Calculate total worked hours
-        if (entry.totalHours) {
-          workedHours = parseFloat(entry.totalHours);
-        } else if (entry.clockInTime && entry.clockOutTime) {
-          const clockIn = new Date(entry.clockInTime);
-          const clockOut = new Date(entry.clockOutTime);
-          let totalMs = clockOut.getTime() - clockIn.getTime();
-          
-          // Subtract break time if recorded
-          if (entry.breakStartTime && entry.breakEndTime) {
-            const breakStart = new Date(entry.breakStartTime);
-            const breakEnd = new Date(entry.breakEndTime);
-            const breakMs = breakEnd.getTime() - breakStart.getTime();
-            totalMs -= breakMs;
-          }
-          
-          workedHours = totalMs / (1000 * 60 * 60); // Convert to hours
-        }
-
-        if (workedHours <= 0) continue;
-
-        // Get or create employee entry
-        if (!employeeHours.has(entry.employeeId)) {
-          employeeHours.set(entry.employeeId, {
-            employeeId: entry.employeeId,
-            regularHours: 0,
-            overtimeHours: 0,
-            totalHours: 0,
-            employee: {
-              id: entry.employeeId,
-              firstName: entry.employeeFirstName || '',
-              lastName: entry.employeeLastName || '',
-              hourlyRate: entry.employeeHourlyRate || ''
-            } as Employee
-          });
-        }
-
-        const empData = employeeHours.get(entry.employeeId)!;
-        empData.totalHours += workedHours;
-      }
-
-      // Calculate regular vs overtime hours (40+ hours = overtime)
-      const result = Array.from(employeeHours.values()).map(emp => {
-        if (emp.totalHours <= 40) {
-          emp.regularHours = emp.totalHours;
-          emp.overtimeHours = 0;
-        } else {
-          emp.regularHours = 40;
-          emp.overtimeHours = emp.totalHours - 40;
-        }
-        return emp;
-      });
-
-      console.log('📊 Calculated hours:', result);
-      return result;
-    } catch (error) {
-      console.error('Error calculating payroll hours:', error);
-      throw error;
-    }
-  }
-
-  // Paycheck settings methods - now with real database operations
-  async getPaycheckSettings(locationId?: string): Promise<any> {
-    try {
-      let query = db.select().from(paycheckSettings).where(eq(paycheckSettings.isActive, true));
-      
-      if (locationId) {
-        query = query.where(eq(paycheckSettings.locationId, locationId));
-      }
-      
-      const settings = await query.limit(1);
-      
-      if (settings.length === 0) {
-        // Create default settings if none exist - ensure locationId is never null
-        const defaultLocationId = locationId || "8d0336af-20da-41fb-a37e-dfdae21ba9bb";
-        const defaultSettings = {
-          locationId: defaultLocationId,
-          paycheckLayout: 'check_stub_only' as const,
-          displayLast4Ssn: true,
-          displayTaxFilingName: true,
-          displayBusinessName: true,
-          printSignature: false,
-          showLastCheckNumber: true,
-          companyName: 'Your Company Name',
-          companyAddress: 'Your Company Address',
-          companyPhone: '',
-          companyEin: '',
-          businessName: 'Your Business Name',
-          taxFilingName: 'Your Tax Filing Name',
-          bankName: 'Your Bank Name',
-          lastCheckNumber: 1000,
-          isActive: true
-        };
-        
-        const [created] = await db.insert(paycheckSettings).values(defaultSettings).returning();
-        return created;
-      }
-      
-      return settings[0];
-    } catch (error) {
-      console.error('Error fetching paycheck settings:', error);
-      throw error;
-    }
-  }
-
-  async updatePaycheckSettings(settingsData: any, locationId?: string): Promise<any> {
-    try {
-      // First get existing settings
-      const existing = await this.getPaycheckSettings(locationId);
-      
-      if (existing && existing.id) {
-        // Update existing settings
-        const updateData = {
-          ...settingsData,
-          updatedAt: new Date()
-        };
-        
-        const [updated] = await db
-          .update(paycheckSettings)
-          .set(updateData)
-          .where(eq(paycheckSettings.id, existing.id))
-          .returning();
-          
-        console.log('✅ Updated paycheck settings:', updated);
-        return updated;
-      } else {
-        // Create new settings if none exist - ensure locationId is never null  
-        const defaultLocationId = locationId || "8d0336af-20da-41fb-a37e-dfdae21ba9bb";
-        const newSettings = {
-          locationId: defaultLocationId,
-          ...settingsData,
-          isActive: true
-        };
-        
-        const [created] = await db.insert(paycheckSettings).values(newSettings).returning();
-        console.log('✅ Created new paycheck settings:', created);
-        return created;
-      }
-    } catch (error) {
-      console.error('Error updating paycheck settings:', error);
-      throw error;
-    }
-  }
-
-  // Tax settings methods
-  async getTaxSettings(locationId: string): Promise<any> {
-    try {
-      const { payrollTaxSettings } = await import('./db/schema_comprehensive_payroll.js');
-      
-      const [settings] = await db
-        .select()
-        .from(payrollTaxSettings)
-        .where(
-          and(
-            eq(payrollTaxSettings.locationId, locationId),
-            eq(payrollTaxSettings.isActive, true)
-          )
-        )
-        .limit(1);
-      
-      return settings;
-    } catch (error) {
-      console.error('Error fetching tax settings:', error);
-      throw error;
-    }
-  }
-
-  async createTaxSettings(settings: any): Promise<any> {
-    try {
-      const { payrollTaxSettings } = await import('./db/schema_comprehensive_payroll.js');
-      
-      const [created] = await db
-        .insert(payrollTaxSettings)
-        .values(settings)
-        .returning();
-      
-      console.log('✅ Created tax settings:', created);
-      return created;
-    } catch (error) {
-      console.error('Error creating tax settings:', error);
-      throw error;
-    }
-  }
-
-  async updateTaxSettings(id: string, settings: any): Promise<any> {
-    try {
-      const { payrollTaxSettings } = await import('./db/schema_comprehensive_payroll.js');
-      
-      const updateData = {
-        ...settings,
-        updatedAt: new Date()
-      };
-      
-      const [updated] = await db
-        .update(payrollTaxSettings)
-        .set(updateData)
-        .where(eq(payrollTaxSettings.id, id))
-        .returning();
-      
-      console.log('✅ Updated tax settings:', updated);
-      return updated;
-    } catch (error) {
-      console.error('Error updating tax settings:', error);
-      throw error;
-    }
-  }
-  
   // In-memory storage for local authentication users (for fallback when Firebase Admin SDK is unavailable)
   private localAuthUsers: LocalAuthUser[] = [];
   
