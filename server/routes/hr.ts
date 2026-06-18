@@ -85,7 +85,8 @@ export function registerHRRoutes(app: Express): void {
   app.get('/api/employees', isAuthenticated, async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
-      if (locationId && !await assertLocationAccess(req, res, locationId)) return;
+      if (!locationId) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, locationId)) return;
       const employees = await storage.getEmployees(locationId);
       res.json(employees);
     } catch (error) {
@@ -224,7 +225,9 @@ export function registerHRRoutes(app: Express): void {
   // Time-off Requests
   app.get('/api/hr/time-off-requests', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      const requests = await storage.getTimeOffRequests();
+      // requireHRAccess has already validated locationId exists and user has access
+      const locationId = req.query.locationId as string;
+      const requests = await storage.getTimeOffRequests(locationId);
       res.json(requests);
     } catch (error) {
       console.error('Error fetching time-off requests:', error);

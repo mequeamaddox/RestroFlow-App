@@ -11,9 +11,10 @@ export function registerAnalyticsRoutes(app: Express): void {
   // Cost Monitoring
   app.get('/api/cost-alerts', isAuthenticated, async (req, res) => {
     try {
-      const { location } = req.query;
-      if (location && !await assertLocationAccess(req, res, location as string)) return;
-      const alerts = await storage.getCostAlerts(location as string);
+      const location = req.query.location as string;
+      if (!location) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, location)) return;
+      const alerts = await storage.getCostAlerts(location);
       res.json(alerts);
     } catch (error) {
       console.error('Error fetching cost alerts:', error);
@@ -23,8 +24,10 @@ export function registerAnalyticsRoutes(app: Express): void {
 
   app.get('/api/price-monitoring', isAuthenticated, async (req, res) => {
     try {
-      const { range } = req.query;
-      const monitoring = await storage.getPriceMonitoring(range as string);
+      const { range, locationId } = req.query;
+      if (!locationId) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, locationId as string)) return;
+      const monitoring = await storage.getPriceMonitoring(range as string, locationId as string);
       res.json(monitoring);
     } catch (error) {
       console.error('Error fetching price monitoring:', error);
@@ -35,7 +38,8 @@ export function registerAnalyticsRoutes(app: Express): void {
   app.get('/api/cost-trends', isAuthenticated, async (req, res) => {
     try {
       const { range, location } = req.query;
-      if (location && !await assertLocationAccess(req, res, location as string)) return;
+      if (!location) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, location as string)) return;
       const trends = await storage.getCostTrends(range as string, location as string);
       res.json(trends);
     } catch (error) {
@@ -47,7 +51,8 @@ export function registerAnalyticsRoutes(app: Express): void {
   app.get('/api/budget-tracking', isAuthenticated, async (req, res) => {
     try {
       const { location } = req.query;
-      if (location && !await assertLocationAccess(req, res, location as string)) return;
+      if (!location) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, location as string)) return;
       const tracking = await storage.getBudgetTracking(location as string);
       res.json(tracking);
     } catch (error) {
@@ -121,6 +126,8 @@ export function registerAnalyticsRoutes(app: Express): void {
   app.get('/api/dashboard/metrics', isAuthenticated, async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
+      if (!locationId) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, locationId)) return;
       const metrics = await storage.getDashboardMetrics(locationId);
       res.json(metrics);
     } catch (error) {
@@ -133,7 +140,8 @@ export function registerAnalyticsRoutes(app: Express): void {
   app.get('/api/analytics/alerts', isAuthenticated, async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
-      if (locationId && !await assertLocationAccess(req, res, locationId)) return;
+      if (!locationId) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, locationId)) return;
       const alerts = await storage.getAnalyticsAlerts(locationId);
       res.json(alerts);
     } catch (error) {

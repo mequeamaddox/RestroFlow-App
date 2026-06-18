@@ -21,9 +21,9 @@ import { Readable } from 'stream';
 
 export function registerInventoryRoutes(app: Express): void {
   // Locations
-  app.get('/api/locations', isAuthenticated, async (_req, res) => {
+  app.get('/api/locations', isAuthenticated, async (req, res) => {
     try {
-      const locations = await storage.getLocations();
+      const locations = await storage.getLocations(req.user!.id);
       res.json(locations);
     } catch (error) {
       console.error('Error fetching locations:', error);
@@ -44,6 +44,7 @@ export function registerInventoryRoutes(app: Express): void {
 
   app.patch('/api/locations/:id', isAuthenticated, async (req, res) => {
     try {
+      if (!await assertLocationAccess(req, res, req.params.id)) return;
       const locationData = insertLocationSchema.partial().parse(req.body);
       const location = await storage.updateLocation(req.params.id, locationData);
       res.json(location);
@@ -55,6 +56,7 @@ export function registerInventoryRoutes(app: Express): void {
 
   app.delete('/api/locations/:id', isAuthenticated, async (req, res) => {
     try {
+      if (!await assertLocationAccess(req, res, req.params.id)) return;
       await storage.deleteLocation(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -64,9 +66,9 @@ export function registerInventoryRoutes(app: Express): void {
   });
 
   // Categories
-  app.get('/api/categories', isAuthenticated, async (_req, res) => {
+  app.get('/api/categories', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
-      const categories = await storage.getCategories();
+      const categories = await storage.getCategories(req.query.locationId as string);
       res.json(categories);
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -74,7 +76,7 @@ export function registerInventoryRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/categories', isAuthenticated, async (req, res) => {
+  app.post('/api/categories', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const categoryData = insertCategorySchema.parse(req.body);
       const category = await storage.createCategory(categoryData);
@@ -88,6 +90,7 @@ export function registerInventoryRoutes(app: Express): void {
   app.put('/api/categories/:id', isAuthenticated, async (req, res) => {
     try {
       const categoryData = insertCategorySchema.partial().parse(req.body);
+      if (categoryData.locationId && !await assertLocationAccess(req, res, categoryData.locationId)) return;
       const category = await storage.updateCategory(req.params.id, categoryData);
       res.json(category);
     } catch (error) {
@@ -96,7 +99,7 @@ export function registerInventoryRoutes(app: Express): void {
     }
   });
 
-  app.delete('/api/categories/:id', isAuthenticated, async (req, res) => {
+  app.delete('/api/categories/:id', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       await storage.deleteCategory(req.params.id);
       res.status(204).send();
@@ -268,7 +271,7 @@ export function registerInventoryRoutes(app: Express): void {
       const errors: Array<{ row: number; field: string; message: string; warning?: boolean }> = [];
       let rowNumber = 0;
 
-      const categories = await storage.getCategories();
+      const categories = await storage.getCategories(locationId);
       const vendors = await storage.getVendors(locationId);
       const isExcel = req.file.originalname.endsWith('.xlsx') || req.file.originalname.endsWith('.xls');
 
@@ -606,10 +609,11 @@ print(json.dumps(rows))
     }
   });
 
-  app.get('/api/waste/stats', isAuthenticated, async (req, res) => {
+  app.get('/api/waste/stats', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
-      const stats = await storage.getWasteStats(startDate ? new Date(startDate as string) : undefined, endDate ? new Date(endDate as string) : undefined);
+      const locationId = req.query.locationId as string;
+      const stats = await storage.getWasteStats(startDate ? new Date(startDate as string) : undefined, endDate ? new Date(endDate as string) : undefined, locationId);
       res.json(stats);
     } catch (error) {
       console.error('Error fetching waste stats:', error);
@@ -620,7 +624,13 @@ print(json.dumps(rows))
   // Inventory Transactions
   app.get('/api/transactions', isAuthenticated, async (req, res) => {
     try {
-      const transactions = await storage.getInventoryTransactions(req.query.itemId as string);
+      const itemId = req.query.itemId as string;
+      if (itemId) {
+        const item = await storage.getInventoryItem(itemId);
+        if (!item) return res.status(404).json({ message: 'Inventory item not found' });
+        if (item.locationId && !await assertLocationAccess(req, res, item.locationId)) return;
+      }
+      const transactions = await storage.getInventoryTransactions(itemId);
       res.json(transactions);
     } catch (error) {
       console.error('Error fetching inventory transactions:', error);

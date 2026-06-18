@@ -130,7 +130,7 @@ export function registerPosRoutes(app: Express): void {
   });
 
   // POS Sales
-  app.get('/api/pos/sales', isAuthenticated, async (req, res) => {
+  app.get('/api/pos/sales', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const sales = await storage.getPosSales(req.query.locationId as string);
       res.json(sales);
@@ -189,9 +189,9 @@ export function registerPosRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/pos/webhook-status', isAuthenticated, async (req, res) => {
+  app.get('/api/pos/webhook-status', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
-      const integrations = await storage.getPosIntegrations();
+      const integrations = await storage.getPosIntegrations(req.query.locationId as string);
       res.json(integrations.map((integration: any) => ({
         id: integration.id, provider: integration.provider, name: integration.name,
         isActive: integration.isActive, lastSyncAt: integration.lastSyncAt,

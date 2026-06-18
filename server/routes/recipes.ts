@@ -95,9 +95,9 @@ export function registerRecipeRoutes(app: Express): void {
   });
 
   // Menu Items
-  app.get('/api/menu-items', isAuthenticated, async (_req, res) => {
+  app.get('/api/menu-items', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
-      const menuItems = await storage.getMenuItems();
+      const menuItems = await storage.getMenuItems(req.query.locationId as string);
       res.json(menuItems);
     } catch (error) {
       console.error('Error fetching menu items:', error);

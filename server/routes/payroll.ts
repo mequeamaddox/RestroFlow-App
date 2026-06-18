@@ -1,6 +1,7 @@
 import type { Express } from 'express';
 import { storage } from '../storage';
 import { isAuthenticated } from './helpers';
+import { assertLocationAccess } from '../securityMiddleware';
 
 export function registerDocumentRoutes(app: Express): void {
   app.get('/api/employees/:employeeId/time-off-requests', isAuthenticated, async (req, res) => {
@@ -26,7 +27,7 @@ export function registerDocumentRoutes(app: Express): void {
   });
 
   // Document management
-  app.get('/api/document-templates', async (_req, res) => {
+  app.get('/api/document-templates', isAuthenticated, async (_req, res) => {
     try {
       const templates = await storage.getDocumentTemplates();
       res.json(templates);
@@ -46,8 +47,11 @@ export function registerDocumentRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/employees/:employeeId/documents', async (req, res) => {
+  app.get('/api/employees/:employeeId/documents', isAuthenticated, async (req, res) => {
     try {
+      const employee = await storage.getEmployee(req.params.employeeId);
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (employee.locationId && !await assertLocationAccess(req, res, employee.locationId)) return;
       const documents = await storage.getEmployeeDocuments(req.params.employeeId);
       const transformedDocuments = documents.map((doc: any) => ({
         id: doc.id, templateId: doc.templateId || null, status: doc.status, deadline: doc.expiresAt || null,

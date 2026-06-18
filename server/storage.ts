@@ -209,11 +209,11 @@ export interface IStorage {
   resetOcrCredits(userId: string): Promise<User>;
 
   // Location operations
-  getLocations(): Promise<Location[]>;
+  getLocations(ownerId?: string): Promise<Location[]>;
   createLocation(location: InsertLocation): Promise<Location>;
 
   // Category operations
-  getCategories(): Promise<Category[]>;
+  getCategories(locationId?: string): Promise<Category[]>;
   createCategory(category: InsertCategory): Promise<Category>;
   updateCategory(id: string, category: Partial<InsertCategory>): Promise<Category>;
   deleteCategory(id: string): Promise<void>;
@@ -247,7 +247,7 @@ export interface IStorage {
   addRecipeIngredients(ingredients: InsertRecipeIngredient[]): Promise<void>;
 
   // Menu item operations
-  getMenuItems(): Promise<MenuItem[]>;
+  getMenuItems(locationId: string): Promise<MenuItem[]>;
   getMenuItem(id: string): Promise<(MenuItem & { ingredients: (MenuItemIngredient & { inventoryItem: InventoryItem })[] }) | undefined>;
   createMenuItem(menuItem: InsertMenuItem): Promise<MenuItem>;
   updateMenuItem(id: string, menuItem: Partial<InsertMenuItem>): Promise<MenuItem>;
@@ -267,7 +267,7 @@ export interface IStorage {
   // Waste tracking operations
   getWasteEntries(): Promise<(WasteEntry & { inventoryItem: InventoryItem; reporter?: User })[]>;
   createWasteEntry(entry: InsertWasteEntry): Promise<WasteEntry>;
-  getWasteStats(startDate?: Date, endDate?: Date): Promise<{ totalCost: number; totalEntries: number }>;
+  getWasteStats(startDate?: Date, endDate?: Date, locationId?: string): Promise<{ totalCost: number; totalEntries: number }>;
 
   // Inventory transaction operations
   createInventoryTransaction(transaction: InsertInventoryTransaction): Promise<InventoryTransaction>;
@@ -328,7 +328,7 @@ export interface IStorage {
 
   // Cost Monitoring & Alerts
   getCostAlerts(locationId?: string): Promise<any[]>;
-  getPriceMonitoring(timeRange: string): Promise<any[]>;
+  getPriceMonitoring(timeRange: string, locationId: string): Promise<any[]>;
   getCostTrends(timeRange: string, locationId?: string): Promise<any[]>;
   getBudgetTracking(locationId?: string): Promise<any>;
 
@@ -474,7 +474,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Location operations
-  async getLocations(): Promise<Location[]> {
+  async getLocations(ownerId?: string): Promise<Location[]> {
+    if (ownerId) {
+      return await db.select().from(locations).where(eq(locations.ownerId, ownerId)).orderBy(locations.name);
+    }
     return await db.select().from(locations).orderBy(locations.name);
   }
 
@@ -643,7 +646,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Category operations
-  async getCategories(): Promise<Category[]> {
+  async getCategories(locationId?: string): Promise<Category[]> {
+    if (locationId) {
+      return await db.select().from(categories)
+        .where(or(eq(categories.locationId, locationId), isNull(categories.locationId)))
+        .orderBy(categories.name);
+    }
     return await db.select().from(categories).orderBy(categories.name);
   }
 
@@ -1513,8 +1521,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Menu item operations
-  async getMenuItems(): Promise<MenuItem[]> {
-    return await db.select().from(menuItems).orderBy(menuItems.name);
+  async getMenuItems(locationId: string): Promise<MenuItem[]> {
+    return await db.select().from(menuItems).where(eq(menuItems.locationId, locationId)).orderBy(menuItems.name);
   }
 
   async getMenuItem(id: string): Promise<(MenuItem & { ingredients: (MenuItemIngredient & { inventoryItem: InventoryItem })[] }) | undefined> {
@@ -1658,18 +1666,19 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getWasteStats(startDate?: Date, endDate?: Date): Promise<{ totalCost: number; totalEntries: number }> {
-    let query = db.select({
+  async getWasteStats(startDate?: Date, endDate?: Date, locationId?: string): Promise<{ totalCost: number; totalEntries: number }> {
+    const conditions: any[] = [];
+    if (startDate && endDate) {
+      conditions.push(gte(wasteEntries.createdAt, startDate));
+      conditions.push(lte(wasteEntries.createdAt, endDate));
+    }
+    if (locationId) {
+      conditions.push(eq(wasteEntries.locationId, locationId));
+    }
+    const query = db.select({
       totalCost: sql<string>`COALESCE(SUM(${wasteEntries.cost}), 0)`,
       totalEntries: sql<string>`COUNT(*)`,
-    }).from(wasteEntries);
-
-    if (startDate && endDate) {
-      query = query.where(and(
-        gte(wasteEntries.createdAt, startDate),
-        lte(wasteEntries.createdAt, endDate)
-      ));
-    }
+    }).from(wasteEntries).where(conditions.length ? and(...conditions) : undefined);
 
     const [result] = await query;
     return {
@@ -1765,7 +1774,7 @@ export class DatabaseStorage implements IStorage {
     
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
-    const wasteStats = await this.getWasteStats(weekAgo, new Date());
+    const wasteStats = await this.getWasteStats(weekAgo, new Date(), locationId);
     
     // Calculate real food cost percentage from POS sales and inventory costs
     const foodCostPercentage = await this.calculateFoodCostPercentage();
@@ -2167,12 +2176,12 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getPriceMonitoring(timeRange: string): Promise<any[]> {
+  async getPriceMonitoring(timeRange: string, locationId: string): Promise<any[]> {
     try {
       // Get real price monitoring data from purchase orders and invoices
       const daysAgo = timeRange === 'week' ? 7 : timeRange === 'month' ? 30 : 90;
       const startDate = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
-      
+
       const priceHistory = await db
         .select({
           itemName: inventoryItems.name,
@@ -2182,7 +2191,7 @@ export class DatabaseStorage implements IStorage {
         })
         .from(inventoryItems)
         .leftJoin(vendors, eq(inventoryItems.vendorId, vendors.id))
-        .where(gte(inventoryItems.updatedAt, startDate))
+        .where(and(gte(inventoryItems.updatedAt, startDate), eq(inventoryItems.locationId, locationId)))
         .orderBy(desc(inventoryItems.updatedAt))
         .limit(20);
       
@@ -2213,7 +2222,7 @@ export class DatabaseStorage implements IStorage {
         : [];
       
       // Get waste data for the period
-      const wasteStats = await this.getWasteStats(startDate, new Date());
+      const wasteStats = await this.getWasteStats(startDate, new Date(), locationId);
       
       // Calculate daily aggregates from real data
       const trends = [];
@@ -3175,8 +3184,13 @@ export class DatabaseStorage implements IStorage {
 
 
   // HR Time-off Request operations
-  async getTimeOffRequests(): Promise<TimeOffRequest[]> {
-    return await db.select().from(timeOffRequests).orderBy(desc(timeOffRequests.createdAt));
+  async getTimeOffRequests(locationId: string): Promise<TimeOffRequest[]> {
+    return await db.select({ timeOffRequest: timeOffRequests })
+      .from(timeOffRequests)
+      .innerJoin(employees, eq(timeOffRequests.employeeId, employees.id))
+      .where(eq(employees.locationId, locationId))
+      .orderBy(desc(timeOffRequests.createdAt))
+      .then(rows => rows.map(r => r.timeOffRequest));
   }
 
   async getEmployeeTimeOffRequests(employeeId: string): Promise<TimeOffRequest[]> {
