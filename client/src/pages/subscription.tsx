@@ -296,7 +296,7 @@ export default function SubscriptionPage() {
               )}
 
               {/* Bar & Beverage Add-on */}
-              {(subscription?.barAddonLocations ?? 0) > 0 && (
+              {(subscription?.barAddonLocations ?? 0) > 0 ? (
                 <div className="p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-purple-400">🍸</span>
@@ -304,6 +304,17 @@ export default function SubscriptionPage() {
                     <span className="text-xs text-slate-400">{barEnabledLocations.map(l => l.name).join(', ')}</span>
                   </div>
                   <Badge className="bg-purple-600">{subscription?.barAddonLocations} location{(subscription?.barAddonLocations ?? 0) > 1 ? 's' : ''}</Badge>
+                </div>
+              ) : currentPlan !== 'free' && (
+                <div className="p-3 bg-slate-700/40 border border-slate-600/50 rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-400">🍸</span>
+                    <div>
+                      <span className="text-sm text-slate-300 font-medium">Bar & Beverage Add-on</span>
+                      <p className="text-xs text-slate-500">Cocktail costing, pour cost analysis, liquor inventory</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="border-purple-600 text-purple-400 text-xs whitespace-nowrap">$79/location/mo</Badge>
                 </div>
               )}
 

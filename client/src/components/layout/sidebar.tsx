@@ -51,13 +51,17 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Inventory', href: '/inventory', icon: Package },
   { name: 'Food Recipes', href: '/recipes', icon: ChefHat },
-  { name: 'Beverage Menu', href: '/beverage-menu', icon: Martini },
   { name: 'Purchase Orders', href: '/purchase-orders', icon: ShoppingCart },
   { name: 'Vendors', href: '/vendors', icon: Building2 },
   { name: 'Invoice Processing', href: '/invoice-processing', icon: FileText, badge: 'OCR' },
   { name: 'Analytics & Reports', href: '/analytics', icon: BarChart3, badge: 'LIVE' },
   { name: 'Waste Tracking', href: '/waste-tracking', icon: Trash2 },
   { name: 'Settings', href: '/settings', icon: Settings },
+];
+
+const barNavigation = [
+  { name: 'Beverage Menu', href: '/beverage-menu', icon: Martini, badge: 'ADD-ON' },
+  { name: 'Beverage Costing', href: '/beveragecost', icon: Calculator },
 ];
 
 // Subscription & Billing navigation for owners
@@ -100,7 +104,7 @@ export default function Sidebar({ isMobileMenuOpen = false, setIsMobileMenuOpen 
   const [internalMobileMenuOpen, setInternalMobileMenuOpen] = useState(false);
   const { user } = useAuth();
   const { signOut } = useClerk();
-  const { currentLocation, setCurrentLocation, locations, isLoading } = useLocation();
+  const { currentLocation, setCurrentLocation, locations, isLoading, hasBarAccess } = useLocation();
   const { hasPermission } = usePermissions();
   
   // Get employee profile data for position title
@@ -247,6 +251,43 @@ export default function Sidebar({ isMobileMenuOpen = false, setIsMobileMenuOpen 
                               (item as any).badge === 'AUTO' ? "bg-blue-500/20 text-blue-400" :
                               "bg-orange-500/20 text-orange-400"
                             )}>
+                              {(item as any).badge}
+                            </span>
+                          )}
+                        </div>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
+          {/* Bar & Beverage Add-on - Only show when enabled for this location */}
+          {hasBarAccess && !isEmployee && (
+            <div className="mb-6">
+              <div className="px-6 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                Bar & Beverage Add-on
+              </div>
+              <ul className="space-y-1">
+                {barNavigation.map((item) => {
+                  const isActive = currentPath === item.href;
+                  const Icon = item.icon;
+
+                  return (
+                    <li key={item.name}>
+                      <Link href={item.href}>
+                        <div
+                          className={cn(
+                            "flex items-center px-6 py-3 text-slate-300 hover:bg-slate-700/50 hover:text-white transition-all duration-200 cursor-pointer rounded-r-2xl mr-4",
+                            isActive && "bg-gradient-to-r from-purple-500/20 to-violet-500/20 border-r-4 border-purple-400 text-white"
+                          )}
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          <Icon className="h-5 w-5 mr-3" />
+                          <span className="flex-1">{item.name}</span>
+                          {(item as any).badge && (
+                            <span className="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-purple-500/20 text-purple-400">
                               {(item as any).badge}
                             </span>
                           )}
