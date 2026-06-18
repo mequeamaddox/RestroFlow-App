@@ -33,48 +33,14 @@ export function registerBillingRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/sales/transactions/:locationId', isAuthenticated, async (req, res) => {
-    try {
-      const { locationId } = req.params;
-      const limit = parseInt(req.query.limit as string) || 50;
-      const transactions = await storage.getSalesTransactions(locationId, limit);
-      res.json(transactions);
-    } catch (error) {
-      console.error('Error fetching sales transactions:', error);
-      res.status(500).json({ message: 'Failed to fetch sales transactions' });
-    }
-  });
-
-  app.get('/api/sales/analytics/:locationId', isAuthenticated, async (req, res) => {
-    try {
-      const { locationId } = req.params;
-      const transactions = await storage.getSalesTransactions(locationId, 1000);
-      const totalRevenue = transactions.reduce((sum: number, t: any) => sum + parseFloat(t.totalAmount), 0);
-      const totalTransactions = transactions.length;
-      const averageTransaction = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
-      const stockLevels = await storage.getRemainingStockLevels(locationId);
-      const totalInventoryValue = stockLevels.reduce((sum: number, item: any) => sum + item.totalValue, 0);
-      const lowStockItems = stockLevels.filter((item: any) => item.isLowStock);
-      res.json({
-        salesSummary: { totalRevenue, totalTransactions, averageTransaction },
-        inventorySummary: { totalInventoryValue, totalItems: stockLevels.length, lowStockItems: lowStockItems.length },
-        stockLevels,
-        recentTransactions: transactions.slice(0, 10),
-      });
-    } catch (error) {
-      console.error('Error fetching sales analytics:', error);
-      res.status(500).json({ message: 'Failed to fetch sales analytics' });
-    }
-  });
-
   // ─── Subscriptions ────────────────────────────────────────────────────────
 
   app.get('/api/subscriptions/plans', async (_req, res) => {
     res.json({
       plans: [
         {
-          id: 'professional',
-          name: 'Professional (Core)',
+          id: 'core',
+          name: 'RestroFlow Core',
           price: 179,
           billingCycle: 'MONTHLY',
           popular: true,
@@ -219,8 +185,8 @@ export function registerBillingRoutes(app: Express): void {
     try {
       const userId = req.user!.id;
       const { plan } = req.body;
-      if (plan !== 'professional')
-        return res.status(400).json({ message: 'Invalid plan. Must be professional.' });
+      if (plan !== 'core')
+        return res.status(400).json({ message: 'Invalid plan. Must be core.' });
       if (!isStripeEnabled)
         return res.status(503).json({ message: 'Stripe billing is not yet configured. Please contact support.', configured: false });
       const user = await storage.getUser(userId);
@@ -281,7 +247,7 @@ export function registerBillingRoutes(app: Express): void {
           const { userId, plan } = session.metadata || {};
           if (userId && plan) {
             await storage.updateUserSubscription(userId, {
-              subscriptionPlan: plan as 'professional',
+              subscriptionPlan: plan as 'core',
               subscriptionStatus: 'active',
               stripeCustomerId: session.customer,
               stripeSubscriptionId: session.subscription,
@@ -295,8 +261,8 @@ export function registerBillingRoutes(app: Express): void {
           const { userId } = sub.metadata || {};
           const mappedStatus = mapStripeStatusToPlan(sub.status);
           const priceId: string = sub.items?.data?.[0]?.price?.id;
-          let plan: 'professional' | undefined;
-          if (priceId === process.env.STRIPE_PRICE_PROFESSIONAL) plan = 'professional';
+          let plan: 'core' | undefined;
+          if (priceId === process.env.STRIPE_PRICE_CORE) plan = 'core';
           if (userId) {
             await storage.updateUserSubscription(userId, {
               ...(plan ? { subscriptionPlan: plan, ocrCreditsLimit: 999 } : {}),

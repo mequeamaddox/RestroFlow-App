@@ -18,10 +18,6 @@ export class PosService {
         sandbox: "https://restaurantapi-qa.spoton.com/posexport/v1",
         production: "https://restaurantapi.spoton.com/posexport/v1",
       },
-      square: {
-        sandbox: "https://connect.squareupsandbox.com",
-        production: "https://connect.squareup.com",
-      },
       toast: {
         sandbox: "https://ws-api-sandbox.toasttab.com",
         production: "https://ws-api.toasttab.com",
@@ -55,9 +51,6 @@ export class PosService {
         case "clover":
           if (!credentials?.accessToken) return false;
           return await this.testCloverConnection(baseUrl, integration.merchantId, credentials.accessToken);
-        case "square":
-          if (!credentials?.accessToken) return false;
-          return await this.testSquareConnection(baseUrl, credentials.accessToken);
         default:
           // For unsupported providers, return true if credentials exist
           return !!(credentials.accessToken || credentials.apiKey);
@@ -83,16 +76,6 @@ export class PosService {
     if (!credentials.apiKey) return false;
     const response = await fetch(`${baseUrl}/locations/${encodeURIComponent(locationId)}`, {
       headers: { "x-api-key": credentials.apiKey! },
-    });
-    return response.ok;
-  }
-
-  private async testSquareConnection(baseUrl: string, accessToken: string): Promise<boolean> {
-    const response = await fetch(`${baseUrl}/v2/locations`, {
-      headers: { 
-        Authorization: `Bearer ${accessToken}`,
-        "Square-Version": "2023-12-13",
-      },
     });
     return response.ok;
   }
@@ -130,9 +113,6 @@ export class PosService {
           break;
         case "spoton":
           await this.syncSpotOnMenuItems(baseUrl, integration, credentials);
-          break;
-        case "square":
-          await this.syncSquareMenuItems(baseUrl, integration, credentials);
           break;
         default:
           console.log(`Menu sync not implemented for provider: ${integration.provider}`);
@@ -206,39 +186,6 @@ export class PosService {
         sku: item.plu ?? null,
       });
     }
-  }
-
-  private async syncSquareMenuItems(baseUrl: string, integration: any, credentials: PosCredentials): Promise<void> {
-    let cursor: string | undefined;
-    do {
-      const url = new URL(`${baseUrl}/v2/catalog/list`);
-      url.searchParams.set("types", "ITEM");
-      if (cursor) url.searchParams.set("cursor", cursor);
-
-      const res = await safeFetch(url.toString(), {
-        headers: {
-          Authorization: `Bearer ${credentials.accessToken}`,
-          "Square-Version": "2025-05-15",
-        },
-      });
-      const data = await res.json();
-
-      for (const obj of data.objects ?? []) {
-        if (obj.type !== "ITEM") continue;
-        const item = obj.item_data;
-        const firstVar = item?.variations?.[0]?.item_variation_data;
-        const cents = firstVar?.price_money?.amount;
-        await storage.upsertPosMenuItem({
-          posItemId: obj.id,
-          posIntegrationId: integration.id,
-          name: item?.name ?? "",
-          price: cents != null ? (cents / 100).toString() : null,
-          category: item?.category_id ?? null,
-          sku: firstVar?.sku ?? null,
-        });
-      }
-      cursor = data?.cursor;
-    } while (cursor);
   }
 
   async pollSpotOnOrders(integrationId: string): Promise<{ ordersProcessed: number }> {
@@ -394,9 +341,6 @@ export class PosService {
       } else if (payload.location_id) {
         provider = "spoton";
         merchantId = payload.location_id;
-      } else if (payload.merchant_id) {
-        provider = "square";
-        merchantId = payload.merchant_id;
       }
 
       const integrations = await storage.getPosIntegrations();
@@ -416,9 +360,6 @@ export class PosService {
           break;
         case "spoton":
           await this.processSpotOnOrder(payload, integration);
-          break;
-        case "square":
-          await this.processSquareOrder(payload, integration);
           break;
         default:
           console.log(`Unknown provider for webhook payload`);
@@ -534,44 +475,6 @@ export class PosService {
           quantity: item.quantity,
           unitPrice: item.price.toString(),
           totalPrice: (item.price * item.quantity).toString(),
-        });
-      }
-    }
-
-    await this.processInventoryDeductions(posSale.id);
-  }
-
-  private async processSquareOrder(payload: any, integration: any): Promise<void> {
-    const order = payload.data.object.order;
-    
-    // Check if order already exists (idempotency)
-    const existing = await storage.getPosSaleByOrderId(integration.id, order.id);
-    if (existing) {
-      console.log(`Square order ${order.id} already processed`);
-      return;
-    }
-    
-    const posSale = await storage.createPosSale({
-      posOrderId: order.id,
-      posIntegrationId: integration.id,
-      locationId: integration.locationId,
-      total: (order.total_money.amount / 100).toString(),
-      orderDate: new Date(order.created_at),
-      inventoryProcessed: false,
-    });
-
-    if (order.line_items) {
-      for (const li of order.line_items) {
-        const qty = Number(li.quantity ?? 1);
-        const totalCents = li.total_money?.amount ?? 0;
-        const unitCents = li.base_price_money?.amount ?? (qty ? Math.round(totalCents / qty) : totalCents);
-        
-        await storage.createPosSaleItem({
-          posSaleId: posSale.id,
-          itemName: li.name,
-          quantity: qty,
-          unitPrice: (unitCents / 100).toString(),
-          totalPrice: (totalCents / 100).toString(),
         });
       }
     }

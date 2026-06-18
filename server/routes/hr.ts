@@ -3,7 +3,7 @@ import { storage } from '../storage';
 import { isAuthenticated, clerkClient, mapPositionToRole, requireHRAccess } from './helpers';
 import { requireLocationAccess, assertLocationAccess } from '../securityMiddleware';
 import { requirePermission, requireAnyPermission, Permission } from '../permissions';
-import { teamResources, insertTeamResourceSchema } from '@shared/schema';
+import { teamResources, insertTeamResourceSchema, timeEntries, timeOffRequests, employeeDocuments, employeeOnboarding, employeeOnboardingSteps } from '@shared/schema';
 import { db } from '../db';
 import { eq, desc, sql, or, isNull } from 'drizzle-orm';
 
@@ -22,7 +22,7 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/hr/departments', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      const department = await storage.createDepartment(req.body);
+      const department = await storage.createDepartment({ ...req.body, locationId: req.query.locationId });
       res.status(201).json(department);
     } catch (error) {
       console.error('Error creating department:', error);
@@ -32,6 +32,9 @@ export function registerHRRoutes(app: Express): void {
 
   app.put('/api/hr/departments/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const existing = await storage.getDepartment(req.params.id);
+      if (!existing) return res.status(404).json({ message: 'Department not found' });
+      if (!await assertLocationAccess(req, res, existing.locationId)) return;
       const department = await storage.updateDepartment(req.params.id, req.body);
       res.json(department);
     } catch (error) {
@@ -42,6 +45,9 @@ export function registerHRRoutes(app: Express): void {
 
   app.delete('/api/hr/departments/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const existing = await storage.getDepartment(req.params.id);
+      if (!existing) return res.status(404).json({ message: 'Department not found' });
+      if (!await assertLocationAccess(req, res, existing.locationId)) return;
       await storage.deleteDepartment(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -73,6 +79,10 @@ export function registerHRRoutes(app: Express): void {
 
   app.delete('/api/hr/positions/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const existing = await storage.getPosition(req.params.id);
+      if (!existing) return res.status(404).json({ message: 'Position not found' });
+      const dept = await storage.getDepartment(existing.departmentId);
+      if (dept && !await assertLocationAccess(req, res, dept.locationId)) return;
       await storage.deletePosition(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -163,6 +173,9 @@ export function registerHRRoutes(app: Express): void {
 
   app.put('/api/hr/employees/:id', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), requireHRAccess, async (req, res) => {
     try {
+      const existing = await storage.getEmployee(req.params.id);
+      if (!existing) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, existing.locationId)) return;
       const employee = await storage.updateEmployee(req.params.id, req.body);
       res.json(employee);
     } catch (error) {
@@ -173,6 +186,9 @@ export function registerHRRoutes(app: Express): void {
 
   app.delete('/api/hr/employees/:id', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), requireHRAccess, async (req, res) => {
     try {
+      const existing = await storage.getEmployee(req.params.id);
+      if (!existing) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, existing.locationId)) return;
       await storage.deleteEmployee(req.params.id);
       res.json({ message: 'Employee deleted successfully' });
     } catch (error) {
@@ -194,7 +210,7 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/hr/shifts', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      const shift = await storage.createShift(req.body);
+      const shift = await storage.createShift({ ...req.body, locationId: req.query.locationId });
       res.status(201).json(shift);
     } catch (error) {
       console.error('Error creating shift:', error);
@@ -204,6 +220,9 @@ export function registerHRRoutes(app: Express): void {
 
   app.put('/api/hr/shifts/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const existing = await storage.getShift(req.params.id);
+      if (!existing) return res.status(404).json({ message: 'Shift not found' });
+      if (!await assertLocationAccess(req, res, existing.locationId)) return;
       const shift = await storage.updateShift(req.params.id, req.body);
       res.json(shift);
     } catch (error) {
@@ -214,6 +233,9 @@ export function registerHRRoutes(app: Express): void {
 
   app.delete('/api/hr/shifts/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const existing = await storage.getShift(req.params.id);
+      if (!existing) return res.status(404).json({ message: 'Shift not found' });
+      if (!await assertLocationAccess(req, res, existing.locationId)) return;
       await storage.deleteShift(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -237,6 +259,11 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/hr/time-off-requests', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      if (req.body.employeeId) {
+        const employee = await storage.getEmployee(req.body.employeeId);
+        if (!employee) return res.status(404).json({ message: 'Employee not found' });
+        if (!await assertLocationAccess(req, res, employee.locationId)) return;
+      }
       const request = await storage.createTimeOffRequest(req.body);
       res.status(201).json(request);
     } catch (error) {
@@ -247,6 +274,10 @@ export function registerHRRoutes(app: Express): void {
 
   app.put('/api/hr/time-off-requests/:id/status', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const [existing] = await db.select().from(timeOffRequests).where(eq(timeOffRequests.id, req.params.id)).limit(1);
+      if (!existing) return res.status(404).json({ message: 'Time-off request not found' });
+      const employee = await storage.getEmployee(existing.employeeId);
+      if (employee && !await assertLocationAccess(req, res, employee.locationId)) return;
       const { status, notes } = req.body;
       const request = await storage.updateTimeOffRequestStatus(req.params.id, status, notes, req.user!.id);
       res.json(request);
@@ -283,7 +314,7 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/hr/tasks', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      const task = await storage.createTask(req.body);
+      const task = await storage.createTask({ ...req.body, locationId: req.query.locationId });
       res.status(201).json(task);
     } catch (error) {
       console.error('Error creating task:', error);
@@ -293,6 +324,9 @@ export function registerHRRoutes(app: Express): void {
 
   app.put('/api/hr/tasks/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const existing = await storage.getTask(req.params.id);
+      if (!existing) return res.status(404).json({ message: 'Task not found' });
+      if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
       const task = await storage.updateTask(req.params.id, req.body);
       res.json(task);
     } catch (error) {
@@ -303,6 +337,9 @@ export function registerHRRoutes(app: Express): void {
 
   app.put('/api/hr/tasks/:id/status', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const existing = await storage.getTask(req.params.id);
+      if (!existing) return res.status(404).json({ message: 'Task not found' });
+      if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
       const task = await storage.updateTaskStatus(req.params.id, req.body.status);
       res.json(task);
     } catch (error) {
@@ -322,8 +359,10 @@ export function registerHRRoutes(app: Express): void {
                te.created_at::text as created_at,
                e.first_name, e.last_name, e.employee_number
         FROM time_entries te
-        LEFT JOIN employees e ON te.employee_id = e.id
-        ${includeHistory === 'true' ? sql`ORDER BY te.created_at DESC LIMIT 100` : sql`WHERE te.status = 'clocked-in' ORDER BY te.created_at DESC LIMIT 50`}
+        INNER JOIN employees e ON te.employee_id = e.id
+        WHERE e.location_id = ${locationId}::uuid
+        ${includeHistory === 'true' ? sql`` : sql`AND te.status = 'clocked-in'`}
+        ORDER BY te.created_at DESC LIMIT ${includeHistory === 'true' ? sql`100` : sql`50`}
       `);
       const manualEntries = manualResult.rows.map((row: any) => ({
         id: row.id, employeeId: row.employee_id,
@@ -383,6 +422,9 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/hr/time-clock/in/:employeeId', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const employee = await storage.getEmployee(req.params.employeeId);
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       const entry = await storage.clockIn(req.params.employeeId, req.body.shiftId);
       res.status(201).json(entry);
     } catch (error) {
@@ -393,8 +435,12 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/hr/time-clock/out/:entryId', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      const entry = await storage.clockOut(req.params.entryId);
-      res.json(entry);
+      const [entry] = await db.select().from(timeEntries).where(eq(timeEntries.id, req.params.entryId)).limit(1);
+      if (!entry) return res.status(404).json({ message: 'Time entry not found' });
+      const employee = await storage.getEmployee(entry.employeeId);
+      if (employee && !await assertLocationAccess(req, res, employee.locationId)) return;
+      const updated = await storage.clockOut(req.params.entryId);
+      res.json(updated);
     } catch (error) {
       console.error('Error clocking out:', error);
       res.status(500).json({ message: 'Failed to clock out' });
@@ -408,6 +454,9 @@ export function registerHRRoutes(app: Express): void {
       const user = await storage.getUser(userId);
       const isOwnerOrAdmin = user?.role === 'admin' || user?.role === 'owner';
       if (!isOwnerOrAdmin && req.params.employeeId !== userId) return res.status(403).json({ message: 'Access denied - can only view your own time entries' });
+      const targetEmployee = await storage.getEmployee(req.params.employeeId);
+      if (!targetEmployee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, targetEmployee.locationId)) return;
       const manualTimeEntries = await storage.getEmployeeTimeEntries(req.params.employeeId);
       const posResult = await db.execute(sql`
         SELECT pt.id, pt.clock_in_at::text as clock_in_at, pt.clock_out_at::text as clock_out_at,
@@ -500,6 +549,10 @@ export function registerHRRoutes(app: Express): void {
   // Time entry CRUD (manager edits)
   app.put('/api/hr/time-entries/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const [existing] = await db.select().from(timeEntries).where(eq(timeEntries.id, req.params.id)).limit(1);
+      if (!existing) return res.status(404).json({ message: 'Time entry not found' });
+      const employee = await storage.getEmployee(existing.employeeId);
+      if (employee && !await assertLocationAccess(req, res, employee.locationId)) return;
       const { clockInTime, clockOutTime, breakStartTime, breakEndTime, notes } = req.body;
       const updateData: any = {};
       if (clockInTime) updateData.clockInTime = new Date(clockInTime);
@@ -517,6 +570,10 @@ export function registerHRRoutes(app: Express): void {
 
   app.delete('/api/hr/time-entries/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const [existing] = await db.select().from(timeEntries).where(eq(timeEntries.id, req.params.id)).limit(1);
+      if (!existing) return res.status(404).json({ message: 'Time entry not found' });
+      const employee = await storage.getEmployee(existing.employeeId);
+      if (employee && !await assertLocationAccess(req, res, employee.locationId)) return;
       await storage.deleteTimeEntry(req.params.id);
       res.json({ message: 'Time entry deleted successfully' });
     } catch (error) {
@@ -530,6 +587,9 @@ export function registerHRRoutes(app: Express): void {
       const userId = req.user!.id;
       const { employeeId, clockInTime, clockOutTime, breakStartTime, breakEndTime, notes } = req.body;
       if (!employeeId || !clockInTime) return res.status(400).json({ message: 'Employee ID and clock in time are required' });
+      const employee = await storage.getEmployee(employeeId);
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       let totalHours = null;
       if (clockOutTime) {
         const diffMs = new Date(clockOutTime).getTime() - new Date(clockInTime).getTime();
@@ -551,9 +611,7 @@ export function registerHRRoutes(app: Express): void {
   // Messaging
   app.get('/api/hr/messages', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      const locationId = req.query.locationId as string;
-      if (locationId && !await assertLocationAccess(req, res, locationId)) return;
-      const messages = await storage.getMessages(locationId);
+      const messages = await storage.getMessages(req.query.locationId as string);
       res.json(messages);
     } catch (error) {
       console.error('Error fetching messages:', error);
@@ -609,7 +667,13 @@ export function registerHRRoutes(app: Express): void {
   // Employee Documents
   app.get('/api/hr/documents', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      const documents = await storage.getEmployeeDocuments(req.query.employeeId as string);
+      const { employeeId } = req.query;
+      if (employeeId) {
+        const employee = await storage.getEmployee(employeeId as string);
+        if (!employee) return res.status(404).json({ message: 'Employee not found' });
+        if (!await assertLocationAccess(req, res, employee.locationId)) return;
+      }
+      const documents = await storage.getEmployeeDocuments(employeeId as string);
       res.json(documents);
     } catch (error) {
       console.error('Error fetching documents:', error);
@@ -629,6 +693,10 @@ export function registerHRRoutes(app: Express): void {
 
   app.put('/api/hr/documents/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const [doc] = await db.select().from(employeeDocuments).where(eq(employeeDocuments.id, req.params.id)).limit(1);
+      if (!doc) return res.status(404).json({ message: 'Document not found' });
+      const employee = await storage.getEmployee(doc.employeeId);
+      if (employee && !await assertLocationAccess(req, res, employee.locationId)) return;
       const document = await storage.updateEmployeeDocument(req.params.id, { ...req.body, reviewedBy: req.user!.id, reviewedAt: new Date() });
       res.json(document);
     } catch (error) {
@@ -639,6 +707,10 @@ export function registerHRRoutes(app: Express): void {
 
   app.delete('/api/hr/documents/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const [doc] = await db.select().from(employeeDocuments).where(eq(employeeDocuments.id, req.params.id)).limit(1);
+      if (!doc) return res.status(404).json({ message: 'Document not found' });
+      const employee = await storage.getEmployee(doc.employeeId);
+      if (employee && !await assertLocationAccess(req, res, employee.locationId)) return;
       await storage.deleteEmployeeDocument(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -726,7 +798,13 @@ export function registerHRRoutes(app: Express): void {
 
   app.get('/api/hr/onboarding', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      const onboarding = await storage.getEmployeeOnboarding(req.query.employeeId as string);
+      const { employeeId } = req.query;
+      if (employeeId) {
+        const employee = await storage.getEmployee(employeeId as string);
+        if (!employee) return res.status(404).json({ message: 'Employee not found' });
+        if (!await assertLocationAccess(req, res, employee.locationId)) return;
+      }
+      const onboarding = await storage.getEmployeeOnboarding(employeeId as string);
       res.json(onboarding);
     } catch (error) {
       console.error('Error fetching employee onboarding:', error);
@@ -746,6 +824,10 @@ export function registerHRRoutes(app: Express): void {
 
   app.put('/api/hr/onboarding/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const [existing] = await db.select().from(employeeOnboarding).where(eq(employeeOnboarding.id, req.params.id)).limit(1);
+      if (!existing) return res.status(404).json({ message: 'Onboarding record not found' });
+      const employee = await storage.getEmployee(existing.employeeId);
+      if (employee && !await assertLocationAccess(req, res, employee.locationId)) return;
       const onboarding = await storage.updateEmployeeOnboarding(req.params.id, req.body);
       res.json(onboarding);
     } catch (error) {
@@ -756,6 +838,10 @@ export function registerHRRoutes(app: Express): void {
 
   app.get('/api/hr/onboarding/:id/steps', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const [existing] = await db.select().from(employeeOnboarding).where(eq(employeeOnboarding.id, req.params.id)).limit(1);
+      if (!existing) return res.status(404).json({ message: 'Onboarding record not found' });
+      const employee = await storage.getEmployee(existing.employeeId);
+      if (employee && !await assertLocationAccess(req, res, employee.locationId)) return;
       const steps = await storage.getEmployeeOnboardingSteps(req.params.id);
       res.json(steps);
     } catch (error) {
@@ -766,6 +852,13 @@ export function registerHRRoutes(app: Express): void {
 
   app.put('/api/hr/onboarding/steps/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const [existingStep] = await db.select().from(employeeOnboardingSteps).where(eq(employeeOnboardingSteps.id, req.params.id)).limit(1);
+      if (!existingStep) return res.status(404).json({ message: 'Onboarding step not found' });
+      const [onboarding] = await db.select().from(employeeOnboarding).where(eq(employeeOnboarding.id, existingStep.employeeOnboardingId)).limit(1);
+      if (onboarding) {
+        const employee = await storage.getEmployee(onboarding.employeeId);
+        if (employee && !await assertLocationAccess(req, res, employee.locationId)) return;
+      }
       const step = await storage.updateEmployeeOnboardingStep(req.params.id, {
         ...req.body, completedBy: req.user!.id,
         completedDate: req.body.status === 'completed' ? new Date() : req.body.completedDate,
@@ -784,17 +877,12 @@ export function registerHRRoutes(app: Express): void {
       const baseUrl = `${req.protocol}://${req.get('host')}`;
       const inviteUrl = `${baseUrl}/onboarding/${token.token}`;
 
-      if (sendMethod === 'email' && email) {
+      if (email) {
         try {
           const { sendEmail } = await import('../email');
           const employee = await storage.getEmployee(employeeId);
           await sendEmail({ to: email, from: 'mequeamaddox@gmail.com', subject: 'Welcome to RestroFlow - Complete Your Onboarding', html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;"><h2>Welcome to RestroFlow!</h2><p>Hi ${employee?.firstName || 'there'},</p><p>Please complete your onboarding by clicking the link below:</p><div style="text-align:center;margin:30px 0;"><a href="${inviteUrl}" style="background-color:#f97316;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;">Complete Onboarding</a></div><p>This invitation will expire in 3 days.</p><p>Best regards,<br>The RestroFlow Team</p></div>` });
         } catch (emailError) { console.error('Failed to send email:', emailError); }
-      } else if (sendMethod === 'text' && phone) {
-        try {
-          const { sendSms, formatPhoneNumber } = await import('../twilioSms');
-          await sendSms({ to: formatPhoneNumber(phone), from: process.env.TWILIO_PHONE_NUMBER || '+1234567890', body: `Welcome to RestroFlow! Complete your onboarding here: ${inviteUrl} - This link expires in 3 days.` });
-        } catch (smsError) { console.error('Failed to send SMS:', smsError); }
       }
 
       res.status(201).json({ token: token.token, inviteUrl, expiresAt: token.expiresAt, message: 'Onboarding invitation created successfully' });
@@ -845,6 +933,9 @@ export function registerHRRoutes(app: Express): void {
     try {
       const { employee, onboardingData } = await storage.getEmployeeWithOnboardingData(req.params.id);
       if (!employee) return res.status(404).json({ error: 'Employee not found' });
+      if (req.params.id !== req.user!.id) {
+        if (!await assertLocationAccess(req, res, employee.locationId)) return;
+      }
       res.json({
         employee,
         onboardingData: onboardingData ? {
@@ -931,6 +1022,7 @@ export function registerHRRoutes(app: Express): void {
       if (user?.role !== 'owner' && user?.role !== 'admin') return res.status(403).json({ error: 'Access denied' });
       const { employee, onboardingData } = await storage.getEmployeeWithOnboardingData(req.params.id);
       if (!employee) return res.status(404).json({ error: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       res.json({
         employee,
         onboardingData: onboardingData ? {

@@ -153,12 +153,13 @@ export const securityHeaders = helmet({
   contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
     directives: {
       defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://*.clerk.com", "https://*.clerk.services"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https:", "https://img.clerk.com"],
-      scriptSrc: ["'self'", "'unsafe-eval'", "https://*.clerk.com", "https://*.clerk.services", "https://clerk.restroflowsolutions.com"],
-      connectSrc: ["'self'", "wss:", "https:", "https://*.clerk.com", "https://*.clerk.services", "https://clerk.restroflowsolutions.com"],
-      frameSrc: ["'self'", "https://*.clerk.com", "https://*.clerk.services", "https://clerk.restroflowsolutions.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://*.clerk.com", "https://*.clerk.services", "https://*.accounts.dev"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "https://*.clerk.com", "https://*.accounts.dev"],
+      imgSrc: ["'self'", "data:", "https:", "https://img.clerk.com", "https://*.accounts.dev"],
+      // clerk.com = live keys; accounts.dev = test keys; both must be allowed
+      scriptSrc: ["'self'", "'unsafe-eval'", "https://*.clerk.com", "https://*.clerk.services", "https://*.accounts.dev", "https://clerk.restroflowsolutions.com"],
+      connectSrc: ["'self'", "wss:", "https:", "https://*.clerk.com", "https://*.clerk.services", "https://*.accounts.dev", "https://clerk.restroflowsolutions.com"],
+      frameSrc: ["'self'", "https://*.clerk.com", "https://*.clerk.services", "https://*.accounts.dev", "https://clerk.restroflowsolutions.com"],
       workerSrc: ["'self'", "blob:"],
     },
   } : false, // Disable CSP in development for Vite compatibility

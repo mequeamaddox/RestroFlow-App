@@ -1,7 +1,7 @@
 # Billing & Subscriptions
 
 Monetization is a freemium model: a free tier with limited OCR and a paid
-**professional** (Core) tier, plus a per-location **HR Management add-on**. Payments
+**core** tier, plus a per-location **HR Management add-on**. Payments
 run through **Stripe**.
 
 > **Enterprise** is no longer a self-serve tier. Larger / multi-unit customers are
@@ -12,12 +12,12 @@ run through **Stripe**.
 | Plan | Price | OCR credits | Notes |
 |------|-------|-------------|-------|
 | `free` | $0 | 5 / month | Default for new owners |
-| `professional` (Core) | $179 / mo | 999 (effectively unlimited) | Unlocks analytics/BI, P&L, all integrations, etc. |
+| `core` (RestroFlow Core) | $179 / mo | 999 (effectively unlimited) | Unlocks analytics/BI, P&L, all integrations, etc. |
 | Enterprise | Custom (contact sales) | — | Not a self-serve plan; handled manually |
 
 HR add-on: **$79 / location / month** on top of the base plan, gated by
 `hrAddonEnabled` on each location. Annual billing applies a 20% discount across the
-board (Professional → $143/mo, HR add-on → $63/location/mo).
+board (Core → $143/mo, HR add-on → $63/location/mo).
 
 ## Files
 
@@ -38,7 +38,7 @@ board (Professional → $143/mo, HR add-on → $63/location/mo).
 Configured via secrets (request these before enabling billing):
 
 - `STRIPE_SECRET_KEY` — server-side API key
-- `STRIPE_PRICE_PROFESSIONAL` — Stripe Price ID for the Professional plan
+- `STRIPE_PRICE_CORE` — Stripe Price ID for the RestroFlow Core plan
 - `STRIPE_WEBHOOK_SECRET` — verifies the `stripe-signature` header
 
 > If `STRIPE_SECRET_KEY` is absent, `isStripeEnabled` is `false`: the subscription
@@ -53,7 +53,7 @@ Webhook signatures are verified using the raw request body captured in
 - **`GET /api/subscriptions/plans`** (`billing.ts`) — static plan + HR add-on catalog
   and `stripeEnabled` flag (no auth required; used by the pricing page).
 - **`POST /api/billing/checkout`** (`billing.ts`) — creates a Stripe Checkout session
-  for the `professional` plan and returns `{ checkoutUrl }`.
+  for the `core` plan and returns `{ checkoutUrl }`.
 - **`POST /api/billing/portal`** (`billing.ts`) — opens the Stripe billing portal for
   the user's `stripeCustomerId`.
 - **`GET /api/subscriptions/current`** (`billing.ts`) — current plan, status, next
@@ -73,13 +73,13 @@ Webhook signatures are verified using the raw request body captured in
 
 `requirePlan(minPlan)` in `billingMiddleware.ts`:
 
-- Plan order: `['free', 'professional']`.
+- Plan order: `['free', 'core']`.
 - Allows the request if the user's `subscriptionPlan` index ≥ `minPlan` index.
 - For any non-free `minPlan`, it additionally requires `subscriptionStatus` to be
   `active` or `past_due`.
 
 Example: analytics routes such as `/api/analytics/profit-loss` and
-`/api/analytics/business-intelligence` are gated with `requirePlan('professional')`.
+`/api/analytics/business-intelligence` are gated with `requirePlan('core')`.
 
 ## OCR credits (freemium)
 

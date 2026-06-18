@@ -62,8 +62,8 @@ const PLAN_FEATURES = {
     color: 'from-slate-500 to-gray-600',
     features: ['1 location', '5 OCR invoice scans/month', 'Basic inventory tracking', 'Recipe costing'],
   },
-  professional: {
-    name: 'Professional',
+  core: {
+    name: 'RestroFlow Core',
     price: 179,
     icon: Star,
     color: 'from-orange-500 to-red-500',
@@ -85,7 +85,7 @@ export default function SubscriptionPage() {
     if (urlParams.get('success') === 'true' && user) {
       toast({
         title: "🎉 Subscription Activated!",
-        description: "Welcome to RestroFlow Professional. Let's set up your account.",
+        description: "Welcome to RestroFlow Core. Let's set up your account.",
       });
       window.history.replaceState({}, document.title, '/subscription');
       queryClient.invalidateQueries({ queryKey: ['/api/subscriptions/current'] });
@@ -123,7 +123,7 @@ export default function SubscriptionPage() {
     },
   });
 
-  const handleCheckout = async (plan: 'professional') => {
+  const handleCheckout = async (plan: 'core') => {
     setCheckoutLoading(plan);
     try {
       const res = await apiRequest('POST', '/api/billing/checkout', { plan });
@@ -388,13 +388,13 @@ export default function SubscriptionPage() {
                 <CardContent className="space-y-2">
                   <Button
                     className="w-full bg-orange-500 hover:bg-orange-600 text-white"
-                    onClick={() => handleCheckout('professional')}
-                    disabled={checkoutLoading === 'professional'}
+                    onClick={() => handleCheckout('core')}
+                    disabled={checkoutLoading === 'core'}
                   >
-                    {checkoutLoading === 'professional'
+                    {checkoutLoading === 'core'
                       ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       : <Star className="h-4 w-4 mr-2" />}
-                    Professional · $179/mo
+                    RestroFlow Core · $179/mo
                   </Button>
                   <Link href="/pricing">
                     <Button variant="ghost" size="sm" className="w-full text-slate-400 hover:text-white text-xs">
@@ -486,10 +486,10 @@ export default function SubscriptionPage() {
                       </li>
                     ))}
                   </ul>
-                  {planId === 'professional' && (
+                  {planId === 'core' && (
                     <Button
                       className="w-full bg-orange-500 hover:bg-orange-600 text-white"
-                      onClick={() => handleCheckout(planId as 'professional')}
+                      onClick={() => handleCheckout(planId as 'core')}
                       disabled={checkoutLoading === planId}
                       size="sm"
                     >

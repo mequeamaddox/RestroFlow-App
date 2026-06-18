@@ -281,7 +281,7 @@ export function PosIntegrationTab() {
   const { currentLocation: selectedLocation } = useLocation();
   const [expandedSales, setExpandedSales] = useState<Set<string>>(new Set());
   const [newIntegration, setNewIntegration] = useState({
-    provider: "spoton" as "spoton" | "clover" | "square" | "toast" | "revel",
+    provider: "spoton" as "spoton" | "clover" | "toast" | "revel",
     name: "",
     merchantId: "",
     credentials: {
@@ -562,7 +562,7 @@ export function PosIntegrationTab() {
         <div>
           <h1 className="text-3xl font-bold">POS Integration</h1>
           <p className="text-muted-foreground">
-            Connect your POS systems (SpotOn, Clover, Square, etc.) for automatic inventory deduction
+            Connect your POS systems (SpotOn, Clover, Toast, Revel) for automatic inventory deduction
           </p>
         </div>
       </div>
@@ -595,7 +595,7 @@ export function PosIntegrationTab() {
                   <Label htmlFor="provider">POS Provider</Label>
                   <Select
                     value={newIntegration.provider}
-                    onValueChange={(value: "spoton" | "clover" | "square" | "toast" | "revel") =>
+                    onValueChange={(value: "spoton" | "clover" | "toast" | "revel") =>
                       setNewIntegration({ ...newIntegration, provider: value })
                     }
                   >
@@ -605,7 +605,6 @@ export function PosIntegrationTab() {
                     <SelectContent>
                       <SelectItem value="spoton">SpotOn POS</SelectItem>
                       <SelectItem value="clover">Clover POS</SelectItem>
-                      <SelectItem value="square">Square POS</SelectItem>
                       <SelectItem value="toast">Toast POS</SelectItem>
                       <SelectItem value="revel">Revel POS</SelectItem>
                     </SelectContent>

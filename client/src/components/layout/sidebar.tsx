@@ -233,10 +233,10 @@ export default function Sidebar({ isMobileMenuOpen = false, setIsMobileMenuOpen 
                   <span>Subscription & Billing</span>
                   <span className={cn(
                     "px-2 py-0.5 text-xs font-bold rounded-full",
-                    subscriptionPlan === 'professional' ? "bg-orange-500/20 text-orange-400" :
+                    subscriptionPlan === 'core' ? "bg-orange-500/20 text-orange-400" :
                     "bg-slate-500/20 text-slate-400"
                   )}>
-                    {subscriptionPlan === 'professional' ? 'PRO' : 'FREE'}
+                    {subscriptionPlan === 'core' ? 'CORE' : 'FREE'}
                   </span>
                 </div>
               </div>

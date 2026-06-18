@@ -40,6 +40,9 @@ coverage
 ehthumbs.db
 Thumbs.db
 
+# Claude Code internal tooling
+.claude/
+
 # IDE
 .vscode/
 .idea/

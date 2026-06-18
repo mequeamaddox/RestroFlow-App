@@ -62,10 +62,11 @@ export function registerAnalyticsRoutes(app: Express): void {
   });
 
   // Business Intelligence
-  app.get('/api/business-intelligence/daily-pnl', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  app.get('/api/business-intelligence/daily-pnl', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const { range, location } = req.query;
-      if (location && !await assertLocationAccess(req, res, location as string)) return;
+      if (!location) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, location as string)) return;
       const pnl = await storage.getDailyPnL(range as string, location as string);
       res.json(pnl);
     } catch (error) {
@@ -74,10 +75,11 @@ export function registerAnalyticsRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/business-intelligence/kpis', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  app.get('/api/business-intelligence/kpis', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const { range, location } = req.query;
-      if (location && !await assertLocationAccess(req, res, location as string)) return;
+      if (!location) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, location as string)) return;
       const kpis = await storage.getKPIMetrics(range as string, location as string);
       res.json(kpis);
     } catch (error) {
@@ -86,10 +88,11 @@ export function registerAnalyticsRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/business-intelligence/profitability', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  app.get('/api/business-intelligence/profitability', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const { range, location } = req.query;
-      if (location && !await assertLocationAccess(req, res, location as string)) return;
+      if (!location) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, location as string)) return;
       const analysis = await storage.getProfitabilityAnalysis(range as string, location as string);
       res.json(analysis);
     } catch (error) {
@@ -98,10 +101,11 @@ export function registerAnalyticsRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/business-intelligence/menu-performance', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  app.get('/api/business-intelligence/menu-performance', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const { range, location } = req.query;
-      if (location && !await assertLocationAccess(req, res, location as string)) return;
+      if (!location) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, location as string)) return;
       const performance = await storage.getMenuPerformance(range as string, location as string);
       res.json(performance);
     } catch (error) {
@@ -110,10 +114,11 @@ export function registerAnalyticsRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/business-intelligence/cost-analysis', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  app.get('/api/business-intelligence/cost-analysis', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const { range, location } = req.query;
-      if (location && !await assertLocationAccess(req, res, location as string)) return;
+      if (!location) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, location as string)) return;
       const analysis = await storage.getCostAnalysis(range as string, location as string);
       res.json(analysis);
     } catch (error) {
@@ -142,36 +147,34 @@ export function registerAnalyticsRoutes(app: Express): void {
       const locationId = req.query.locationId as string;
       if (!locationId) return res.status(400).json({ message: 'Location ID required' });
       if (!await assertLocationAccess(req, res, locationId)) return;
-      const alerts = await storage.getAnalyticsAlerts(locationId);
-      res.json(alerts);
+      res.json([]);
     } catch (error) {
       console.error('Error fetching analytics alerts:', error);
       res.status(500).json({ message: 'Failed to fetch analytics alerts' });
     }
   });
 
-  // Business intelligence summary
-  app.get('/api/analytics/business-intelligence', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  // Business intelligence summary (not yet implemented)
+  app.get('/api/analytics/business-intelligence', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
-      if (locationId && !await assertLocationAccess(req, res, locationId)) return;
+      if (!locationId) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, locationId)) return;
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      const bi = await storage.getBusinessIntelligenceSummary(locationId);
-      res.json(bi);
+      res.json({});
     } catch (error) {
       console.error('Error fetching business intelligence:', error);
       res.status(500).json({ message: 'Failed to fetch business intelligence' });
     }
   });
 
-  // Profit & Loss
-  app.get('/api/analytics/profit-loss', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  // Profit & Loss (not yet implemented)
+  app.get('/api/analytics/profit-loss', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
-      const period = req.query.period as string || 'monthly';
-      if (locationId && !await assertLocationAccess(req, res, locationId)) return;
-      const pnl = await storage.getProfitLoss(locationId, period);
-      res.json(pnl);
+      if (!locationId) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, locationId)) return;
+      res.json([]);
     } catch (error) {
       console.error('Error fetching profit & loss:', error);
       res.status(500).json({ message: 'Failed to fetch profit & loss' });
@@ -182,13 +185,14 @@ export function registerAnalyticsRoutes(app: Express): void {
   app.get('/api/activities', isAuthenticated, async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
-      if (locationId && !await assertLocationAccess(req, res, locationId)) return;
+      if (!locationId) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, locationId)) return;
       const activities: any[] = [];
 
       const recentInventory = await db
         .select({ id: inventoryItems.id, name: inventoryItems.name, createdAt: inventoryItems.createdAt })
         .from(inventoryItems)
-        .where(locationId ? sql`${inventoryItems.locationId} = ${locationId}` : sql`1=1`)
+        .where(sql`${inventoryItems.locationId} = ${locationId}`)
         .orderBy(desc(inventoryItems.createdAt))
         .limit(5);
 
@@ -199,7 +203,7 @@ export function registerAnalyticsRoutes(app: Express): void {
       const recentRecipes = await db
         .select({ id: recipes.id, name: recipes.name, createdAt: recipes.createdAt })
         .from(recipes)
-        .where(locationId ? sql`${recipes.locationId} = ${locationId}` : sql`1=1`)
+        .where(sql`${recipes.locationId} = ${locationId}`)
         .orderBy(desc(recipes.createdAt))
         .limit(3);
 
@@ -216,10 +220,11 @@ export function registerAnalyticsRoutes(app: Express): void {
   });
 
   // Real-time analytics
-  app.get('/api/analytics/realtime', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  app.get('/api/analytics/realtime', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
-      if (locationId && !await assertLocationAccess(req, res, locationId)) return;
+      if (!locationId) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, locationId)) return;
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');
@@ -247,10 +252,11 @@ export function registerAnalyticsRoutes(app: Express): void {
   });
 
   // Sales trend
-  app.get('/api/analytics/sales-trend', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  app.get('/api/analytics/sales-trend', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
-      if (locationId && !await assertLocationAccess(req, res, locationId)) return;
+      if (!locationId) return res.status(400).json({ message: 'Location ID required' });
+      if (!await assertLocationAccess(req, res, locationId)) return;
       const timeRange = req.query.timeRange as string || '7d';
       const days = timeRange === '30d' ? 30 : 7;
 
@@ -279,7 +285,7 @@ export function registerAnalyticsRoutes(app: Express): void {
   });
 
   // Manual BI backfill (owner only)
-  app.post('/api/analytics/backfill-bi', isAuthenticated, requirePlan('professional'), async (req: any, res) => {
+  app.post('/api/analytics/backfill-bi', isAuthenticated, requirePlan('core'), async (req: any, res) => {
     try {
       if (req.user.role !== 'owner') {
         return res.status(403).json({ message: 'Only owners can trigger BI backfill' });

@@ -43,7 +43,7 @@ export const locations = pgTable("locations", {
 });
 
 // Subscription plans enum
-export const subscriptionPlanEnum = pgEnum("subscription_plan", ["free", "professional", "enterprise"]);
+export const subscriptionPlanEnum = pgEnum("subscription_plan", ["free", "core", "enterprise"]);
 export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "inactive", "cancelled", "paused", "past_due"]);
 
 // User storage table (required for Replit Auth)
@@ -921,7 +921,7 @@ export type InsertTeamResource = z.infer<typeof insertTeamResourceSchema>;
 
 
 // Universal POS Integration Tables
-export const posProviderEnum = pgEnum("pos_provider", ["clover", "spoton", "square", "toast", "revel"]);
+export const posProviderEnum = pgEnum("pos_provider", ["clover", "spoton", "toast", "revel"]);
 
 export const posIntegrations = pgTable("pos_integrations", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),

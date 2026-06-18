@@ -47,10 +47,8 @@ appropriate (see notes).
 | `CLERK_SECRET_KEY` | Clerk server auth | **Live** in prod, **test** in dev |
 | `VITE_CLERK_PUBLISHABLE_KEY` | Clerk client auth | Live PK is domain-locked to restroflowsolutions.com — use a test PK in dev. See [AUTH](AUTH.md) |
 | `PII_ENCRYPTION_KEY` | Encrypts SSN/bank PII at rest | **Required.** Use the **same value** in dev and prod if data ever moves between them; changing it makes existing ciphertext unreadable. See [DATABASE](DATABASE.md) |
-| `FIREBASE_SERVICE_ACCOUNT_JSON`, `VITE_FIREBASE_*` | Firebase | |
 | `SENDGRID_API_KEY` | Transactional email | |
-| `STRIPE_SECRET_KEY`, `STRIPE_PRICE_PROFESSIONAL`, `STRIPE_WEBHOOK_SECRET` | Billing | Absent → billing disabled (app still runs). See [BILLING](BILLING.md) |
-| `SQUARE_ACCESS_TOKEN`, `SQUARE_APPLICATION_ID`, `SQUARE_ENVIRONMENT`, `SQUARE_WEBHOOK_SIGNATURE_KEY` | Square POS provider | Absent → Square POS sync disabled (other POS providers still run). See [POS](POS.md) |
+| `STRIPE_SECRET_KEY`, `STRIPE_PRICE_CORE`, `STRIPE_WEBHOOK_SECRET` | Billing | Absent → billing disabled (app still runs). See [BILLING](BILLING.md) |
 | AWS credentials | Object storage + Textract OCR | OCR degrades gracefully if missing. See [OCR](OCR.md) |
 | `SENTRY_DSN` | Error monitoring | Optional; disabled if unset |
 | `ENABLE_SCHEDULERS` | Background POS/analytics jobs | `true` to enable; off by default |

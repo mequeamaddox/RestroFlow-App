@@ -14,6 +14,19 @@ export function useAuth() {
   const { getToken } = useClerkAuth();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // If Clerk hasn't reported isLoaded within 10s, stop blocking the UI
+  const [clerkTimedOut, setClerkTimedOut] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (!isLoaded) {
+        console.warn('useAuth: Clerk did not load within 10s — check VITE_CLERK_PUBLISHABLE_KEY and that the staging domain is authorized in the Clerk dashboard.');
+        setClerkTimedOut(true);
+        setIsLoading(false);
+      }
+    }, 10000);
+    return () => clearTimeout(t);
+  }, []);
 
   const fetchUserData = async () => {
     if (!clerkUser) return null;
@@ -72,9 +85,10 @@ export function useAuth() {
 
   return {
     user,
-    isLoading: !isLoaded || isLoading,
+    isLoading: !clerkTimedOut && (!isLoaded || isLoading),
     isAuthenticated: isLoaded && isSignedIn && !!user,
     isInitialized: isLoaded,
+    clerkTimedOut,
     checkAuth: async () => !!user,
     refreshAuth,
   };

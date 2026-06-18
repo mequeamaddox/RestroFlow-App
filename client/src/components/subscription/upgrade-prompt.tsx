@@ -36,7 +36,7 @@ export function UpgradePrompt({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/user/subscription'] });
       toast({
-        title: "Welcome to Professional! 🎉",
+        title: "Welcome to RestroFlow Core! 🎉",
         description: "You now have unlimited OCR processing with advanced image recognition",
       });
       onOpenChange(false);
@@ -62,13 +62,13 @@ export function UpgradePrompt({
       case 'image_ocr_blocked':
         return {
           title: "Premium Feature Required",
-          description: "Advanced OCR for scanned images requires a Professional subscription",
+          description: "Advanced OCR for scanned images requires a RestroFlow Core subscription",
           icon: <FileImage className="h-6 w-6 text-blue-500" />,
           urgency: "medium"
         };
       default:
         return {
-          title: "Upgrade to Professional",
+          title: "Upgrade to RestroFlow Core",
           description: "Unlock unlimited OCR processing and advanced features",
           icon: <Crown className="h-6 w-6 text-purple-500" />,
           urgency: "low"
@@ -99,7 +99,7 @@ export function UpgradePrompt({
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Current vs Professional Comparison */}
+          {/* Current vs Core Comparison */}
           <div className="grid grid-cols-2 gap-4">
             <Card className="bg-slate-800 border-slate-700">
               <CardHeader className="pb-3">
@@ -121,7 +121,7 @@ export function UpgradePrompt({
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm text-white flex items-center gap-1">
                     <Crown className="h-4 w-4" />
-                    Professional
+                    RestroFlow Core
                   </CardTitle>
                   <Badge className="text-xs bg-orange-500">Upgrade</Badge>
                 </div>
@@ -189,7 +189,7 @@ export function UpgradePrompt({
                     ? "bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
                     : "bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                 } text-white shadow-lg`}
-                onClick={() => upgradeMutation.mutate('professional')}
+                onClick={() => upgradeMutation.mutate('core')}
                 disabled={upgradeMutation.isPending}
               >
                 <Crown className="h-4 w-4" />

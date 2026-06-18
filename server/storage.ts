@@ -194,7 +194,7 @@ export interface IStorage {
   
   // Subscription operations
   updateUserSubscription(userId: string, subscriptionData: { 
-    subscriptionPlan?: 'free' | 'professional';
+    subscriptionPlan?: 'free' | 'core';
     subscriptionStatus?: 'active' | 'inactive' | 'cancelled' | 'past_due';
     stripeCustomerId?: string;
     stripeSubscriptionId?: string;
@@ -449,7 +449,6 @@ export interface IStorage {
   cancelInvitationToken(id: string): Promise<void>;
   expireOldInvitationTokens(): Promise<number>;
 
-  // Local authentication methods (fallback when Firebase Admin SDK is unavailable)
   createLocalAuthUser(user: InsertLocalAuthUser): Promise<LocalAuthUser>;
   getLocalAuthUser(email: string): Promise<LocalAuthUser | null>;
   verifyLocalAuthUser(email: string, password: string): Promise<LocalAuthUser | null>;
@@ -563,8 +562,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Subscription operations
-  async updateUserSubscription(userId: string, subscriptionData: { 
-    subscriptionPlan?: 'free' | 'professional';
+  async updateUserSubscription(userId: string, subscriptionData: {
+    subscriptionPlan?: 'free' | 'core';
     subscriptionStatus?: 'active' | 'inactive' | 'cancelled' | 'past_due';
     stripeCustomerId?: string;
     stripeSubscriptionId?: string;
@@ -617,7 +616,7 @@ export class DatabaseStorage implements IStorage {
     const creditsLimit = user.ocrCreditsLimit || 5;
     
     // Premium users have unlimited OCR access
-    if (plan === 'professional') {
+    if (plan === 'core') {
       return { hasAccess: true, creditsRemaining: 999, plan };
     }
     
@@ -4198,7 +4197,6 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
-  // In-memory storage for local authentication users (for fallback when Firebase Admin SDK is unavailable)
   private localAuthUsers: LocalAuthUser[] = [];
   
   async createLocalAuthUser(user: InsertLocalAuthUser): Promise<LocalAuthUser> {

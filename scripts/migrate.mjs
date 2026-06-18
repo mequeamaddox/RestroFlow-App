@@ -63,6 +63,10 @@ const migrations = [
     name: "employee_onboarding_data.routing_number -> text",
     sql: `ALTER TABLE employee_onboarding_data ALTER COLUMN routing_number TYPE text`,
   },
+  {
+    name: "subscription_plan enum: professional -> core",
+    sql: `DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'professional' AND enumtypid = 'subscription_plan'::regtype) THEN ALTER TYPE subscription_plan RENAME VALUE 'professional' TO 'core'; END IF; END $$`,
+  },
 ];
 
 async function run() {
