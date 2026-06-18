@@ -47,9 +47,9 @@ export function LocationProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Owners and platform_admin always have access; others need the add-on enabled on the location
-  const hasHRAccess = user?.role === 'owner' || user?.role === 'platform_admin' || currentLocation?.hrAddonEnabled || false;
-  const hasBarAccess = user?.role === 'owner' || user?.role === 'platform_admin' || (currentLocation as any)?.barAddonEnabled || false;
+  // Only platform_admin bypasses add-on checks; owners and all others need the add-on enabled on the location
+  const hasHRAccess = user?.role === 'platform_admin' || currentLocation?.hrAddonEnabled || false;
+  const hasBarAccess = user?.role === 'platform_admin' || (currentLocation as any)?.barAddonEnabled || false;
 
   return (
     <LocationContext.Provider value={{
