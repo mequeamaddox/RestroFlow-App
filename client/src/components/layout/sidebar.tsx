@@ -60,8 +60,12 @@ const navigation = [
 ];
 
 const barNavigation = [
-  { name: 'Beverage Menu', href: '/beverage-menu', icon: Martini, badge: 'ADD-ON' },
+  { name: 'Bar Dashboard', href: '/bar/dashboard', icon: BarChart3, badge: 'ADD-ON' },
+  { name: 'Beverage Menu', href: '/beverage-menu', icon: Martini },
   { name: 'Beverage Costing', href: '/beveragecost', icon: Calculator },
+  { name: 'Inventory Counts', href: '/bar/inventory', icon: Package },
+  { name: 'Waste Log', href: '/bar/waste-log', icon: Trash2 },
+  { name: 'Bar Purchase Orders', href: '/bar/purchase-orders', icon: ShoppingCart },
 ];
 
 // Subscription & Billing navigation for owners
