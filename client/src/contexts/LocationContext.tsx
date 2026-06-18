@@ -46,8 +46,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Check if user has HR access (owners always have access, others need HR add-on)
-  const hasHRAccess = user?.role === 'owner' || currentLocation?.hrAddonEnabled || false;
+  // Owners and platform_admin always have access; others need HR add-on enabled on the location
+  const hasHRAccess = user?.role === 'owner' || user?.role === 'platform_admin' || currentLocation?.hrAddonEnabled || false;
 
   return (
     <LocationContext.Provider value={{

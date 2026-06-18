@@ -1,3 +1,4 @@
+import { HRUpgradePrompt } from "@/components/hr/hr-upgrade-prompt";
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ export default function HRPositions() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { hasPermission } = usePermissions();
-  const { currentLocation } = useLocation();
+  const { currentLocation, hasHRAccess } = useLocation();
 
   const { data: positions = [], isLoading } = useQuery<Position[]>({
     queryKey: ['/api/hr/positions', currentLocation?.id],
@@ -126,6 +127,7 @@ export default function HRPositions() {
 
   const canManage = hasPermission(Permission.MANAGE_EMPLOYEES);
 
+  if (!hasHRAccess) return <HRUpgradePrompt locationName={currentLocation?.name || "this location"} />;
   return (
     <div className="max-w-7xl mx-auto p-6">
       <div className="mb-8">

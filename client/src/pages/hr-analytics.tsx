@@ -1,3 +1,4 @@
+import { HRUpgradePrompt } from "@/components/hr/hr-upgrade-prompt";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users, Clock, CheckSquare, Calendar, MessageSquare, TrendingUp, DollarSign, Target, Activity, Briefcase, UserCheck, Timer } from "lucide-react";
@@ -26,7 +27,7 @@ interface HRAnalytics {
 }
 
 export default function HRAnalytics() {
-  const { currentLocation } = useLocation();
+  const { currentLocation, hasHRAccess } = useLocation();
   
   const { data: analytics, isLoading } = useQuery<HRAnalytics>({
     queryKey: ['/api/hr/analytics', currentLocation?.id],
@@ -71,6 +72,7 @@ export default function HRAnalytics() {
   const weeklyLaborCost = analytics?.estimatedWeeklyLabor || 0;
   const monthlyLaborCost = weeklyLaborCost * 4.33;
 
+  if (!hasHRAccess) return <HRUpgradePrompt locationName={currentLocation?.name || "this location"} />;
   return (
     <div className="max-w-7xl mx-auto p-6" data-testid="hr-analytics">
       <div className="mb-8">

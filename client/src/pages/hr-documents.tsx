@@ -1,3 +1,4 @@
+import { HRUpgradePrompt } from "@/components/hr/hr-upgrade-prompt";
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,7 +44,7 @@ interface OnboardingFormData {
 
 export default function HRDocumentsPage() {
   const { toast } = useToast();
-  const { currentLocation } = useLocation();
+  const { currentLocation, hasHRAccess } = useLocation();
   const [selectedEmployee, setSelectedEmployee] = useState<string>('');
   const [documentFilter, setDocumentFilter] = useState<string>('all');
   const [onboardingFilter, setOnboardingFilter] = useState<string>('all');
@@ -211,6 +212,7 @@ export default function HRDocumentsPage() {
     return onb.status === onboardingFilter;
   }) || [];
 
+  if (!hasHRAccess) return <HRUpgradePrompt locationName={currentLocation?.name || "this location"} />;
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

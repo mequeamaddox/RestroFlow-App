@@ -1,3 +1,4 @@
+import { HRUpgradePrompt } from "@/components/hr/hr-upgrade-prompt";
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,7 +47,7 @@ interface TimeEntry {
 export default function HRTimeClock() {
   const { user } = useAuth();
   const { hasPermission } = usePermissions();
-  const { currentLocation } = useLocation();
+  const { currentLocation, hasHRAccess } = useLocation();
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -342,6 +343,7 @@ export default function HRTimeClock() {
     );
   }
 
+  if (!hasHRAccess) return <HRUpgradePrompt locationName={currentLocation?.name || "this location"} />;
   return (
     <div className="max-w-7xl mx-auto p-6">
       <div className="mb-6">

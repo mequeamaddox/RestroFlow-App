@@ -1,3 +1,5 @@
+import { HRUpgradePrompt } from "@/components/hr/hr-upgrade-prompt";
+import { useLocation } from "@/contexts/LocationContext";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,6 +54,7 @@ interface TimeOffRequest {
 }
 
 export default function HRTimeOff() {
+  const { currentLocation, hasHRAccess } = useLocation();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const { toast } = useToast();
@@ -163,6 +166,7 @@ export default function HRTimeOff() {
     );
   }
 
+  if (!hasHRAccess) return <HRUpgradePrompt locationName={currentLocation?.name || "this location"} />;
   return (
     <div className="space-y-6">
       {/* Header */}

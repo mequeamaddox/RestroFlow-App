@@ -1,3 +1,5 @@
+import { HRUpgradePrompt } from "@/components/hr/hr-upgrade-prompt";
+import { useLocation } from "@/contexts/LocationContext";
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +33,7 @@ interface Task {
 }
 
 export default function HRTasks() {
+  const { currentLocation, hasHRAccess } = useLocation();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
@@ -139,6 +142,8 @@ export default function HRTasks() {
   const getTasksByStatus = (status: string) => {
     return tasks.filter((task: Task) => task.status === status).length;
   };
+
+  if (!hasHRAccess) return <HRUpgradePrompt locationName={currentLocation?.name || "this location"} />;
 
   if (isLoading) {
     return (

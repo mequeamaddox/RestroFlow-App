@@ -1,3 +1,4 @@
+import { HRUpgradePrompt } from "@/components/hr/hr-upgrade-prompt";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -61,7 +62,7 @@ export default function HRScheduling() {
   const [editingShift, setEditingShift] = useState<Shift | null>(null);
   const [departmentFilter, setDepartmentFilter] = useState<string>("all");
   const { toast } = useToast();
-  const { currentLocation } = useLocation();
+  const { currentLocation, hasHRAccess } = useLocation();
 
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ['/api/hr/employees', currentLocation?.id],
@@ -421,6 +422,7 @@ export default function HRScheduling() {
     );
   }
 
+  if (!hasHRAccess) return <HRUpgradePrompt locationName={currentLocation?.name || "this location"} />;
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
