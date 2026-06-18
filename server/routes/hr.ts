@@ -877,17 +877,12 @@ export function registerHRRoutes(app: Express): void {
       const baseUrl = `${req.protocol}://${req.get('host')}`;
       const inviteUrl = `${baseUrl}/onboarding/${token.token}`;
 
-      if (sendMethod === 'email' && email) {
+      if (email) {
         try {
           const { sendEmail } = await import('../email');
           const employee = await storage.getEmployee(employeeId);
           await sendEmail({ to: email, from: 'mequeamaddox@gmail.com', subject: 'Welcome to RestroFlow - Complete Your Onboarding', html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;"><h2>Welcome to RestroFlow!</h2><p>Hi ${employee?.firstName || 'there'},</p><p>Please complete your onboarding by clicking the link below:</p><div style="text-align:center;margin:30px 0;"><a href="${inviteUrl}" style="background-color:#f97316;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;">Complete Onboarding</a></div><p>This invitation will expire in 3 days.</p><p>Best regards,<br>The RestroFlow Team</p></div>` });
         } catch (emailError) { console.error('Failed to send email:', emailError); }
-      } else if (sendMethod === 'text' && phone) {
-        try {
-          const { sendSms, formatPhoneNumber } = await import('../twilioSms');
-          await sendSms({ to: formatPhoneNumber(phone), from: process.env.TWILIO_PHONE_NUMBER || '+1234567890', body: `Welcome to RestroFlow! Complete your onboarding here: ${inviteUrl} - This link expires in 3 days.` });
-        } catch (smsError) { console.error('Failed to send SMS:', smsError); }
       }
 
       res.status(201).json({ token: token.token, inviteUrl, expiresAt: token.expiresAt, message: 'Onboarding invitation created successfully' });
