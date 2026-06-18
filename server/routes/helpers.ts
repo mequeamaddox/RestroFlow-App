@@ -88,9 +88,7 @@ export const requireHRAccess = async (req: any, res: any, next: any) => {
     }
     // Verify tenant ownership/assignment before any other check
     if (!await assertLocationAccess(req, res, locationId)) return;
-    // Owners control billing and bypass the hrAddonEnabled gate (they're the ones who enable it)
-    if (req.user?.role === 'owner') return next();
-    // Non-owners must be on a location that has the HR add-on active
+    // All roles (including owners) must have the HR add-on active on this location
     const locations = await storage.getLocations();
     const location = locations.find((loc: any) => loc.id === locationId);
     if (!location?.hrAddonEnabled) {

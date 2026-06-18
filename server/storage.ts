@@ -204,6 +204,7 @@ export interface IStorage {
   }): Promise<User>;
   getSubscriptionByUser(userId: string): Promise<User | undefined>;
   updateOcrCreditsUsed(userId: string, creditsUsed: number): Promise<User>;
+  claimOcrCredit(userId: string): Promise<boolean>;
   checkOcrAccess(userId: string): Promise<{ hasAccess: boolean; creditsRemaining: number; plan: string }>;
   resetOcrCredits(userId: string): Promise<User>;
 
@@ -589,6 +590,17 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId))
       .returning();
     return user;
+  }
+
+  async claimOcrCredit(userId: string): Promise<boolean> {
+    const result = await db.update(users)
+      .set({ ocrCreditsUsed: sql`ocr_credits_used + 1`, updatedAt: new Date() })
+      .where(and(
+        eq(users.id, userId),
+        sql`ocr_credits_used < ocr_credits_limit`,
+      ))
+      .returning({ id: users.id });
+    return result.length > 0;
   }
 
   async checkOcrAccess(userId: string): Promise<{ hasAccess: boolean; creditsRemaining: number; plan: string }> {
