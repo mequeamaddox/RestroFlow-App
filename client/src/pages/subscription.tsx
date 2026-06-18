@@ -284,7 +284,7 @@ export default function SubscriptionPage() {
               )}
 
               {/* HR Add-on */}
-              {(subscription?.hrAddonLocations ?? 0) > 0 && (
+              {(subscription?.hrAddonLocations ?? 0) > 0 ? (
                 <div className="p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Users className="h-4 w-4 text-blue-400" />
@@ -292,6 +292,17 @@ export default function SubscriptionPage() {
                     <span className="text-xs text-slate-400">{hrEnabledLocations.map(l => l.name).join(', ')}</span>
                   </div>
                   <Badge className="bg-blue-600">{subscription?.hrAddonLocations} location{(subscription?.hrAddonLocations ?? 0) > 1 ? 's' : ''}</Badge>
+                </div>
+              ) : currentPlan !== 'free' && (
+                <div className="p-3 bg-slate-700/40 border border-slate-600/50 rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-slate-400" />
+                    <div>
+                      <span className="text-sm text-slate-300 font-medium">HR & Employee Management Add-on</span>
+                      <p className="text-xs text-slate-500">Scheduling, time clock, messaging, documents, payroll</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="border-blue-600 text-blue-400 text-xs whitespace-nowrap">$79/location/mo</Badge>
                 </div>
               )}
 

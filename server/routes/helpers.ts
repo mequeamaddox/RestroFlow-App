@@ -103,7 +103,7 @@ export const requireHRAccess = async (req: any, res: any, next: any) => {
       return res.status(400).json({ message: 'Location ID required', code: 'LOCATION_REQUIRED' });
     }
     const user = req.user;
-    if (user?.role === 'owner' || user?.role === 'platform_admin') return next();
+    if (user?.role === 'platform_admin') return next();
     const locs = await storage.getLocations();
     const location = locs.find((loc: any) => loc.id === locationId);
     if (!location) {
@@ -125,12 +125,12 @@ export const requireHRAccess = async (req: any, res: any, next: any) => {
 
 export const requireBarAccess = async (req: any, res: any, next: any) => {
   try {
-    const locationId = req.query.locationId as string;
+    const locationId = (req.query.locationId || req.body?.locationId) as string;
     if (!locationId) {
       return res.status(400).json({ message: 'Location ID required', code: 'LOCATION_REQUIRED' });
     }
     const user = req.user;
-    if (user?.role === 'owner' || user?.role === 'platform_admin') return next();
+    if (user?.role === 'platform_admin') return next();
     const locs = await storage.getLocations();
     const location = locs.find((loc: any) => loc.id === locationId);
     if (!location) {

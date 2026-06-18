@@ -118,6 +118,53 @@ const migrations: { name: string; sql: string }[] = [
     )`,
   },
   {
+    name: "onboarding_step enum",
+    sql: `DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'onboarding_step') THEN
+        CREATE TYPE onboarding_step AS ENUM ('restaurant_info', 'departments', 'positions', 'hr_addon', 'employee_invitations');
+      END IF;
+    END $$`,
+  },
+  {
+    name: "owner_onboarding_status enum",
+    sql: `DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'owner_onboarding_status') THEN
+        CREATE TYPE owner_onboarding_status AS ENUM ('not_started', 'in_progress', 'completed', 'skipped');
+      END IF;
+    END $$`,
+  },
+  {
+    name: "owner_onboarding table",
+    sql: `CREATE TABLE IF NOT EXISTS owner_onboarding (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id varchar NOT NULL REFERENCES users(id),
+      is_completed boolean DEFAULT false,
+      current_step onboarding_step DEFAULT 'restaurant_info',
+      total_steps integer DEFAULT 5,
+      completed_steps integer DEFAULT 0,
+      skipped_steps jsonb DEFAULT '[]',
+      started_at timestamp DEFAULT now(),
+      completed_at timestamp,
+      data jsonb DEFAULT '{}',
+      created_at timestamp DEFAULT now(),
+      updated_at timestamp DEFAULT now()
+    )`,
+  },
+  {
+    name: "owner_onboarding_steps table",
+    sql: `CREATE TABLE IF NOT EXISTS owner_onboarding_steps (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      onboarding_id uuid NOT NULL REFERENCES owner_onboarding(id) ON DELETE CASCADE,
+      step_name onboarding_step NOT NULL,
+      status owner_onboarding_status DEFAULT 'not_started',
+      step_data jsonb,
+      started_at timestamp,
+      completed_at timestamp,
+      created_at timestamp DEFAULT now(),
+      updated_at timestamp DEFAULT now()
+    )`,
+  },
+  {
     name: "locations fk cascade — add ON DELETE CASCADE to all FKs referencing locations(id)",
     sql: `
       DO $$

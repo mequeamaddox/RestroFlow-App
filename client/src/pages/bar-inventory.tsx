@@ -41,8 +41,8 @@ interface InventoryItem {
 }
 
 interface CountSession {
-  id: number;
-  locationId: number;
+  id: string;
+  locationId: string;
   countedBy: string;
   countDate: string;
   shift: Shift;
@@ -309,7 +309,7 @@ function DetailView({
 
 interface CountModeProps {
   barItems: InventoryItem[];
-  locationId: number;
+  locationId: string;
   onSaved: () => void;
   onCancel: () => void;
 }
@@ -516,7 +516,7 @@ export default function BarInventoryPage() {
 
   // View state
   const [mode, setMode] = useState<"history" | "count">("history");
-  const [selectedCountId, setSelectedCountId] = useState<number | null>(null);
+  const [selectedCountId, setSelectedCountId] = useState<string | null>(null);
 
   // Queries — must be called before the hasBarAccess guard
   const { data: allInventoryItems = [], isLoading: inventoryLoading } = useQuery<InventoryItem[]>({

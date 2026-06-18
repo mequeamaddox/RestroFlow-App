@@ -159,16 +159,26 @@ export default function Onboarding() {
     }
   }, [user, setLocation, toast]);
 
+  interface OnboardingProgress {
+    userId: string;
+    isCompleted: boolean;
+    currentStep: string;
+    completedSteps: number;
+    totalSteps: number;
+    data: Record<string, any>;
+  }
+
   // Get onboarding progress
-  const { data: progress, isLoading: isLoadingProgress } = useQuery({
+  const { data: progress, isLoading: isLoadingProgress } = useQuery<OnboardingProgress>({
     queryKey: ['/api/owner-onboarding/progress'],
     enabled: isOwnerLevel(user?.role)
   });
 
   // Start onboarding mutation
-  const startOnboardingMutation = useMutation({
+  const startOnboardingMutation = useMutation<OnboardingProgress>({
     mutationFn: async () => {
-      return await apiRequest('POST', '/api/owner-onboarding/start');
+      const res = await apiRequest('POST', '/api/owner-onboarding/start');
+      return res.json();
     },
     onSuccess: (data) => {
       setOnboardingData(data.data || {});
@@ -180,9 +190,10 @@ export default function Onboarding() {
   // Update step mutation
   const updateStepMutation = useMutation({
     mutationFn: async ({ stepName, stepData, status = 'completed' }: { stepName: string; stepData: any; status?: string }) => {
-      return await apiRequest('PUT', '/api/owner-onboarding/step', { stepName, stepData, status });
+      const res = await apiRequest('PUT', '/api/owner-onboarding/step', { stepName, stepData, status });
+      return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/owner-onboarding/progress'] });
       toast({
         title: "Progress Saved",
@@ -194,7 +205,8 @@ export default function Onboarding() {
   // Complete onboarding mutation
   const completeOnboardingMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest('POST', '/api/owner-onboarding/complete');
+      const res = await apiRequest('POST', '/api/owner-onboarding/complete');
+      return res.json();
     },
     onSuccess: () => {
       toast({
