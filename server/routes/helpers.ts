@@ -1,6 +1,7 @@
 import { createClerkClient } from '@clerk/express';
 import { requireAuth } from '../clerkAuth';
 import { storage } from '../storage';
+import { assertLocationAccess } from '../securityMiddleware';
 import multer from 'multer';
 
 export const clerkClient = createClerkClient({
@@ -85,14 +86,14 @@ export const requireHRAccess = async (req: any, res: any, next: any) => {
     if (!locationId) {
       return res.status(400).json({ message: 'Location ID required', code: 'LOCATION_REQUIRED' });
     }
-    const user = req.user;
-    if (user?.role === 'owner') return next();
+    // Verify tenant ownership/assignment before any other check
+    if (!await assertLocationAccess(req, res, locationId)) return;
+    // Owners control billing and bypass the hrAddonEnabled gate (they're the ones who enable it)
+    if (req.user?.role === 'owner') return next();
+    // Non-owners must be on a location that has the HR add-on active
     const locations = await storage.getLocations();
     const location = locations.find((loc: any) => loc.id === locationId);
-    if (!location) {
-      return res.status(404).json({ message: 'Location not found' });
-    }
-    if (!location.hrAddonEnabled) {
+    if (!location?.hrAddonEnabled) {
       return res.status(403).json({
         message: 'HR add-on not enabled for this location',
         code: 'HR_ADDON_REQUIRED',

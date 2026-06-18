@@ -1,29 +1,12 @@
 import type { Express } from 'express';
 import { storage } from '../storage';
-import { isAuthenticated, clerkClient, mapPositionToRole } from './helpers';
+import { isAuthenticated, clerkClient, mapPositionToRole, requireHRAccess } from './helpers';
 import { requireLocationAccess, assertLocationAccess } from '../securityMiddleware';
 import { requirePermission, requireAnyPermission, Permission } from '../permissions';
 import { teamResources, insertTeamResourceSchema } from '@shared/schema';
 import { db } from '../db';
 import { eq, desc, sql } from 'drizzle-orm';
 
-// HR access middleware (checks hrAddonEnabled on location)
-async function requireHRAccess(req: any, res: any, next: any) {
-  try {
-    const locationId = req.query.locationId as string;
-    if (!locationId) return res.status(400).json({ message: 'Location ID required', code: 'LOCATION_REQUIRED' });
-    const user = req.user;
-    if (user?.role === 'owner') return next();
-    const locations = await storage.getLocations();
-    const location = locations.find((loc: any) => loc.id === locationId);
-    if (!location) return res.status(404).json({ message: 'Location not found' });
-    if (!location.hrAddonEnabled) return res.status(403).json({ message: 'HR add-on not enabled for this location', code: 'HR_ADDON_REQUIRED', upgradeUrl: '/upgrade' });
-    next();
-  } catch (error) {
-    console.error('Error checking HR access:', error);
-    res.status(500).json({ message: 'Failed to verify HR access' });
-  }
-}
 
 export function registerHRRoutes(app: Express): void {
   // Departments
@@ -47,7 +30,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.put('/api/hr/departments/:id', isAuthenticated, async (req, res) => {
+  app.put('/api/hr/departments/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const department = await storage.updateDepartment(req.params.id, req.body);
       res.json(department);
@@ -57,7 +40,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.delete('/api/hr/departments/:id', isAuthenticated, async (req, res) => {
+  app.delete('/api/hr/departments/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       await storage.deleteDepartment(req.params.id);
       res.status(204).send();
@@ -88,7 +71,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.delete('/api/hr/positions/:id', isAuthenticated, async (req, res) => {
+  app.delete('/api/hr/positions/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       await storage.deletePosition(req.params.id);
       res.status(204).send();
@@ -177,7 +160,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.put('/api/hr/employees/:id', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
+  app.put('/api/hr/employees/:id', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), requireHRAccess, async (req, res) => {
     try {
       const employee = await storage.updateEmployee(req.params.id, req.body);
       res.json(employee);
@@ -187,7 +170,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.delete('/api/hr/employees/:id', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
+  app.delete('/api/hr/employees/:id', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), requireHRAccess, async (req, res) => {
     try {
       await storage.deleteEmployee(req.params.id);
       res.json({ message: 'Employee deleted successfully' });
@@ -218,7 +201,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.put('/api/hr/shifts/:id', isAuthenticated, async (req, res) => {
+  app.put('/api/hr/shifts/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const shift = await storage.updateShift(req.params.id, req.body);
       res.json(shift);
@@ -228,7 +211,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.delete('/api/hr/shifts/:id', isAuthenticated, async (req, res) => {
+  app.delete('/api/hr/shifts/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       await storage.deleteShift(req.params.id);
       res.status(204).send();
@@ -249,7 +232,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/hr/time-off-requests', isAuthenticated, async (req, res) => {
+  app.post('/api/hr/time-off-requests', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const request = await storage.createTimeOffRequest(req.body);
       res.status(201).json(request);
@@ -259,7 +242,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.put('/api/hr/time-off-requests/:id/status', isAuthenticated, async (req, res) => {
+  app.put('/api/hr/time-off-requests/:id/status', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const { status, notes } = req.body;
       const request = await storage.updateTimeOffRequestStatus(req.params.id, status, notes, req.user!.id);
@@ -295,7 +278,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/hr/tasks', isAuthenticated, async (req, res) => {
+  app.post('/api/hr/tasks', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const task = await storage.createTask(req.body);
       res.status(201).json(task);
@@ -305,7 +288,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.put('/api/hr/tasks/:id', isAuthenticated, async (req, res) => {
+  app.put('/api/hr/tasks/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const task = await storage.updateTask(req.params.id, req.body);
       res.json(task);
@@ -315,7 +298,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.put('/api/hr/tasks/:id/status', isAuthenticated, async (req, res) => {
+  app.put('/api/hr/tasks/:id/status', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const task = await storage.updateTaskStatus(req.params.id, req.body.status);
       res.json(task);
@@ -395,7 +378,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/hr/time-clock/in/:employeeId', isAuthenticated, async (req, res) => {
+  app.post('/api/hr/time-clock/in/:employeeId', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const entry = await storage.clockIn(req.params.employeeId, req.body.shiftId);
       res.status(201).json(entry);
@@ -405,7 +388,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/hr/time-clock/out/:entryId', isAuthenticated, async (req, res) => {
+  app.post('/api/hr/time-clock/out/:entryId', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const entry = await storage.clockOut(req.params.entryId);
       res.json(entry);
@@ -512,7 +495,7 @@ export function registerHRRoutes(app: Express): void {
   });
 
   // Time entry CRUD (manager edits)
-  app.put('/api/hr/time-entries/:id', isAuthenticated, async (req, res) => {
+  app.put('/api/hr/time-entries/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const { clockInTime, clockOutTime, breakStartTime, breakEndTime, notes } = req.body;
       const updateData: any = {};
@@ -529,7 +512,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.delete('/api/hr/time-entries/:id', isAuthenticated, async (req, res) => {
+  app.delete('/api/hr/time-entries/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       await storage.deleteTimeEntry(req.params.id);
       res.json({ message: 'Time entry deleted successfully' });
@@ -539,7 +522,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/hr/time-entries/manual', isAuthenticated, async (req, res) => {
+  app.post('/api/hr/time-entries/manual', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const userId = req.user!.id;
       const { employeeId, clockInTime, clockOutTime, breakStartTime, breakEndTime, notes } = req.body;
@@ -586,7 +569,7 @@ export function registerHRRoutes(app: Express): void {
   });
 
   // Team Resources
-  app.get('/api/hr/team-resources', isAuthenticated, async (_req, res) => {
+  app.get('/api/hr/team-resources', isAuthenticated, requireHRAccess, async (_req, res) => {
     try {
       const resources = await db.select().from(teamResources).orderBy(desc(teamResources.uploadedAt));
       res.json(resources);
@@ -596,7 +579,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/hr/team-resources', isAuthenticated, async (req, res) => {
+  app.post('/api/hr/team-resources', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const resourceData = insertTeamResourceSchema.parse({ ...req.body, uploadedBy: req.user!.id });
       const [resource] = await db.insert(teamResources).values(resourceData).returning();
@@ -607,7 +590,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.delete('/api/hr/team-resources/:id', isAuthenticated, async (req, res) => {
+  app.delete('/api/hr/team-resources/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       await db.delete(teamResources).where(eq(teamResources.id, req.params.id));
       res.status(204).send();
@@ -618,7 +601,7 @@ export function registerHRRoutes(app: Express): void {
   });
 
   // Employee Documents
-  app.get('/api/hr/documents', isAuthenticated, async (req, res) => {
+  app.get('/api/hr/documents', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const documents = await storage.getEmployeeDocuments(req.query.employeeId as string);
       res.json(documents);
@@ -628,7 +611,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/hr/documents', isAuthenticated, async (req, res) => {
+  app.post('/api/hr/documents', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const document = await storage.createEmployeeDocument({ ...req.body, uploadedBy: req.user!.id });
       res.status(201).json(document);
@@ -638,7 +621,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.put('/api/hr/documents/:id', isAuthenticated, async (req, res) => {
+  app.put('/api/hr/documents/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const document = await storage.updateEmployeeDocument(req.params.id, { ...req.body, reviewedBy: req.user!.id, reviewedAt: new Date() });
       res.json(document);
@@ -648,7 +631,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.delete('/api/hr/documents/:id', isAuthenticated, async (req, res) => {
+  app.delete('/api/hr/documents/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       await storage.deleteEmployeeDocument(req.params.id);
       res.status(204).send();
@@ -704,7 +687,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/hr/onboarding/templates/:id/steps', isAuthenticated, async (req, res) => {
+  app.get('/api/hr/onboarding/templates/:id/steps', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const steps = await storage.getOnboardingSteps(req.params.id);
       res.json(steps);
@@ -714,7 +697,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/hr/onboarding/steps', isAuthenticated, async (req, res) => {
+  app.post('/api/hr/onboarding/steps', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const step = await storage.createOnboardingStep(req.body);
       res.status(201).json(step);
@@ -725,7 +708,7 @@ export function registerHRRoutes(app: Express): void {
   });
 
   // Employee Onboarding Progress
-  app.get('/api/hr/onboarding/analytics', isAuthenticated, async (req, res) => {
+  app.get('/api/hr/onboarding/analytics', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const analytics = await storage.getOnboardingProgress(req.query.locationId as string);
       res.json(analytics);
@@ -735,7 +718,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/hr/onboarding', isAuthenticated, async (req, res) => {
+  app.get('/api/hr/onboarding', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const onboarding = await storage.getEmployeeOnboarding(req.query.employeeId as string);
       res.json(onboarding);
@@ -745,7 +728,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/hr/onboarding', isAuthenticated, async (req, res) => {
+  app.post('/api/hr/onboarding', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const onboarding = await storage.createEmployeeOnboarding(req.body);
       res.status(201).json(onboarding);
@@ -755,7 +738,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.put('/api/hr/onboarding/:id', isAuthenticated, async (req, res) => {
+  app.put('/api/hr/onboarding/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const onboarding = await storage.updateEmployeeOnboarding(req.params.id, req.body);
       res.json(onboarding);
@@ -765,7 +748,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/hr/onboarding/:id/steps', isAuthenticated, async (req, res) => {
+  app.get('/api/hr/onboarding/:id/steps', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const steps = await storage.getEmployeeOnboardingSteps(req.params.id);
       res.json(steps);
@@ -775,7 +758,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.put('/api/hr/onboarding/steps/:id', isAuthenticated, async (req, res) => {
+  app.put('/api/hr/onboarding/steps/:id', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const step = await storage.updateEmployeeOnboardingStep(req.params.id, {
         ...req.body, completedBy: req.user!.id,
