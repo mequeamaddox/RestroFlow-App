@@ -67,6 +67,10 @@ const migrations: { name: string; sql: string }[] = [
       updated_by varchar
     )`,
   },
+  {
+    name: "locations.bar_addon_enabled",
+    sql: "ALTER TABLE locations ADD COLUMN IF NOT EXISTS bar_addon_enabled boolean DEFAULT false",
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {
