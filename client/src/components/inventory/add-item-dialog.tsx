@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { useLocation } from "@/contexts/LocationContext";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ScanLine, Camera, Calculator, AlertCircle } from "lucide-react";
+import { Calculator, AlertCircle } from "lucide-react";
 
 interface AddItemDialogProps {
   isOpen: boolean;
@@ -29,7 +29,6 @@ interface AddItemDialogProps {
 export default function AddItemDialog({ isOpen, onClose, onSuccess, categories, vendors, editingItem, onDelete }: AddItemDialogProps) {
   const { toast } = useToast();
   const { currentLocation } = useLocation();
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const form = useForm<InsertInventoryItem>({
@@ -197,15 +196,6 @@ export default function AddItemDialog({ isOpen, onClose, onSuccess, categories, 
 
   const onSubmit = (data: InsertInventoryItem) => {
     createItemMutation.mutate(data);
-  };
-
-  const handleBarcodeScanned = (barcode: string) => {
-    form.setValue("barcode", barcode);
-    setIsScannerOpen(false);
-    toast({
-      title: "Barcode Scanned",
-      description: `Barcode ${barcode} added to the form`,
-    });
   };
 
   const handleClose = () => {
@@ -697,20 +687,9 @@ export default function AddItemDialog({ isOpen, onClose, onSuccess, categories, 
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Barcode (Optional)</FormLabel>
-                  <div className="flex space-x-2">
-                    <FormControl>
-                      <Input placeholder="Scan or enter barcode" {...field} value={field.value ?? ''} className="flex-1" />
-                    </FormControl>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsScannerOpen(true)}
-                      className="px-3"
-                    >
-                      <Camera className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  <FormControl>
+                    <Input placeholder="Enter barcode" {...field} value={field.value ?? ''} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
