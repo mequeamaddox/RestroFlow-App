@@ -79,8 +79,6 @@ const hrNavigation = [
   { name: 'Messaging', href: '/hr/messaging', icon: MessageSquare },
 ];
 
-const ownerOnlyHRNavigation: typeof hrNavigation = [];
-
 const employeeNavigation = [
   { name: 'My Dashboard', href: '/employee/dashboard', icon: Home },
   { name: 'My Documents', href: '/employee/documents', icon: FileText },
@@ -115,14 +113,6 @@ export default function Sidebar({ isMobileMenuOpen = false, setIsMobileMenuOpen 
     enabled: !!userId && isEmployee,
   });
   const isHREnabled = hasPermission(Permission.VIEW_ALL_EMPLOYEES) || hasPermission(Permission.MANAGE_EMPLOYEES);
-  
-  // Get user subscription status for badges
-  const { data: userProfile } = useQuery({
-    queryKey: ['/api/auth/me'],
-    enabled: !!user && !isEmployee
-  });
-  const subscriptionPlan = (userProfile as any)?.user?.subscriptionPlan || 'free';
-  const subscriptionStatus = (userProfile as any)?.user?.subscriptionStatus || 'inactive';
   
   // Use external state if provided, otherwise use internal state
   const mobileMenuOpen = isMobileMenuOpen || internalMobileMenuOpen;
@@ -226,55 +216,6 @@ export default function Sidebar({ isMobileMenuOpen = false, setIsMobileMenuOpen 
             </div>
           )}
           
-          {/* Subscription & Billing - Only show for owners */}
-          {isOwner && (
-            <div className="mb-6">
-              <div className="px-6 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                <div className="flex items-center justify-between">
-                  <span>Subscription & Billing</span>
-                  <span className={cn(
-                    "px-2 py-0.5 text-xs font-bold rounded-full",
-                    subscriptionPlan === 'core' ? "bg-orange-500/20 text-orange-400" :
-                    "bg-slate-500/20 text-slate-400"
-                  )}>
-                    {subscriptionPlan === 'core' ? 'CORE' : 'FREE'}
-                  </span>
-                </div>
-              </div>
-              <ul className="space-y-1">
-                {subscriptionNavigation.map((item) => {
-                  const isActive = currentPath === item.href;
-                  const Icon = item.icon;
-                  
-                  return (
-                    <li key={item.name}>
-                      <Link href={item.href}>
-                        <div
-                          className={cn(
-                            "flex items-center px-6 py-3 text-slate-300 hover:bg-slate-700/50 hover:text-white transition-all duration-200 cursor-pointer rounded-r-2xl mr-4",
-                            isActive && "bg-gradient-to-r from-purple-500/20 to-pink-500/20 border-r-4 border-purple-400 text-white"
-                          )}
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          <Icon className="h-5 w-5 mr-3" />
-                          <span className="flex-1">{item.name}</span>
-                          {(item as any).badge && (
-                            <span className="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-purple-500/20 text-purple-400">
-                              {(item as any).badge}
-                            </span>
-                          )}
-                          {subscriptionStatus === 'active' && (
-                            <div className="w-2 h-2 bg-green-400 rounded-full ml-2"></div>
-                          )}
-                        </div>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
-
           {/* Core Platform - Show limited view for employees, full view for managers+ */}
           {!isEmployee && (
             <div className="mb-6">
@@ -395,40 +336,30 @@ export default function Sidebar({ isMobileMenuOpen = false, setIsMobileMenuOpen 
             </div>
           )}
 
-          {/* Owner-Only HR Features */}
-          {isOwner && isHREnabled && (
+          {/* Subscription & Billing - Only show for owners */}
+          {isOwner && (
             <div className="mb-6">
               <div className="px-6 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                <div className="flex items-center justify-between">
-                  <span>Owner Access</span>
-                  <span className="bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full text-xs font-bold">
-                    RESTRICTED
-                  </span>
-                </div>
+                Subscription & Billing
               </div>
               <ul className="space-y-1">
-                {ownerOnlyHRNavigation.map((item) => {
+                {subscriptionNavigation.map((item) => {
                   const isActive = currentPath === item.href;
                   const Icon = item.icon;
-                  
                   return (
                     <li key={item.name}>
                       <Link href={item.href}>
                         <div
                           className={cn(
                             "flex items-center px-6 py-3 text-slate-300 hover:bg-slate-700/50 hover:text-white transition-all duration-200 cursor-pointer rounded-r-2xl mr-4",
-                            isActive && "bg-gradient-to-r from-red-500/20 to-orange-500/20 border-r-4 border-red-400 text-white"
+                            isActive && "bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-r-4 border-yellow-400 text-white"
                           )}
                           onClick={() => setMobileMenuOpen(false)}
                         >
                           <Icon className="h-5 w-5 mr-3" />
                           <span className="flex-1">{item.name}</span>
                           {(item as any).badge && (
-                            <span className={cn(
-                              "ml-2 px-2 py-0.5 text-xs font-bold rounded-full",
-                              (item as any).badge === 'OWNER' ? "bg-red-500/20 text-red-400" :
-                              "bg-gray-500/20 text-gray-400"
-                            )}>
+                            <span className="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-yellow-500/20 text-yellow-400">
                               {(item as any).badge}
                             </span>
                           )}
