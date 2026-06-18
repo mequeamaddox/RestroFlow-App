@@ -147,38 +147,34 @@ export function registerAnalyticsRoutes(app: Express): void {
       const locationId = req.query.locationId as string;
       if (!locationId) return res.status(400).json({ message: 'Location ID required' });
       if (!await assertLocationAccess(req, res, locationId)) return;
-      const alerts = await storage.getAnalyticsAlerts(locationId);
-      res.json(alerts);
+      res.json([]);
     } catch (error) {
       console.error('Error fetching analytics alerts:', error);
       res.status(500).json({ message: 'Failed to fetch analytics alerts' });
     }
   });
 
-  // Business intelligence summary
+  // Business intelligence summary (not yet implemented)
   app.get('/api/analytics/business-intelligence', isAuthenticated, requirePlan('professional'), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       if (!locationId) return res.status(400).json({ message: 'Location ID required' });
       if (!await assertLocationAccess(req, res, locationId)) return;
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      const bi = await storage.getBusinessIntelligenceSummary(locationId);
-      res.json(bi);
+      res.json({});
     } catch (error) {
       console.error('Error fetching business intelligence:', error);
       res.status(500).json({ message: 'Failed to fetch business intelligence' });
     }
   });
 
-  // Profit & Loss
+  // Profit & Loss (not yet implemented)
   app.get('/api/analytics/profit-loss', isAuthenticated, requirePlan('professional'), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
-      const period = req.query.period as string || 'monthly';
       if (!locationId) return res.status(400).json({ message: 'Location ID required' });
       if (!await assertLocationAccess(req, res, locationId)) return;
-      const pnl = await storage.getProfitLoss(locationId, period);
-      res.json(pnl);
+      res.json([]);
     } catch (error) {
       console.error('Error fetching profit & loss:', error);
       res.status(500).json({ message: 'Failed to fetch profit & loss' });
