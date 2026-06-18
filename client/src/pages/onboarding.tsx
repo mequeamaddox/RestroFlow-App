@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -145,9 +145,11 @@ export default function Onboarding() {
   const [onboardingData, setOnboardingData] = useState<OnboardingData>({});
   const [isCompleting, setIsCompleting] = useState(false);
   
+  const isOwnerLevel = (role?: string) => role === 'owner' || role === 'platform_admin';
+
   // Redirect if not owner
   useEffect(() => {
-    if (user && user.role !== 'owner') {
+    if (user && !isOwnerLevel(user.role)) {
       setLocation('/');
       toast({
         title: "Access Denied",
@@ -160,7 +162,7 @@ export default function Onboarding() {
   // Get onboarding progress
   const { data: progress, isLoading: isLoadingProgress } = useQuery({
     queryKey: ['/api/owner-onboarding/progress'],
-    enabled: user?.role === 'owner'
+    enabled: isOwnerLevel(user?.role)
   });
 
   // Start onboarding mutation
@@ -177,8 +179,8 @@ export default function Onboarding() {
 
   // Update step mutation
   const updateStepMutation = useMutation({
-    mutationFn: async ({ stepName, stepData }: { stepName: string; stepData: any }) => {
-      return await apiRequest('PUT', '/api/owner-onboarding/step', { stepName, stepData, status: 'completed' });
+    mutationFn: async ({ stepName, stepData, status = 'completed' }: { stepName: string; stepData: any; status?: string }) => {
+      return await apiRequest('PUT', '/api/owner-onboarding/step', { stepName, stepData, status });
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/owner-onboarding/progress'] });
@@ -205,7 +207,7 @@ export default function Onboarding() {
 
   // Initialize onboarding on mount
   useEffect(() => {
-    if (user?.role === 'owner' && !progress && !startOnboardingMutation.isPending) {
+    if (isOwnerLevel(user?.role) && !progress && !startOnboardingMutation.isPending) {
       startOnboardingMutation.mutate();
     } else if (progress) {
       setOnboardingData(progress.data || {});
@@ -236,7 +238,7 @@ export default function Onboarding() {
     
     if (!ONBOARDING_STEPS[currentStep].required) {
       // Save as skipped
-      await updateStepMutation.mutateAsync({ stepName: currentStepKey, stepData: null });
+      await updateStepMutation.mutateAsync({ stepName: currentStepKey, stepData: null, status: 'skipped' });
       
       if (currentStep < ONBOARDING_STEPS.length - 1) {
         setCurrentStep(currentStep + 1);
@@ -249,7 +251,7 @@ export default function Onboarding() {
 
   const progressPercent = ((currentStep + 1) / ONBOARDING_STEPS.length) * 100;
 
-  if (isLoadingProgress || !user || user.role !== 'owner') {
+  if (isLoadingProgress || !user || !isOwnerLevel(user.role)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading onboarding...</div>
@@ -334,7 +336,7 @@ export default function Onboarding() {
           <CardHeader>
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-                {React.createElement(ONBOARDING_STEPS[currentStep].icon, { className: "w-6 h-6 text-white" })}
+                {(() => { const StepIcon = ONBOARDING_STEPS[currentStep].icon; return <StepIcon className="w-6 h-6 text-white" />; })()}
               </div>
               <div>
                 <CardTitle className="text-white">{ONBOARDING_STEPS[currentStep].title}</CardTitle>
@@ -1201,6 +1203,12 @@ function HRAddonStep({ data, onComplete, onSkip, isLoading }: {
 
   const watchEnableHR = form.watch("enableHR");
 
+  const { data: locationsData } = useQuery<any[]>({
+    queryKey: ['/api/locations'],
+    enabled: watchEnableHR,
+  });
+  const availableLocations = (locationsData || []).map((loc: any) => ({ id: loc.id, name: loc.name }));
+
   const onSubmit = (values: z.infer<typeof hrAddonSchema>) => {
     onComplete(values);
   };
@@ -1241,12 +1249,6 @@ function HRAddonStep({ data, onComplete, onSkip, isLoading }: {
       icon: UserCheck,
       recommended: false
     }
-  ];
-
-  // Mock locations data - in real app this would come from props or API
-  const availableLocations = [
-    { id: "1", name: "Main Restaurant" },
-    { id: "2", name: "Bar & Grill" }
   ];
 
   return (
