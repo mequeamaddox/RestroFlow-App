@@ -43,7 +43,7 @@ export const locations = pgTable("locations", {
 });
 
 // Subscription plans enum
-export const subscriptionPlanEnum = pgEnum("subscription_plan", ["free", "professional", "enterprise"]);
+export const subscriptionPlanEnum = pgEnum("subscription_plan", ["free", "core", "enterprise"]);
 export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "inactive", "cancelled", "paused", "past_due"]);
 
 // User storage table (required for Replit Auth)

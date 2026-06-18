@@ -194,7 +194,7 @@ export interface IStorage {
   
   // Subscription operations
   updateUserSubscription(userId: string, subscriptionData: { 
-    subscriptionPlan?: 'free' | 'professional';
+    subscriptionPlan?: 'free' | 'core';
     subscriptionStatus?: 'active' | 'inactive' | 'cancelled' | 'past_due';
     stripeCustomerId?: string;
     stripeSubscriptionId?: string;
@@ -562,8 +562,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Subscription operations
-  async updateUserSubscription(userId: string, subscriptionData: { 
-    subscriptionPlan?: 'free' | 'professional';
+  async updateUserSubscription(userId: string, subscriptionData: {
+    subscriptionPlan?: 'free' | 'core';
     subscriptionStatus?: 'active' | 'inactive' | 'cancelled' | 'past_due';
     stripeCustomerId?: string;
     stripeSubscriptionId?: string;
@@ -616,7 +616,7 @@ export class DatabaseStorage implements IStorage {
     const creditsLimit = user.ocrCreditsLimit || 5;
     
     // Premium users have unlimited OCR access
-    if (plan === 'professional') {
+    if (plan === 'core') {
       return { hasAccess: true, creditsRemaining: 999, plan };
     }
     

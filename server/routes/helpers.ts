@@ -50,7 +50,7 @@ export async function checkOcrAccess(userId: string): Promise<{ hasAccess: boole
   const plan = user.subscriptionPlan || 'free';
   const ocrCreditsUsed = user.ocrCreditsUsed || 0;
   const maxOcrCredits = 5;
-  if (plan === 'professional') {
+  if (plan === 'core') {
     return { hasAccess: true, creditsRemaining: 999, plan };
   }
   const creditsRemaining = Math.max(0, maxOcrCredits - ocrCreditsUsed);
@@ -67,10 +67,10 @@ export function mapPositionToRole(positionTitle: string | null | undefined): str
 
 // Single source of truth for subscription pricing (USD / month).
 // These must match what Stripe actually charges:
-// RestroFlow Core (Professional) = $179, HR add-on = $79 per location.
+// RestroFlow Core = $179, HR add-on = $79 per location.
 export const PLAN_BASE_PRICE: Record<string, number> = {
   free: 0,
-  professional: 179,
+  core: 179,
 };
 export const HR_ADDON_PRICE_PER_LOCATION = 79;
 

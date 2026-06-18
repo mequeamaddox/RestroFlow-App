@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // Subscription plan validation schema
-export const subscriptionPlanSchema = z.enum(['professional']);
+export const subscriptionPlanSchema = z.enum(['core']);
 
 // Create subscription request schema
 export const createSubscriptionSchema = z.object({

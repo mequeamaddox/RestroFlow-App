@@ -77,11 +77,11 @@ export function registerInvoiceRoutes(app: Express): void {
       const userId = (req as any).user!.id;
       const user = await storage.getUser(userId);
       if (!user) return res.status(401).json({ message: 'User not found' });
-      if ((user.subscriptionPlan || 'free') !== 'professional') {
+      if ((user.subscriptionPlan || 'free') !== 'core') {
         const claimed = await storage.claimOcrCredit(userId);
         if (!claimed) {
           return res.status(402).json({
-            message: 'OCR credit limit reached. Upgrade to Professional for unlimited processing.',
+            message: 'OCR credit limit reached. Upgrade to RestroFlow Core for unlimited processing.',
             code: 'OCR_CREDITS_EXHAUSTED',
             upgradeUrl: '/subscription',
           });

@@ -9,9 +9,9 @@ export const stripe = stripeSecretKey
 export const isStripeEnabled = !!stripe;
 
 export const PLANS = {
-  professional: {
-    name: 'Professional',
-    priceId: process.env.STRIPE_PRICE_PROFESSIONAL || '',
+  core: {
+    name: 'RestroFlow Core',
+    priceId: process.env.STRIPE_PRICE_CORE || '',
     amount: 17900,
     ocrLimit: 999,
   },

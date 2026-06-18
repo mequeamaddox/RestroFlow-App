@@ -62,7 +62,7 @@ export function registerAnalyticsRoutes(app: Express): void {
   });
 
   // Business Intelligence
-  app.get('/api/business-intelligence/daily-pnl', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  app.get('/api/business-intelligence/daily-pnl', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const { range, location } = req.query;
       if (!location) return res.status(400).json({ message: 'Location ID required' });
@@ -75,7 +75,7 @@ export function registerAnalyticsRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/business-intelligence/kpis', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  app.get('/api/business-intelligence/kpis', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const { range, location } = req.query;
       if (!location) return res.status(400).json({ message: 'Location ID required' });
@@ -88,7 +88,7 @@ export function registerAnalyticsRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/business-intelligence/profitability', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  app.get('/api/business-intelligence/profitability', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const { range, location } = req.query;
       if (!location) return res.status(400).json({ message: 'Location ID required' });
@@ -101,7 +101,7 @@ export function registerAnalyticsRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/business-intelligence/menu-performance', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  app.get('/api/business-intelligence/menu-performance', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const { range, location } = req.query;
       if (!location) return res.status(400).json({ message: 'Location ID required' });
@@ -114,7 +114,7 @@ export function registerAnalyticsRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/business-intelligence/cost-analysis', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  app.get('/api/business-intelligence/cost-analysis', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const { range, location } = req.query;
       if (!location) return res.status(400).json({ message: 'Location ID required' });
@@ -155,7 +155,7 @@ export function registerAnalyticsRoutes(app: Express): void {
   });
 
   // Business intelligence summary (not yet implemented)
-  app.get('/api/analytics/business-intelligence', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  app.get('/api/analytics/business-intelligence', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       if (!locationId) return res.status(400).json({ message: 'Location ID required' });
@@ -169,7 +169,7 @@ export function registerAnalyticsRoutes(app: Express): void {
   });
 
   // Profit & Loss (not yet implemented)
-  app.get('/api/analytics/profit-loss', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  app.get('/api/analytics/profit-loss', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       if (!locationId) return res.status(400).json({ message: 'Location ID required' });
@@ -220,7 +220,7 @@ export function registerAnalyticsRoutes(app: Express): void {
   });
 
   // Real-time analytics
-  app.get('/api/analytics/realtime', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  app.get('/api/analytics/realtime', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       if (!locationId) return res.status(400).json({ message: 'Location ID required' });
@@ -252,7 +252,7 @@ export function registerAnalyticsRoutes(app: Express): void {
   });
 
   // Sales trend
-  app.get('/api/analytics/sales-trend', isAuthenticated, requirePlan('professional'), async (req, res) => {
+  app.get('/api/analytics/sales-trend', isAuthenticated, requirePlan('core'), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       if (!locationId) return res.status(400).json({ message: 'Location ID required' });
@@ -285,7 +285,7 @@ export function registerAnalyticsRoutes(app: Express): void {
   });
 
   // Manual BI backfill (owner only)
-  app.post('/api/analytics/backfill-bi', isAuthenticated, requirePlan('professional'), async (req: any, res) => {
+  app.post('/api/analytics/backfill-bi', isAuthenticated, requirePlan('core'), async (req: any, res) => {
     try {
       if (req.user.role !== 'owner') {
         return res.status(403).json({ message: 'Only owners can trigger BI backfill' });

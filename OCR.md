@@ -55,7 +55,7 @@ Results are written to the `invoice_processing` table (`shared/schema.ts`), incl
 - `storage.checkOcrAccess(userId)` verifies remaining credits before processing;
   `updateOcrCreditsUsed` increments afterward; `resetOcrCredits` clears the counter.
 - When exhausted, the frontend shows an upgrade prompt steering users to the
-  professional plan.
+  RestroFlow Core plan.
 
 ## External config
 

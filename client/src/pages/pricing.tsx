@@ -94,8 +94,8 @@ export default function Pricing() {
         ]
       },
       {
-        id: "professional",
-        name: "Professional (Core)",
+        id: "core",
+        name: "RestroFlow Core",
         price: 179,
         billingCycle: "MONTHLY",
         features: [
@@ -149,12 +149,12 @@ export default function Pricing() {
       ...plan,
       displayPrice,
       originalPrice: plan.price,
-      icon: plan.id === 'free' ? ChefHat : plan.id === 'professional' ? Star : Crown,
-      color: plan.id === 'free' ? 'from-slate-500 to-gray-500' : 
-             plan.id === 'professional' ? 'from-orange-500 to-red-500' :
+      icon: plan.id === 'free' ? ChefHat : plan.id === 'core' ? Star : Crown,
+      color: plan.id === 'free' ? 'from-slate-500 to-gray-500' :
+             plan.id === 'core' ? 'from-orange-500 to-red-500' :
              'from-purple-500 to-pink-500',
-      popular: plan.id === 'professional',
-      competitorPrice: plan.id === 'free' ? 0 : plan.id === 'professional' ? 330 : 480
+      popular: plan.id === 'core',
+      competitorPrice: plan.id === 'free' ? 0 : plan.id === 'core' ? 330 : 480
     };
   };
   
@@ -265,7 +265,7 @@ export default function Pricing() {
                     <div className="text-sm text-slate-400">Industry standard pricing</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-lg font-semibold text-slate-300 mb-2">RestroFlow Professional</div>
+                    <div className="text-lg font-semibold text-slate-300 mb-2">RestroFlow Core</div>
                     <div className="text-3xl font-bold text-green-400">
                       ${billingCycle === 'monthly' ? '179' : '143'}/mo
                     </div>
@@ -290,7 +290,7 @@ export default function Pricing() {
                     <Users className="h-6 w-6 text-blue-400 mr-2" />
                     <h3 className="text-xl font-bold text-white">HR Employee Management Add-on</h3>
                   </div>
-                  <p className="text-slate-300 text-sm">Add comprehensive employee management to your Professional plan</p>
+                  <p className="text-slate-300 text-sm">Add comprehensive employee management to your RestroFlow Core plan</p>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -522,7 +522,7 @@ export default function Pricing() {
                       <CardTitle className="text-2xl font-bold text-white mb-2">{displayPlan.name}</CardTitle>
                       <CardDescription className="text-slate-300 mb-4">
                         {plan.id === 'free' ? 'Get started with basic features' :
-                         plan.id === 'professional' ? 'Most popular - complete MarginEdge alternative with unlimited OCR' :
+                         plan.id === 'core' ? 'Most popular - complete MarginEdge alternative with unlimited OCR' :
                          'Premium features for restaurant chains'}
                       </CardDescription>
                       
@@ -604,7 +604,7 @@ export default function Pricing() {
                     <h3 className="text-lg font-semibold text-white mb-4">Table Service Restaurant</h3>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-slate-300">Professional Plan</span>
+                        <span className="text-slate-300">RestroFlow Core</span>
                         <span className="text-white">${billingCycle === 'monthly' ? '179' : '143'}/mo</span>
                       </div>
                       <div className="flex justify-between">
@@ -618,7 +618,7 @@ export default function Pricing() {
                     <h3 className="text-lg font-semibold text-white mb-4">Bar & Grill Location</h3>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-slate-300">Professional Plan</span>
+                        <span className="text-slate-300">RestroFlow Core</span>
                         <span className="text-white">${billingCycle === 'monthly' ? '179' : '143'}/mo</span>
                       </div>
                       <div className="flex justify-between">
@@ -673,7 +673,7 @@ export default function Pricing() {
               
               <div>
                 <h3 className="text-lg font-semibold text-white mb-2">Can I use different plans for different locations?</h3>
-                <p className="text-slate-300 text-sm">Absolutely! Mix and match plans per location. Your restaurant might use Professional while your bar uses Professional + Bar Operations.</p>
+                <p className="text-slate-300 text-sm">Absolutely! Mix and match plans per location. Your restaurant might use RestroFlow Core while your bar uses Core + HR Add-on.</p>
               </div>
             </div>
           </div>

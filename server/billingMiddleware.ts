@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { storage } from './storage';
 
-const PLAN_ORDER = ['free', 'professional'] as const;
+const PLAN_ORDER = ['free', 'core'] as const;
 type Plan = (typeof PLAN_ORDER)[number];
 
 // Statuses that constitute an active, billable subscription

@@ -9,7 +9,7 @@ import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 
 interface SubscriptionData {
-  plan: 'free' | 'professional';
+  plan: 'free' | 'core';
   status: string;
   creditsUsed: number;
   creditsLimit: number;
@@ -79,7 +79,7 @@ export function SubscriptionBanner() {
 
   if (!subscription) return null;
 
-  const isPremium = subscription.plan === 'professional';
+  const isPremium = subscription.plan === 'core';
   const creditsPercentage = (subscription.creditsUsed / subscription.creditsLimit) * 100;
 
   return (
@@ -93,7 +93,7 @@ export function SubscriptionBanner() {
               <Zap className="h-5 w-5 text-blue-500" />
             )}
             <CardTitle className="text-lg">
-              {subscription.plan === 'free' ? 'Free Plan' : 'Professional Plan'}
+              {subscription.plan === 'free' ? 'Free Plan' : 'RestroFlow Core'}
             </CardTitle>
             <Badge variant={isPremium ? "default" : "secondary"}>
               {subscription.status}
@@ -102,7 +102,7 @@ export function SubscriptionBanner() {
           
           {!isPremium && (
             <Button
-              onClick={() => upgradeMutation.mutate('professional')}
+              onClick={() => upgradeMutation.mutate('core')}
               disabled={upgradeMutation.isPending}
               size="sm"
               className="gap-2"

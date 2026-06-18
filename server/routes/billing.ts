@@ -39,8 +39,8 @@ export function registerBillingRoutes(app: Express): void {
     res.json({
       plans: [
         {
-          id: 'professional',
-          name: 'Professional (Core)',
+          id: 'core',
+          name: 'RestroFlow Core',
           price: 179,
           billingCycle: 'MONTHLY',
           popular: true,
@@ -185,8 +185,8 @@ export function registerBillingRoutes(app: Express): void {
     try {
       const userId = req.user!.id;
       const { plan } = req.body;
-      if (plan !== 'professional')
-        return res.status(400).json({ message: 'Invalid plan. Must be professional.' });
+      if (plan !== 'core')
+        return res.status(400).json({ message: 'Invalid plan. Must be core.' });
       if (!isStripeEnabled)
         return res.status(503).json({ message: 'Stripe billing is not yet configured. Please contact support.', configured: false });
       const user = await storage.getUser(userId);
@@ -247,7 +247,7 @@ export function registerBillingRoutes(app: Express): void {
           const { userId, plan } = session.metadata || {};
           if (userId && plan) {
             await storage.updateUserSubscription(userId, {
-              subscriptionPlan: plan as 'professional',
+              subscriptionPlan: plan as 'core',
               subscriptionStatus: 'active',
               stripeCustomerId: session.customer,
               stripeSubscriptionId: session.subscription,
@@ -261,8 +261,8 @@ export function registerBillingRoutes(app: Express): void {
           const { userId } = sub.metadata || {};
           const mappedStatus = mapStripeStatusToPlan(sub.status);
           const priceId: string = sub.items?.data?.[0]?.price?.id;
-          let plan: 'professional' | undefined;
-          if (priceId === process.env.STRIPE_PRICE_PROFESSIONAL) plan = 'professional';
+          let plan: 'core' | undefined;
+          if (priceId === process.env.STRIPE_PRICE_CORE) plan = 'core';
           if (userId) {
             await storage.updateUserSubscription(userId, {
               ...(plan ? { subscriptionPlan: plan, ocrCreditsLimit: 999 } : {}),
