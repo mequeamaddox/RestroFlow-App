@@ -57,8 +57,6 @@ const navigation = [
   { name: 'Invoice Processing', href: '/invoice-processing', icon: FileText, badge: 'OCR' },
   { name: 'Analytics & Reports', href: '/analytics', icon: BarChart3, badge: 'LIVE' },
   { name: 'Waste Tracking', href: '/waste-tracking', icon: Trash2 },
-  { name: 'Automated Ordering', href: '/automated-ordering', icon: Bot, badge: 'SOON' },
-  { name: 'Demand Forecasting', href: '/forecasting', icon: Brain, badge: 'SOON' },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
