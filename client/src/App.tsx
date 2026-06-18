@@ -47,6 +47,8 @@ import PublicOnboarding from "@/pages/public-onboarding";
 import Onboarding from "@/pages/onboarding";
 import InvitationAccept from "@/pages/invitation-accept";
 import MultiUnitDashboard from "@/pages/multi-unit-dashboard";
+import AutomatedOrdering from "@/pages/automated-ordering";
+import Forecasting from "@/pages/forecasting";
 import BluetoothScalePrototype from "@/pages/bluetooth-scale-prototype";
 import BeverageCost from "@/pages/beveragecost";
 import BeverageMenu from "@/pages/beveragemenu";
@@ -122,6 +124,8 @@ function Router() {
                 <Route path="/vendors" component={Vendors} />
                 <Route path="/purchase-orders" component={PurchaseOrders} />
                 <Route path="/waste-tracking" component={WasteTracking} />
+                <Route path="/automated-ordering" component={AutomatedOrdering} />
+                <Route path="/forecasting" component={Forecasting} />
                 <Route path="/analytics" component={Analytics} />
                 <Route path="/invoice-processing" component={InvoiceProcessing} />
                 <Route path="/multi-unit-dashboard" component={MultiUnitDashboard} />
