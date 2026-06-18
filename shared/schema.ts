@@ -43,7 +43,7 @@ export const locations = pgTable("locations", {
 });
 
 // Subscription plans enum
-export const subscriptionPlanEnum = pgEnum("subscription_plan", ["free", "professional", "enterprise"]);
+export const subscriptionPlanEnum = pgEnum("subscription_plan", ["free", "core", "enterprise"]);
 export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "inactive", "cancelled", "paused", "past_due"]);
 
 // User storage table (required for Replit Auth)
@@ -65,15 +65,6 @@ export const users = pgTable("users", {
   ocrCreditsLimit: integer("ocr_credits_limit").default(5), // Free tier gets 5 OCR processes
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-// Platform-level settings (key/value store for platform admins)
-export const platformSettings = pgTable("platform_settings", {
-  key: varchar("key", { length: 100 }).primaryKey(),
-  value: text("value"),
-  description: text("description"),
-  updatedAt: timestamp("updated_at").defaultNow(),
-  updatedBy: varchar("updated_by"),
 });
 
 // Categories for inventory items
@@ -423,44 +414,6 @@ export const inventoryValuations = pgTable("inventory_valuations", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Paycheck settings for actual payroll processing
-export const paycheckLayoutEnum = pgEnum("paycheck_layout", ["no_printing", "check_stub_only", "check_on_top", "check_on_bottom"]);
-
-export const paycheckSettings = pgTable("paycheck_settings", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  locationId: uuid("location_id").references(() => locations.id).notNull(),
-  paycheckLayout: paycheckLayoutEnum("paycheck_layout").notNull().default("check_stub_only"),
-  
-  // Display options
-  displayLast4Ssn: boolean("display_last4_ssn").default(true),
-  displayTaxFilingName: boolean("display_tax_filing_name").default(true),
-  displayBusinessName: boolean("display_business_name").default(true),
-  printSignature: boolean("print_signature").default(false),
-  showLastCheckNumber: boolean("show_last_check_number").default(true),
-  
-  // Company information
-  companyName: varchar("company_name", { length: 255 }).default("Your Company Name"),
-  companyAddress: text("company_address").default("Your Company Address"),
-  companyPhone: varchar("company_phone", { length: 20 }),
-  companyEin: varchar("company_ein", { length: 20 }),
-  
-  // Business names (for tax purposes)
-  businessName: varchar("business_name", { length: 255 }).default("Your Business Name"),
-  taxFilingName: varchar("tax_filing_name", { length: 255 }).default("Your Tax Filing Name"),
-  
-  // Bank information
-  bankName: varchar("bank_name", { length: 255 }).default("Your Bank Name"),
-  routingNumber: varchar("routing_number", { length: 20 }),
-  accountNumber: varchar("account_number", { length: 20 }),
-  
-  // Check details
-  lastCheckNumber: integer("last_check_number").default(1000),
-  signatureImagePath: varchar("signature_image_path", { length: 500 }),
-  
-  isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
 
 // Relations
 export const locationsRelations = relations(locations, ({ many }) => ({
@@ -935,82 +888,6 @@ export const insertPerformanceReviewSchema = createInsertSchema(performanceRevie
 export const insertTimeEntrySchema = createInsertSchema(timeEntries).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertTeamResourceSchema = createInsertSchema(teamResources).omit({ id: true, createdAt: true, updatedAt: true });
 
-// Internal Payroll System Tables
-export const payPeriods = pgTable("pay_periods", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: varchar("name").notNull(), // "Week of Jan 1-7, 2025"
-  startDate: date("start_date").notNull(),
-  endDate: date("end_date").notNull(),
-  payDate: date("pay_date").notNull(),
-  frequency: varchar("frequency").notNull(), // weekly, biweekly, monthly, salary
-  locationId: uuid("location_id").references(() => locations.id).notNull(),
-  status: varchar("status").default("draft"), // draft, calculating, approved, paid
-  totalGrossPay: decimal("total_gross_pay", { precision: 12, scale: 2 }).default("0"),
-  totalDeductions: decimal("total_deductions", { precision: 12, scale: 2 }).default("0"),
-  totalNetPay: decimal("total_net_pay", { precision: 12, scale: 2 }).default("0"),
-  approvedBy: varchar("approved_by"), // User ID
-  approvedAt: timestamp("approved_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const paystubs = pgTable("paystubs", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  payPeriodId: uuid("pay_period_id").references(() => payPeriods.id).notNull(),
-  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
-  regularHours: decimal("regular_hours", { precision: 8, scale: 2 }).default("0"),
-  overtimeHours: decimal("overtime_hours", { precision: 8, scale: 2 }).default("0"),
-  regularRate: decimal("regular_rate", { precision: 10, scale: 2 }).notNull(),
-  overtimeRate: decimal("overtime_rate", { precision: 10, scale: 2 }),
-  regularPay: decimal("regular_pay", { precision: 12, scale: 2 }).default("0"),
-  overtimePay: decimal("overtime_pay", { precision: 12, scale: 2 }).default("0"),
-  bonuses: decimal("bonuses", { precision: 12, scale: 2 }).default("0"),
-  tips: decimal("tips", { precision: 12, scale: 2 }).default("0"),
-  grossPay: decimal("gross_pay", { precision: 12, scale: 2 }).default("0"),
-  federalTax: decimal("federal_tax", { precision: 12, scale: 2 }).default("0"),
-  stateTax: decimal("state_tax", { precision: 12, scale: 2 }).default("0"),
-  socialSecurity: decimal("social_security", { precision: 12, scale: 2 }).default("0"),
-  medicare: decimal("medicare", { precision: 12, scale: 2 }).default("0"),
-  otherDeductions: decimal("other_deductions", { precision: 12, scale: 2 }).default("0"),
-  totalDeductions: decimal("total_deductions", { precision: 12, scale: 2 }).default("0"),
-  netPay: decimal("net_pay", { precision: 12, scale: 2 }).default("0"),
-  status: varchar("status").default("calculated"), // calculated, approved, paid
-  notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const payrollDeductions = pgTable("payroll_deductions", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: varchar("name").notNull(), // "Health Insurance", "401k", etc.
-  type: varchar("type").notNull(), // "tax", "benefit", "garnishment", "other"
-  calculationType: varchar("calculation_type").notNull(), // "fixed", "percentage", "tiered"
-  amount: decimal("amount", { precision: 10, scale: 4 }), // Fixed amount or percentage
-  isPreTax: boolean("is_pre_tax").default(false),
-  isEmployerPaid: boolean("is_employer_paid").default(false),
-  isActive: boolean("is_active").default(true),
-  description: text("description"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const employeeDeductions = pgTable("employee_deductions", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
-  payrollDeductionId: uuid("payroll_deduction_id").references(() => payrollDeductions.id).notNull(),
-  customAmount: decimal("custom_amount", { precision: 10, scale: 4 }), // Override default amount
-  isActive: boolean("is_active").default(true),
-  startDate: date("start_date"),
-  endDate: date("end_date"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-// Payroll insert schemas
-export const insertPayPeriodSchema = createInsertSchema(payPeriods).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertPaystubSchema = createInsertSchema(paystubs).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertPayrollDeductionSchema = createInsertSchema(payrollDeductions).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertEmployeeDeductionSchema = createInsertSchema(employeeDeductions).omit({ id: true, createdAt: true, updatedAt: true });
 
 // HR Types
 export type Department = typeof departments.$inferSelect;
@@ -1042,18 +919,9 @@ export type InsertTimeEntry = z.infer<typeof insertTimeEntrySchema>;
 export type TeamResource = typeof teamResources.$inferSelect;
 export type InsertTeamResource = z.infer<typeof insertTeamResourceSchema>;
 
-// Payroll Types
-export type PayPeriod = typeof payPeriods.$inferSelect;
-export type InsertPayPeriod = z.infer<typeof insertPayPeriodSchema>;
-export type Paystub = typeof paystubs.$inferSelect;
-export type InsertPaystub = z.infer<typeof insertPaystubSchema>;
-export type PayrollDeduction = typeof payrollDeductions.$inferSelect;
-export type InsertPayrollDeduction = z.infer<typeof insertPayrollDeductionSchema>;
-export type EmployeeDeduction = typeof employeeDeductions.$inferSelect;
-export type InsertEmployeeDeduction = z.infer<typeof insertEmployeeDeductionSchema>;
 
 // Universal POS Integration Tables
-export const posProviderEnum = pgEnum("pos_provider", ["clover", "spoton", "square", "toast", "revel"]);
+export const posProviderEnum = pgEnum("pos_provider", ["clover", "spoton", "toast", "revel"]);
 
 export const posIntegrations = pgTable("pos_integrations", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1904,67 +1772,6 @@ export const insertRecipeAssignmentSchema = createInsertSchema(recipeAssignments
 export type RecipeAssignment = typeof recipeAssignments.$inferSelect;
 export type InsertRecipeAssignment = z.infer<typeof insertRecipeAssignmentSchema>;
 
-// Payroll system tables
-export const payrollPeriods = pgTable("payroll_periods", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  locationId: uuid("location_id").references(() => locations.id, { onDelete: "cascade" }).notNull(),
-  startDate: date("start_date").notNull(),
-  endDate: date("end_date").notNull(),
-  payDate: date("pay_date").notNull(),
-  status: varchar("status").default("draft"), // draft, processed, paid
-  totalGrossPay: decimal("total_gross_pay", { precision: 10, scale: 2 }).default("0.00"),
-  totalNetPay: decimal("total_net_pay", { precision: 10, scale: 2 }).default("0.00"),
-  totalDeductions: decimal("total_deductions", { precision: 10, scale: 2 }).default("0.00"),
-  createdBy: varchar("created_by").references(() => users.id).notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const paychecks = pgTable("paychecks", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  payrollPeriodId: uuid("payroll_period_id").references(() => payrollPeriods.id, { onDelete: "cascade" }).notNull(),
-  employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "cascade" }).notNull(),
-  checkNumber: varchar("check_number"),
-  regularHours: decimal("regular_hours", { precision: 5, scale: 2 }).default("0.00"),
-  overtimeHours: decimal("overtime_hours", { precision: 5, scale: 2 }).default("0.00"),
-  hourlyRate: decimal("hourly_rate", { precision: 10, scale: 2 }).default("0.00"),
-  regularPay: decimal("regular_pay", { precision: 10, scale: 2 }).default("0.00"),
-  overtimePay: decimal("overtime_pay", { precision: 10, scale: 2 }).default("0.00"),
-  grossPay: decimal("gross_pay", { precision: 10, scale: 2 }).default("0.00"),
-  federalTax: decimal("federal_tax", { precision: 10, scale: 2 }).default("0.00"),
-  stateTax: decimal("state_tax", { precision: 10, scale: 2 }).default("0.00"),
-  socialSecurity: decimal("social_security", { precision: 10, scale: 2 }).default("0.00"),
-  medicare: decimal("medicare", { precision: 10, scale: 2 }).default("0.00"),
-  otherDeductions: decimal("other_deductions", { precision: 10, scale: 2 }).default("0.00"),
-  totalDeductions: decimal("total_deductions", { precision: 10, scale: 2 }).default("0.00"),
-  netPay: decimal("net_pay", { precision: 10, scale: 2 }).default("0.00"),
-  status: varchar("status").default("pending"), // pending, issued, voided
-  issuedAt: timestamp("issued_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const payStubs = pgTable("pay_stubs", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  paycheckId: uuid("paycheck_id").references(() => paychecks.id, { onDelete: "cascade" }).notNull(),
-  employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "cascade" }).notNull(),
-  stubData: text("stub_data").notNull(), // JSON string with all pay stub details
-  viewedAt: timestamp("viewed_at"),
-  downloadedAt: timestamp("downloaded_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-// Insert schemas and types for payroll system
-export const insertPayrollPeriodSchema = createInsertSchema(payrollPeriods).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertPaycheckSchema = createInsertSchema(paychecks).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertPayStubSchema = createInsertSchema(payStubs).omit({ id: true, createdAt: true });
-
-export type PayrollPeriod = typeof payrollPeriods.$inferSelect;
-export type InsertPayrollPeriod = z.infer<typeof insertPayrollPeriodSchema>;
-export type Paycheck = typeof paychecks.$inferSelect;
-export type InsertPaycheck = z.infer<typeof insertPaycheckSchema>;
-export type PayStub = typeof payStubs.$inferSelect;
-export type InsertPayStub = z.infer<typeof insertPayStubSchema>;
 
 // Vendor price catalog types
 export const insertVendorPriceCatalogSchema = createInsertSchema(vendorPriceCatalog).omit({ id: true, createdAt: true, updatedAt: true });
@@ -2039,4 +1846,13 @@ export type OwnerOnboarding = typeof ownerOnboarding.$inferSelect;
 export type InsertOwnerOnboarding = z.infer<typeof insertOwnerOnboardingSchema>;
 export type OwnerOnboardingStep = typeof ownerOnboardingSteps.$inferSelect;
 export type InsertOwnerOnboardingStep = z.infer<typeof insertOwnerOnboardingStepSchema>;
+
+// Platform-level settings (key/value store for platform admins)
+export const platformSettings = pgTable("platform_settings", {
+  key: varchar("key", { length: 100 }).primaryKey(),
+  value: text("value"),
+  description: text("description"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  updatedBy: varchar("updated_by"),
+});
 
