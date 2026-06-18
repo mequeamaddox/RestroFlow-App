@@ -3,6 +3,7 @@ import { getAuth } from '@clerk/express';
 import { storage } from '../storage';
 import { isAuthenticated, clerkClient, calculateSubscriptionTotal, requirePlatformAdmin } from './helpers';
 import { requirePermission, Permission } from '../permissions';
+import { isOwnerLevel } from '@shared/roles';
 import { insertInvitationTokenSchema, invitationTokens } from '@shared/schema';
 import { InvitationEmailService } from '../invitationEmailService';
 import { db } from '../db';
@@ -134,7 +135,7 @@ export function registerAuthRoutes(app: Express): void {
     try {
       const userId = req.user!.id;
       const user = await storage.getUser(userId);
-      if (user?.role !== 'owner' && user?.role !== 'admin') {
+      if (!isOwnerLevel(user?.role)) {
         return res.status(403).json({ message: 'Only owners can reset OCR credits' });
       }
       await storage.resetOcrCredits(userId);

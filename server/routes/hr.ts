@@ -3,6 +3,7 @@ import { storage } from '../storage';
 import { isAuthenticated, clerkClient, mapPositionToRole, requireHRAccess } from './helpers';
 import { requireLocationAccess, assertLocationAccess } from '../securityMiddleware';
 import { requirePermission, requireAnyPermission, Permission } from '../permissions';
+import { isOwnerLevel, isManagerLevel } from '@shared/roles';
 import { teamResources, insertTeamResourceSchema, timeEntries, timeOffRequests, employeeDocuments, employeeOnboarding, employeeOnboardingSteps } from '@shared/schema';
 import { db } from '../db';
 import { eq, desc, sql, or, isNull } from 'drizzle-orm';
@@ -452,7 +453,7 @@ export function registerHRRoutes(app: Express): void {
     try {
       const userId = req.user!.id;
       const user = await storage.getUser(userId);
-      const isOwnerOrAdmin = user?.role === 'admin' || user?.role === 'owner';
+      const isOwnerOrAdmin = isManagerLevel(user?.role);
       if (!isOwnerOrAdmin && req.params.employeeId !== userId) return res.status(403).json({ message: 'Access denied - can only view your own time entries' });
       const targetEmployee = await storage.getEmployee(req.params.employeeId);
       if (!targetEmployee) return res.status(404).json({ message: 'Employee not found' });
@@ -1019,7 +1020,7 @@ export function registerHRRoutes(app: Express): void {
   app.get('/api/employees/:id/onboarding-data', isAuthenticated, async (req, res) => {
     try {
       const user = await storage.getUser(req.user!.id);
-      if (user?.role !== 'owner' && user?.role !== 'admin') return res.status(403).json({ error: 'Access denied' });
+      if (!isOwnerLevel(user?.role)) return res.status(403).json({ error: 'Access denied' });
       const { employee, onboardingData } = await storage.getEmployeeWithOnboardingData(req.params.id);
       if (!employee) return res.status(404).json({ error: 'Employee not found' });
       if (!await assertLocationAccess(req, res, employee.locationId)) return;

@@ -3,6 +3,7 @@ import { storage } from '../storage';
 import { isAuthenticated, calculateSubscriptionTotal } from './helpers';
 import { requireLocationAccess } from '../securityMiddleware';
 import { sendEmail } from '../email';
+import { isOwnerLevel } from '@shared/roles';
 import {
   stripe,
   isStripeEnabled,
@@ -81,7 +82,7 @@ export function registerBillingRoutes(app: Express): void {
     try {
       const userId = req.user!.id;
       const user = await storage.getUser(userId);
-      if (user?.role !== 'owner')
+      if (!isOwnerLevel(user?.role))
         return res.status(403).json({ message: 'Access denied. Only business owners can access subscription information.' });
       if (!user) return res.status(404).json({ message: 'User not found' });
       const allLocations = await storage.getLocations();
@@ -110,7 +111,7 @@ export function registerBillingRoutes(app: Express): void {
       const userId = req.user!.id;
       const user = await storage.getSubscriptionByUser(userId);
       if (!user) return res.status(404).json({ message: 'User not found' });
-      if (user.role !== 'owner')
+      if (!isOwnerLevel(user.role))
         return res.status(403).json({ message: 'Access denied. Only business owners can cancel subscriptions.' });
       if (user.stripeSubscriptionId && isStripeEnabled) {
         await cancelStripeSubscription(user.stripeSubscriptionId, false);
@@ -129,7 +130,7 @@ export function registerBillingRoutes(app: Express): void {
 
   app.get('/api/owner-onboarding/progress', isAuthenticated, async (req, res) => {
     try {
-      if (req.user!.role !== 'owner')
+      if (!isOwnerLevel(req.user!.role))
         return res.status(403).json({ message: 'Access denied. Onboarding is only available to business owners.' });
       const onboarding = await storage.getOwnerOnboarding(req.user!.id);
       res.json(onboarding || { userId: req.user!.id, isCompleted: false, currentStep: 'restaurant_info', completedSteps: 0, totalSteps: 5, data: {} });
@@ -141,7 +142,7 @@ export function registerBillingRoutes(app: Express): void {
 
   app.post('/api/owner-onboarding/start', isAuthenticated, async (req, res) => {
     try {
-      if (req.user!.role !== 'owner')
+      if (!isOwnerLevel(req.user!.role))
         return res.status(403).json({ message: 'Access denied. Onboarding is only available to business owners.' });
       let onboarding = await storage.getOwnerOnboarding(req.user!.id);
       if (!onboarding) {
@@ -156,7 +157,7 @@ export function registerBillingRoutes(app: Express): void {
 
   app.put('/api/owner-onboarding/step', isAuthenticated, async (req, res) => {
     try {
-      if (req.user!.role !== 'owner')
+      if (!isOwnerLevel(req.user!.role))
         return res.status(403).json({ message: 'Access denied. Onboarding is only available to business owners.' });
       const { stepName, stepData, status = 'completed' } = req.body;
       const onboarding = await storage.updateOwnerOnboardingStep(req.user!.id, stepName, stepData, status);
@@ -169,7 +170,7 @@ export function registerBillingRoutes(app: Express): void {
 
   app.post('/api/owner-onboarding/complete', isAuthenticated, async (req, res) => {
     try {
-      if (req.user!.role !== 'owner')
+      if (!isOwnerLevel(req.user!.role))
         return res.status(403).json({ message: 'Access denied. Onboarding is only available to business owners.' });
       const onboarding = await storage.completeOwnerOnboarding(req.user!.id);
       res.json(onboarding);

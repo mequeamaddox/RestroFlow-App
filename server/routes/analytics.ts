@@ -3,6 +3,7 @@ import { storage } from '../storage';
 import { isAuthenticated } from './helpers';
 import { assertLocationAccess } from '../securityMiddleware';
 import { requirePlan } from '../billingMiddleware';
+import { isOwnerLevel } from '@shared/roles';
 import { db } from '../db';
 import { sql, desc } from 'drizzle-orm';
 import { inventoryItems, recipes, wasteEntries, posSales } from '@shared/schema';
@@ -287,7 +288,7 @@ export function registerAnalyticsRoutes(app: Express): void {
   // Manual BI backfill (owner only)
   app.post('/api/analytics/backfill-bi', isAuthenticated, requirePlan('core'), async (req: any, res) => {
     try {
-      if (req.user.role !== 'owner') {
+      if (!isOwnerLevel(req.user.role)) {
         return res.status(403).json({ message: 'Only owners can trigger BI backfill' });
       }
       const { computeBusinessIntelligence } = await import('../jobs/analyticsScheduler');
