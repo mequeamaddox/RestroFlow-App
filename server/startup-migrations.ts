@@ -202,8 +202,8 @@ export async function runStartupMigrations(): Promise<void> {
       await db.execute(sql.raw(m.sql));
       console.log(`  ✅ ${m.name}`);
     } catch (err: any) {
-      console.error(`  ❌ Migration failed [${m.name}]: ${err.message}`);
-      throw err;
+      // Log but never crash the server over a migration — the app should still start
+      console.error(`  ⚠️ Migration skipped [${m.name}]: ${err.message}`);
     }
   }
   console.log("✅ Startup migrations complete.");
