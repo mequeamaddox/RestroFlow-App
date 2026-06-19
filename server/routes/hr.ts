@@ -150,7 +150,7 @@ export function registerHRRoutes(app: Express): void {
             const { sendEmail } = await import('../email');
             await sendEmail({
               to: employee.email,
-              from: 'mequeamaddox@gmail.com',
+              from: process.env.FROM_EMAIL || 'noreply@restroflowsolutions.com',
               subject: 'Welcome to RestroFlow - Activate Your Account',
               html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2>Welcome to RestroFlow!</h2><p>Hi ${employee.firstName},</p><p>Your employee account has been created. Click below to activate your account (link valid for 3 days).</p><div style="text-align:center;margin:30px 0;"><a href="${loginUrl}" style="background-color:#f97316;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;display:inline-block;font-weight:bold;">Activate My Account</a></div><p>After signing in, go to Settings → Privacy & Security to set your own password.</p><p>Best regards,<br>The RestroFlow Team</p></div>`,
             });
@@ -882,7 +882,7 @@ export function registerHRRoutes(app: Express): void {
         try {
           const { sendEmail } = await import('../email');
           const employee = await storage.getEmployee(employeeId);
-          await sendEmail({ to: email, from: 'mequeamaddox@gmail.com', subject: 'Welcome to RestroFlow - Complete Your Onboarding', html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;"><h2>Welcome to RestroFlow!</h2><p>Hi ${employee?.firstName || 'there'},</p><p>Please complete your onboarding by clicking the link below:</p><div style="text-align:center;margin:30px 0;"><a href="${inviteUrl}" style="background-color:#f97316;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;">Complete Onboarding</a></div><p>This invitation will expire in 3 days.</p><p>Best regards,<br>The RestroFlow Team</p></div>` });
+          await sendEmail({ to: email, from: process.env.FROM_EMAIL || 'noreply@restroflowsolutions.com', subject: 'Welcome to RestroFlow - Complete Your Onboarding', html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;"><h2>Welcome to RestroFlow!</h2><p>Hi ${employee?.firstName || 'there'},</p><p>Please complete your onboarding by clicking the link below:</p><div style="text-align:center;margin:30px 0;"><a href="${inviteUrl}" style="background-color:#f97316;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;">Complete Onboarding</a></div><p>This invitation will expire in 3 days.</p><p>Best regards,<br>The RestroFlow Team</p></div>` });
         } catch (emailError) { console.error('Failed to send email:', emailError); }
       }
 
