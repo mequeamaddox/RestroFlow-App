@@ -815,11 +815,27 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/hr/onboarding', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      const onboarding = await storage.createEmployeeOnboarding(req.body);
+      const { employeeId, templateId, startDate, targetCompletionDate, assignedMentorId, notes } = req.body;
+      if (!employeeId || !templateId) {
+        return res.status(400).json({ message: 'employeeId and templateId are required' });
+      }
+      // Count steps in the template so totalSteps is never null
+      const steps = await storage.getOnboardingSteps(templateId);
+      const totalSteps = steps.length > 0 ? steps.length : 1;
+      const onboarding = await storage.createEmployeeOnboarding({
+        employeeId,
+        templateId,
+        totalSteps,
+        status: 'in-progress',
+        startDate: startDate ? new Date(startDate) : new Date(),
+        targetCompletionDate: targetCompletionDate ? new Date(targetCompletionDate) : null,
+        assignedMentorId: assignedMentorId || null,
+        notes: notes || null,
+      });
       res.status(201).json(onboarding);
     } catch (error) {
       console.error('Error creating employee onboarding:', error);
-      res.status(500).json({ message: 'Failed to create employee onboarding' });
+      res.status(500).json({ message: 'Failed to start onboarding' });
     }
   });
 
