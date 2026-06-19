@@ -32,11 +32,13 @@ export default function Inventory() {
   });
 
   const { data: categories = [] } = useQuery({
-    queryKey: ['/api/categories'],
+    queryKey: ['/api/categories', currentLocation?.id],
+    enabled: !!currentLocation,
   });
 
   const { data: vendors = [] } = useQuery({
-    queryKey: ['/api/vendors'],
+    queryKey: ['/api/vendors', currentLocation?.id],
+    enabled: !!currentLocation,
   });
 
   const { data: lowStockItems = [] } = useQuery({
@@ -54,9 +56,9 @@ export default function Inventory() {
   });
 
   const handleAddSuccess = () => {
-    queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/inventory', currentLocation?.id] });
     queryClient.invalidateQueries({ queryKey: ['/api/dashboard/metrics'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/inventory/low-stock'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/inventory/low-stock', currentLocation?.id] });
     setIsAddDialogOpen(false);
     toast({
       title: "Success",
@@ -65,9 +67,9 @@ export default function Inventory() {
   };
 
   const handleEditSuccess = () => {
-    queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/inventory', currentLocation?.id] });
     queryClient.invalidateQueries({ queryKey: ['/api/dashboard/metrics'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/inventory/low-stock'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/inventory/low-stock', currentLocation?.id] });
     setEditingItem(null);
     toast({
       title: "Success",
