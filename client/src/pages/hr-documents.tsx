@@ -153,6 +153,7 @@ export default function HRDocumentsPage() {
         startDate: onboardingStartDate,
         targetCompletionDate: onboardingTargetDate,
         assignedMentorId: onboardingMentorId || undefined,
+        locationId: currentLocation?.id,
       }).then(() => {
         queryClient.invalidateQueries({ queryKey: ['/api/hr/onboarding'] });
         toast({

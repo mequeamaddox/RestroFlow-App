@@ -98,7 +98,7 @@ export function requirePlatformAdmin(req: any, res: any, next: any) {
 
 export const requireHRAccess = async (req: any, res: any, next: any) => {
   try {
-    const locationId = req.query.locationId as string;
+    const locationId = (req.query.locationId || req.body?.locationId) as string;
     if (!locationId) {
       return res.status(400).json({ message: 'Location ID required', code: 'LOCATION_REQUIRED' });
     }
