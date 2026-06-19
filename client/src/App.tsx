@@ -64,7 +64,7 @@ function Router() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { isAuthenticated, isLoading, user } = useAuth();
 
-  const isOwner = user?.role === 'owner' || user?.role === 'platform_admin';
+  const isOwner = user?.role === 'owner';
   const { data: onboardingProgress } = useQuery<{ isCompleted: boolean }>({
     queryKey: ['/api/owner-onboarding/progress'],
     enabled: isAuthenticated && isOwner,
