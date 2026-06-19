@@ -107,13 +107,23 @@ export default function InviteEmployeeDialog({
         positionId: data.positionId || undefined,
       };
       
-      return await apiRequest('POST', '/api/invitations', payload);
+      const res = await apiRequest('POST', '/api/invitations', payload);
+      return res.json();
     },
-    onSuccess: () => {
-      toast({
-        title: 'Invitation Sent!',
-        description: 'Employee invitation has been sent successfully via email.',
-      });
+    onSuccess: (data: any) => {
+      if (data?.emailSent) {
+        toast({
+          title: 'Invitation Sent!',
+          description: 'Employee invitation has been sent via email.',
+        });
+      } else {
+        toast({
+          title: 'Invitation Created',
+          description: data?.invitationUrl
+            ? `Email not configured. Share this link: ${data.invitationUrl}`
+            : 'Invitation created. Configure RESEND_API_KEY to send emails.',
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ['/api/invitations'] });
       form.reset();
       setDialogOpen(false);

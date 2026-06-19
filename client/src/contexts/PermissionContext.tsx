@@ -45,6 +45,7 @@ export enum Permission {
 }
 
 export enum RestaurantRole {
+  PLATFORM_ADMIN = "platform_admin",
   OWNER = "owner",
   GM = "gm",
   FOH_MANAGER = "foh_manager",
@@ -55,6 +56,8 @@ export enum RestaurantRole {
 
 // Role-based permission matrix (matching server-side)
 const ROLE_PERMISSIONS: Record<RestaurantRole, Permission[]> = {
+  // Platform admin gets every permission
+  [RestaurantRole.PLATFORM_ADMIN]: Object.values(Permission),
   [RestaurantRole.OWNER]: [
     Permission.VIEW_ALL_EMPLOYEES,
     Permission.MANAGE_EMPLOYEES,
@@ -211,6 +214,7 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
     [RestaurantRole.FOH_MANAGER]: 3,
     [RestaurantRole.GM]: 4,
     [RestaurantRole.OWNER]: 5,
+    [RestaurantRole.PLATFORM_ADMIN]: 10,
   };
   
   const canManageUser = (targetRole: string): boolean => {
@@ -282,7 +286,7 @@ export function usePermissionGuard() {
     canViewFinancials: () => hasPermission(Permission.VIEW_FINANCIAL_DATA),
     canManageInventory: () => hasPermission(Permission.MANAGE_INVENTORY),
     canViewAnalytics: () => hasPermission(Permission.VIEW_ANALYTICS),
-    isManager: () => [RestaurantRole.OWNER, RestaurantRole.GM, RestaurantRole.FOH_MANAGER, RestaurantRole.BOH_MANAGER].includes(userRole),
-    isOwnerOrGM: () => [RestaurantRole.OWNER, RestaurantRole.GM].includes(userRole),
+    isManager: () => [RestaurantRole.PLATFORM_ADMIN, RestaurantRole.OWNER, RestaurantRole.GM, RestaurantRole.FOH_MANAGER, RestaurantRole.BOH_MANAGER].includes(userRole),
+    isOwnerOrGM: () => [RestaurantRole.PLATFORM_ADMIN, RestaurantRole.OWNER, RestaurantRole.GM].includes(userRole),
   };
 }

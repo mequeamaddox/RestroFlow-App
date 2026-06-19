@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "@/contexts/LocationContext";
+import { BarUpgradePrompt } from "@/components/bar/bar-upgrade-prompt";
 import { apiRequest } from "@/lib/queryClient";
 import { DollarSign, Beer, Martini, FlaskConical, Package, Percent, ArrowRight, Save } from "lucide-react";
 import { Link, useLocation as useRoute } from "wouter";
@@ -71,7 +72,7 @@ function toMoney(n: number) {
 }
 
 export default function BeverageCostingPage() {
-  const { currentLocation } = useLocation();
+  const { currentLocation, hasBarAccess } = useLocation();
   const { toast } = useToast();
   const [, navigate] = useRoute();
 
@@ -270,6 +271,8 @@ export default function BeverageCostingPage() {
     setCaseCost(cc);
     setCanSizeOz(csize);
   }
+
+  if (!hasBarAccess) return <BarUpgradePrompt locationName={currentLocation?.name || "this location"} />;
 
   return (
     <div className="p-3 lg:p-6 space-y-6 bg-slate-950 min-h-screen">

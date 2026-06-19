@@ -9,6 +9,7 @@ interface LocationContextType {
   locations: Location[];
   isLoading: boolean;
   hasHRAccess: boolean;
+  hasBarAccess: boolean;
 }
 
 const LocationContext = createContext<LocationContextType | undefined>(undefined);
@@ -46,8 +47,9 @@ export function LocationProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Check if user has HR access (owners always have access, others need HR add-on)
-  const hasHRAccess = user?.role === 'owner' || currentLocation?.hrAddonEnabled || false;
+  // Only platform_admin bypasses add-on checks; owners and all others need the add-on enabled on the location
+  const hasHRAccess = user?.role === 'platform_admin' || currentLocation?.hrAddonEnabled || false;
+  const hasBarAccess = user?.role === 'platform_admin' || (currentLocation as any)?.barAddonEnabled || false;
 
   return (
     <LocationContext.Provider value={{
@@ -55,7 +57,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
       setCurrentLocation,
       locations,
       isLoading,
-      hasHRAccess
+      hasHRAccess,
+      hasBarAccess,
     }}>
       {children}
     </LocationContext.Provider>

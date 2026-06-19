@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -135,19 +135,32 @@ interface OnboardingData {
   employee_invitations?: z.infer<typeof employeeInvitationsSchema>;
 }
 
+interface OnboardingProgress {
+  id?: string;
+  userId: string;
+  isCompleted: boolean;
+  currentStep: string;
+  completedSteps: number;
+  totalSteps: number;
+  data: Record<string, any>;
+}
+
 export default function Onboarding() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  
+
   const [currentStep, setCurrentStep] = useState(0);
   const [onboardingData, setOnboardingData] = useState<OnboardingData>({});
   const [isCompleting, setIsCompleting] = useState(false);
-  
+  const startedRef = useRef(false);
+
+  const isOwnerLevel = (role?: string) => role === 'owner' || role === 'platform_admin';
+
   // Redirect if not owner
   useEffect(() => {
-    if (user && user.role !== 'owner') {
+    if (user && !isOwnerLevel(user.role)) {
       setLocation('/');
       toast({
         title: "Access Denied",
@@ -158,41 +171,54 @@ export default function Onboarding() {
   }, [user, setLocation, toast]);
 
   // Get onboarding progress
-  const { data: progress, isLoading: isLoadingProgress } = useQuery({
+  const { data: progress, isLoading: isLoadingProgress, error: progressError } = useQuery<OnboardingProgress>({
     queryKey: ['/api/owner-onboarding/progress'],
-    enabled: user?.role === 'owner'
+    enabled: isOwnerLevel(user?.role),
+    retry: false,
+  });
+
+  // Get user's locations so we can pass locationId when sending invitations
+  const { data: locations = [] } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ['/api/locations'],
+    enabled: isOwnerLevel(user?.role),
   });
 
   // Start onboarding mutation
-  const startOnboardingMutation = useMutation({
+  const startOnboardingMutation = useMutation<OnboardingProgress>({
     mutationFn: async () => {
-      return await apiRequest('POST', '/api/owner-onboarding/start');
+      const res = await apiRequest('POST', '/api/owner-onboarding/start');
+      return res.json();
     },
     onSuccess: (data) => {
       setOnboardingData(data.data || {});
       const stepIndex = ONBOARDING_STEPS.findIndex(step => step.key === data.currentStep);
       setCurrentStep(Math.max(0, stepIndex));
+    },
+    onError: () => {
+      toast({
+        title: "Setup Error",
+        description: "Could not start onboarding. Please refresh and try again.",
+        variant: "destructive"
+      });
     }
   });
 
   // Update step mutation
   const updateStepMutation = useMutation({
-    mutationFn: async ({ stepName, stepData }: { stepName: string; stepData: any }) => {
-      return await apiRequest('PUT', '/api/owner-onboarding/step', { stepName, stepData, status: 'completed' });
+    mutationFn: async ({ stepName, stepData, status = 'completed' }: { stepName: string; stepData: any; status?: string }) => {
+      const res = await apiRequest('PUT', '/api/owner-onboarding/step', { stepName, stepData, status });
+      return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/owner-onboarding/progress'] });
-      toast({
-        title: "Progress Saved",
-        description: "Your progress has been saved successfully."
-      });
     }
   });
 
   // Complete onboarding mutation
   const completeOnboardingMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest('POST', '/api/owner-onboarding/complete');
+      const res = await apiRequest('POST', '/api/owner-onboarding/complete');
+      return res.json();
     },
     onSuccess: () => {
       toast({
@@ -203,16 +229,29 @@ export default function Onboarding() {
     }
   });
 
-  // Initialize onboarding on mount
+  // Initialize onboarding once when progress query settles
   useEffect(() => {
-    if (user?.role === 'owner' && !progress && !startOnboardingMutation.isPending) {
+    if (!isOwnerLevel(user?.role)) return;
+    if (isLoadingProgress) return;
+    if (startedRef.current) return;
+    startedRef.current = true;
+
+    if (progressError) {
+      // Server error (e.g. table not ready) — mutate will handle retry
       startOnboardingMutation.mutate();
-    } else if (progress) {
+      return;
+    }
+
+    if (progress?.id) {
+      // Existing DB record — resume from saved state
       setOnboardingData(progress.data || {});
       const stepIndex = ONBOARDING_STEPS.findIndex(step => step.key === progress.currentStep);
       setCurrentStep(Math.max(0, stepIndex));
+    } else {
+      // No record yet (server returned default) — create one
+      startOnboardingMutation.mutate();
     }
-  }, [user, progress, startOnboardingMutation]);
+  }, [user?.role, isLoadingProgress, progress, progressError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleStepComplete = async (stepData: any) => {
     const currentStepKey = ONBOARDING_STEPS[currentStep].key;
@@ -221,6 +260,63 @@ export default function Onboarding() {
 
     // Save progress to backend
     await updateStepMutation.mutateAsync({ stepName: currentStepKey, stepData });
+
+    // After restaurant info step: auto-create a location if none exists yet.
+    // This is required for the invitation step to work (invitations need a locationId).
+    if (currentStepKey === 'restaurant_info' && locations.length === 0) {
+      try {
+        await apiRequest('POST', '/api/locations', {
+          name: stepData.name,
+          type: stepData.type || 'restaurant',
+          address: stepData.address,
+          phone: stepData.phone,
+          manager: stepData.manager,
+        });
+        queryClient.invalidateQueries({ queryKey: ['/api/locations'] });
+      } catch {
+        // Non-critical: invitation step will still show a helpful error if needed
+      }
+    }
+
+    // If this is the employee invitations step, send the actual invitations
+    if (currentStepKey === 'employee_invitations' && stepData?.invitations?.length > 0) {
+      const firstLocationId = locations[0]?.id;
+      const sentCount = { emailSent: 0, tokenOnly: 0, failed: 0 };
+      const inviteLinks: string[] = [];
+      for (const invite of stepData.invitations) {
+        if (!invite.email) continue;
+        try {
+          const res = await apiRequest('POST', '/api/invitations', {
+            email: invite.email,
+            role: 'employee',
+            firstName: invite.firstName,
+            lastName: invite.lastName,
+            locationId: firstLocationId,
+            expiresInHours: 168,
+          });
+          const data = await res.json();
+          if (data.emailSent) {
+            sentCount.emailSent++;
+          } else {
+            sentCount.tokenOnly++;
+            if (data.invitationUrl) inviteLinks.push(`${invite.firstName || invite.email}: ${data.invitationUrl}`);
+          }
+        } catch {
+          sentCount.failed++;
+        }
+      }
+      const total = sentCount.emailSent + sentCount.tokenOnly;
+      if (total > 0) {
+        toast({
+          title: sentCount.emailSent > 0 ? `${sentCount.emailSent} invitation email${sentCount.emailSent > 1 ? 's' : ''} sent` : "Invitations created",
+          description: sentCount.tokenOnly > 0
+            ? `${sentCount.tokenOnly} invitation${sentCount.tokenOnly > 1 ? 's' : ''} created (email not configured — share links manually from HR → Invitations).`
+            : sentCount.failed > 0 ? `${sentCount.failed} failed to send.` : "Team members will receive an email to create their accounts.",
+        });
+      } else if (sentCount.failed > 0) {
+        toast({ title: "Invitations failed", description: "Could not create invitations. You can retry from HR → Invitations.", variant: "destructive" });
+      }
+    }
 
     // Move to next step or complete
     if (currentStep < ONBOARDING_STEPS.length - 1) {
@@ -236,7 +332,7 @@ export default function Onboarding() {
     
     if (!ONBOARDING_STEPS[currentStep].required) {
       // Save as skipped
-      await updateStepMutation.mutateAsync({ stepName: currentStepKey, stepData: null });
+      await updateStepMutation.mutateAsync({ stepName: currentStepKey, stepData: null, status: 'skipped' });
       
       if (currentStep < ONBOARDING_STEPS.length - 1) {
         setCurrentStep(currentStep + 1);
@@ -249,10 +345,43 @@ export default function Onboarding() {
 
   const progressPercent = ((currentStep + 1) / ONBOARDING_STEPS.length) * 100;
 
-  if (isLoadingProgress || !user || user.role !== 'owner') {
+  const isInitializing = isLoadingProgress || startOnboardingMutation.isPending;
+
+  if (!user || !isOwnerLevel(user.role)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading onboarding...</div>
+      </div>
+    );
+  }
+
+  if (startOnboardingMutation.isError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <Card className="w-full max-w-md mx-4 bg-slate-800 border-slate-700">
+          <CardHeader className="text-center">
+            <CardTitle className="text-red-400">Setup Unavailable</CardTitle>
+            <CardDescription className="text-slate-300">
+              We couldn't connect to the onboarding service. This is usually a temporary issue.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <Button
+              onClick={() => startOnboardingMutation.mutate()}
+              className="bg-orange-500 hover:bg-orange-600"
+            >
+              Try Again
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-white text-xl">Setting up your workspace...</div>
       </div>
     );
   }
@@ -334,7 +463,7 @@ export default function Onboarding() {
           <CardHeader>
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-                {React.createElement(ONBOARDING_STEPS[currentStep].icon, { className: "w-6 h-6 text-white" })}
+                {(() => { const StepIcon = ONBOARDING_STEPS[currentStep].icon; return <StepIcon className="w-6 h-6 text-white" />; })()}
               </div>
               <div>
                 <CardTitle className="text-white">{ONBOARDING_STEPS[currentStep].title}</CardTitle>
@@ -1201,6 +1330,12 @@ function HRAddonStep({ data, onComplete, onSkip, isLoading }: {
 
   const watchEnableHR = form.watch("enableHR");
 
+  const { data: locationsData } = useQuery<any[]>({
+    queryKey: ['/api/locations'],
+    enabled: watchEnableHR,
+  });
+  const availableLocations = (locationsData || []).map((loc: any) => ({ id: loc.id, name: loc.name }));
+
   const onSubmit = (values: z.infer<typeof hrAddonSchema>) => {
     onComplete(values);
   };
@@ -1241,12 +1376,6 @@ function HRAddonStep({ data, onComplete, onSkip, isLoading }: {
       icon: UserCheck,
       recommended: false
     }
-  ];
-
-  // Mock locations data - in real app this would come from props or API
-  const availableLocations = [
-    { id: "1", name: "Main Restaurant" },
-    { id: "2", name: "Bar & Grill" }
   ];
 
   return (

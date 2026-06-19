@@ -50,6 +50,10 @@ import MultiUnitDashboard from "@/pages/multi-unit-dashboard";
 import BluetoothScalePrototype from "@/pages/bluetooth-scale-prototype";
 import BeverageCost from "@/pages/beveragecost";
 import BeverageMenu from "@/pages/beveragemenu";
+import BarDashboard from "@/pages/bar-dashboard";
+import BarInventory from "@/pages/bar-inventory";
+import BarWasteLog from "@/pages/bar-waste-log";
+import BarPurchaseOrders from "@/pages/bar-purchase-orders";
 import PlatformSettings from "@/pages/platform-settings";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
@@ -106,8 +110,8 @@ function Router() {
               <Switch>
                 {/* Owner Onboarding Route - Must be accessible to owners only */}
                 <Route path="/onboarding" component={() => {
-                  // Only allow owners to access onboarding
-                  if (user?.role !== 'owner') {
+                  // Allow owners and platform_admin to access onboarding
+                  if (!['owner', 'platform_admin'].includes(user?.role ?? '')) {
                     return <NotFound />;
                   }
                   return <Onboarding />;
@@ -131,6 +135,11 @@ function Router() {
                 {/* Hidden owner-only prototype routes */}
                 <Route path="/bluetooth-scale-prototype" component={BluetoothScalePrototype} />
                 <Route path="/beveragecost" component={BeverageCost} />
+                {/* Bar & Beverage Add-on Routes */}
+                <Route path="/bar/dashboard" component={BarDashboard} />
+                <Route path="/bar/inventory" component={BarInventory} />
+                <Route path="/bar/waste-log" component={BarWasteLog} />
+                <Route path="/bar/purchase-orders" component={BarPurchaseOrders} />
                 <Route path="/settings" component={Settings} />
                 {/* HR Employee Management Add-on Routes */}
                 <Route path="/hr/dashboard" component={HRDashboard} />

@@ -67,6 +67,132 @@ const migrations: { name: string; sql: string }[] = [
       updated_by varchar
     )`,
   },
+  {
+    name: "locations.bar_addon_enabled",
+    sql: "ALTER TABLE locations ADD COLUMN IF NOT EXISTS bar_addon_enabled boolean DEFAULT false",
+  },
+  {
+    name: "bar_inventory_counts table",
+    sql: `CREATE TABLE IF NOT EXISTS bar_inventory_counts (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      location_id uuid NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+      counted_by varchar(255) NOT NULL,
+      count_date date NOT NULL DEFAULT CURRENT_DATE,
+      shift varchar(50) NOT NULL DEFAULT 'end_of_day',
+      notes text,
+      status varchar(50) NOT NULL DEFAULT 'draft',
+      created_at timestamp DEFAULT now(),
+      updated_at timestamp DEFAULT now()
+    )`,
+  },
+  {
+    name: "bar_inventory_count_items table",
+    sql: `CREATE TABLE IF NOT EXISTS bar_inventory_count_items (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      count_id uuid NOT NULL REFERENCES bar_inventory_counts(id) ON DELETE CASCADE,
+      inventory_item_id uuid NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+      fill_level numeric(5,4) NOT NULL DEFAULT 1,
+      quantity_ml numeric(10,2),
+      unit_cost numeric(10,4),
+      notes text,
+      created_at timestamp DEFAULT now()
+    )`,
+  },
+  {
+    name: "bar_waste_log table",
+    sql: `CREATE TABLE IF NOT EXISTS bar_waste_log (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      location_id uuid NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+      inventory_item_id uuid REFERENCES inventory_items(id),
+      menu_item_id uuid REFERENCES menu_items(id),
+      item_name varchar(255) NOT NULL,
+      quantity numeric(10,4) NOT NULL,
+      unit varchar(20) NOT NULL DEFAULT 'oz',
+      cost numeric(10,4),
+      reason varchar(50) NOT NULL,
+      notes text,
+      logged_by varchar(255) NOT NULL,
+      log_date timestamp NOT NULL DEFAULT now(),
+      shift varchar(50),
+      created_at timestamp DEFAULT now()
+    )`,
+  },
+  {
+    name: "onboarding_step enum",
+    sql: `DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'onboarding_step') THEN
+        CREATE TYPE onboarding_step AS ENUM ('restaurant_info', 'departments', 'positions', 'hr_addon', 'employee_invitations');
+      END IF;
+    END $$`,
+  },
+  {
+    name: "owner_onboarding_status enum",
+    sql: `DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'owner_onboarding_status') THEN
+        CREATE TYPE owner_onboarding_status AS ENUM ('not_started', 'in_progress', 'completed', 'skipped');
+      END IF;
+    END $$`,
+  },
+  {
+    name: "owner_onboarding table",
+    sql: `CREATE TABLE IF NOT EXISTS owner_onboarding (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id varchar NOT NULL REFERENCES users(id),
+      is_completed boolean DEFAULT false,
+      current_step onboarding_step DEFAULT 'restaurant_info',
+      total_steps integer DEFAULT 5,
+      completed_steps integer DEFAULT 0,
+      skipped_steps jsonb DEFAULT '[]',
+      started_at timestamp DEFAULT now(),
+      completed_at timestamp,
+      data jsonb DEFAULT '{}',
+      created_at timestamp DEFAULT now(),
+      updated_at timestamp DEFAULT now()
+    )`,
+  },
+  {
+    name: "owner_onboarding_steps table",
+    sql: `CREATE TABLE IF NOT EXISTS owner_onboarding_steps (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      onboarding_id uuid NOT NULL REFERENCES owner_onboarding(id) ON DELETE CASCADE,
+      step_name onboarding_step NOT NULL,
+      status owner_onboarding_status DEFAULT 'not_started',
+      step_data jsonb,
+      started_at timestamp,
+      completed_at timestamp,
+      created_at timestamp DEFAULT now(),
+      updated_at timestamp DEFAULT now()
+    )`,
+  },
+  {
+    name: "locations fk cascade — add ON DELETE CASCADE to all FKs referencing locations(id)",
+    sql: `
+      DO $$
+      DECLARE r RECORD;
+      BEGIN
+        FOR r IN
+          SELECT tc.constraint_name, tc.table_name, kcu.column_name
+          FROM information_schema.table_constraints AS tc
+          JOIN information_schema.key_column_usage AS kcu
+            ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+          JOIN information_schema.referential_constraints AS rc
+            ON tc.constraint_name = rc.constraint_name AND tc.table_schema = rc.constraint_schema
+          JOIN information_schema.key_column_usage AS ccu
+            ON rc.unique_constraint_name = ccu.constraint_name AND rc.unique_constraint_schema = ccu.table_schema
+          WHERE tc.constraint_type = 'FOREIGN KEY'
+            AND ccu.table_name = 'locations'
+            AND ccu.column_name = 'id'
+            AND rc.delete_rule <> 'CASCADE'
+        LOOP
+          EXECUTE format('ALTER TABLE %I DROP CONSTRAINT %I', r.table_name, r.constraint_name);
+          EXECUTE format(
+            'ALTER TABLE %I ADD CONSTRAINT %I FOREIGN KEY (%I) REFERENCES locations(id) ON DELETE CASCADE',
+            r.table_name, r.constraint_name, r.column_name
+          );
+        END LOOP;
+      END $$
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

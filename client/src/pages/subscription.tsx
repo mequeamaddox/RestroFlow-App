@@ -37,6 +37,8 @@ interface SubscriptionInfo {
   nextBillingDate: string;
   totalAmount: number;
   hrAddonLocations: number;
+  barAddonLocations: number;
+  locationCount: number;
   createdAt: string;
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
@@ -52,6 +54,7 @@ interface LocationInfo {
   name: string;
   type: string;
   hrAddonEnabled: boolean;
+  barAddonEnabled: boolean;
 }
 
 const PLAN_FEATURES = {
@@ -167,6 +170,8 @@ export default function SubscriptionPage() {
   const ocrLimit = userSubscription?.ocrCreditsLimit || 5;
   const ocrPct = currentPlan === 'free' ? Math.min(100, (ocrUsed / ocrLimit) * 100) : 0;
   const hrEnabledLocations = locations?.filter(loc => loc.hrAddonEnabled) || [];
+  const barEnabledLocations = locations?.filter(loc => loc.barAddonEnabled) || [];
+  const locationLimit = currentPlan === 'free' ? 1 : currentPlan === 'core' ? 3 : null;
 
   if (!user) {
     return (
@@ -279,7 +284,7 @@ export default function SubscriptionPage() {
               )}
 
               {/* HR Add-on */}
-              {(subscription?.hrAddonLocations ?? 0) > 0 && (
+              {(subscription?.hrAddonLocations ?? 0) > 0 ? (
                 <div className="p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Users className="h-4 w-4 text-blue-400" />
@@ -287,6 +292,40 @@ export default function SubscriptionPage() {
                     <span className="text-xs text-slate-400">{hrEnabledLocations.map(l => l.name).join(', ')}</span>
                   </div>
                   <Badge className="bg-blue-600">{subscription?.hrAddonLocations} location{(subscription?.hrAddonLocations ?? 0) > 1 ? 's' : ''}</Badge>
+                </div>
+              ) : currentPlan !== 'free' && (
+                <div className="p-3 bg-slate-700/40 border border-slate-600/50 rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-slate-400" />
+                    <div>
+                      <span className="text-sm text-slate-300 font-medium">HR & Employee Management Add-on</span>
+                      <p className="text-xs text-slate-500">Scheduling, time clock, messaging, documents, payroll</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="border-blue-600 text-blue-400 text-xs whitespace-nowrap">$79/location/mo</Badge>
+                </div>
+              )}
+
+              {/* Bar & Beverage Add-on */}
+              {(subscription?.barAddonLocations ?? 0) > 0 ? (
+                <div className="p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-purple-400">🍸</span>
+                    <span className="text-sm text-white font-medium">Bar & Beverage Add-on active</span>
+                    <span className="text-xs text-slate-400">{barEnabledLocations.map(l => l.name).join(', ')}</span>
+                  </div>
+                  <Badge className="bg-purple-600">{subscription?.barAddonLocations} location{(subscription?.barAddonLocations ?? 0) > 1 ? 's' : ''}</Badge>
+                </div>
+              ) : currentPlan !== 'free' && (
+                <div className="p-3 bg-slate-700/40 border border-slate-600/50 rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-400">🍸</span>
+                    <div>
+                      <span className="text-sm text-slate-300 font-medium">Bar & Beverage Add-on</span>
+                      <p className="text-xs text-slate-500">Cocktail costing, pour cost analysis, liquor inventory</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="border-purple-600 text-purple-400 text-xs whitespace-nowrap">$79/location/mo</Badge>
                 </div>
               )}
 
@@ -364,11 +403,17 @@ export default function SubscriptionPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">Locations</span>
-                  <span className="text-white">{locations?.length || 0}</span>
+                  <span className="text-white">
+                    {locations?.length || 0}{locationLimit !== null ? ` / ${locationLimit}` : ''}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">HR Add-on</span>
-                  <span className="text-white">{(subscription?.hrAddonLocations ?? 0) > 0 ? 'Active' : 'Inactive'}</span>
+                  <span className="text-white">{(subscription?.hrAddonLocations ?? 0) > 0 ? `${subscription!.hrAddonLocations} loc.` : 'Inactive'}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-400">Bar Add-on</span>
+                  <span className="text-white">{(subscription?.barAddonLocations ?? 0) > 0 ? `${subscription!.barAddonLocations} loc.` : 'Inactive'}</span>
                 </div>
               </CardContent>
             </Card>

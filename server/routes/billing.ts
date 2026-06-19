@@ -3,6 +3,7 @@ import { storage } from '../storage';
 import { isAuthenticated, calculateSubscriptionTotal } from './helpers';
 import { requireLocationAccess } from '../securityMiddleware';
 import { sendEmail } from '../email';
+import { isOwnerLevel } from '@shared/roles';
 import {
   stripe,
   isStripeEnabled,
@@ -44,12 +45,13 @@ export function registerBillingRoutes(app: Express): void {
           price: 179,
           billingCycle: 'MONTHLY',
           popular: true,
+          locationLimit: 3,
           features: [
+            'Up to 3 locations',
             'Unlimited OCR invoice processing',
             'Advanced image OCR (scanned invoices)',
             'Support for all file types (PDF, Images)',
             'Advanced analytics dashboard',
-            'Unlimited locations',
             'All POS/accounting integrations',
             'Budget tracking & variance analysis',
             'Theoretical vs actual reporting',
@@ -61,7 +63,7 @@ export function registerBillingRoutes(app: Express): void {
       ],
       hrAddon: {
         pricePerLocation: 79,
-        description: 'HR Management Add-on - Employee scheduling, time tracking, payroll, and document management',
+        description: 'HR Management Add-on — Employee scheduling, time tracking, payroll, and document management',
         features: [
           'Employee scheduling & time tracking',
           'Digital document management',
@@ -73,6 +75,19 @@ export function registerBillingRoutes(app: Express): void {
           'HR analytics & reporting',
         ],
       },
+      barAddon: {
+        pricePerLocation: 79,
+        description: 'Bar & Beverage Add-on — Cocktail recipe costing, pour cost analysis, and liquor inventory',
+        features: [
+          'Liquor inventory tracking by oz/ml',
+          'Cocktail recipe costing',
+          'Pour cost & variance analysis',
+          'Beverage waste tracking',
+          'Happy hour pricing tools',
+          'Beverage menu management',
+          'Bar-specific analytics & reporting',
+        ],
+      },
       stripeEnabled: isStripeEnabled,
     });
   });
@@ -81,19 +96,23 @@ export function registerBillingRoutes(app: Express): void {
     try {
       const userId = req.user!.id;
       const user = await storage.getUser(userId);
-      if (user?.role !== 'owner')
+      if (!isOwnerLevel(user?.role))
         return res.status(403).json({ message: 'Access denied. Only business owners can access subscription information.' });
       if (!user) return res.status(404).json({ message: 'User not found' });
       const allLocations = await storage.getLocations();
       // Tenant-aware: only count THIS owner's locations, never other tenants'
-      const hrAddonLocations = allLocations.filter((loc: any) => loc.ownerId === userId && loc.hrAddonEnabled).length;
+      const ownedLocations = allLocations.filter((loc: any) => loc.ownerId === userId);
+      const hrAddonLocations = ownedLocations.filter((loc: any) => loc.hrAddonEnabled).length;
+      const barAddonLocations = ownedLocations.filter((loc: any) => loc.barAddonEnabled).length;
       res.json({
         id: user.stripeSubscriptionId || user.id,
         plan: user.subscriptionPlan || 'free',
         status: user.subscriptionStatus || 'inactive',
         nextBillingDate: user.subscriptionEndDate?.toISOString(),
-        totalAmount: calculateSubscriptionTotal(user.subscriptionPlan, hrAddonLocations),
+        totalAmount: calculateSubscriptionTotal(user.subscriptionPlan, hrAddonLocations, barAddonLocations),
         hrAddonLocations,
+        barAddonLocations,
+        locationCount: ownedLocations.length,
         stripeCustomerId: user.stripeCustomerId,
         stripeSubscriptionId: user.stripeSubscriptionId,
         createdAt: user.createdAt?.toISOString(),
@@ -110,7 +129,7 @@ export function registerBillingRoutes(app: Express): void {
       const userId = req.user!.id;
       const user = await storage.getSubscriptionByUser(userId);
       if (!user) return res.status(404).json({ message: 'User not found' });
-      if (user.role !== 'owner')
+      if (!isOwnerLevel(user.role))
         return res.status(403).json({ message: 'Access denied. Only business owners can cancel subscriptions.' });
       if (user.stripeSubscriptionId && isStripeEnabled) {
         await cancelStripeSubscription(user.stripeSubscriptionId, false);
@@ -129,11 +148,15 @@ export function registerBillingRoutes(app: Express): void {
 
   app.get('/api/owner-onboarding/progress', isAuthenticated, async (req, res) => {
     try {
-      if (req.user!.role !== 'owner')
+      if (!isOwnerLevel(req.user!.role))
         return res.status(403).json({ message: 'Access denied. Onboarding is only available to business owners.' });
       const onboarding = await storage.getOwnerOnboarding(req.user!.id);
       res.json(onboarding || { userId: req.user!.id, isCompleted: false, currentStep: 'restaurant_info', completedSteps: 0, totalSteps: 5, data: {} });
-    } catch (error) {
+    } catch (error: any) {
+      // If the table doesn't exist yet (first deploy before drizzle-kit push), return the default.
+      if (error?.code === '42P01' || error?.message?.includes('does not exist')) {
+        return res.json({ userId: req.user!.id, isCompleted: false, currentStep: 'restaurant_info', completedSteps: 0, totalSteps: 5, data: {} });
+      }
       console.error('Error fetching onboarding progress:', error);
       res.status(500).json({ message: 'Failed to fetch onboarding progress' });
     }
@@ -141,7 +164,7 @@ export function registerBillingRoutes(app: Express): void {
 
   app.post('/api/owner-onboarding/start', isAuthenticated, async (req, res) => {
     try {
-      if (req.user!.role !== 'owner')
+      if (!isOwnerLevel(req.user!.role))
         return res.status(403).json({ message: 'Access denied. Onboarding is only available to business owners.' });
       let onboarding = await storage.getOwnerOnboarding(req.user!.id);
       if (!onboarding) {
@@ -156,7 +179,7 @@ export function registerBillingRoutes(app: Express): void {
 
   app.put('/api/owner-onboarding/step', isAuthenticated, async (req, res) => {
     try {
-      if (req.user!.role !== 'owner')
+      if (!isOwnerLevel(req.user!.role))
         return res.status(403).json({ message: 'Access denied. Onboarding is only available to business owners.' });
       const { stepName, stepData, status = 'completed' } = req.body;
       const onboarding = await storage.updateOwnerOnboardingStep(req.user!.id, stepName, stepData, status);
@@ -169,7 +192,7 @@ export function registerBillingRoutes(app: Express): void {
 
   app.post('/api/owner-onboarding/complete', isAuthenticated, async (req, res) => {
     try {
-      if (req.user!.role !== 'owner')
+      if (!isOwnerLevel(req.user!.role))
         return res.status(403).json({ message: 'Access denied. Onboarding is only available to business owners.' });
       const onboarding = await storage.completeOwnerOnboarding(req.user!.id);
       res.json(onboarding);

@@ -146,7 +146,7 @@ export default function EmployeeDocuments() {
   };
 
   // Check if user is manager/owner for upload capabilities
-  const isManager = user?.role === 'owner' || user?.role === 'manager';
+  const isManager = user?.role === 'owner' || user?.role === 'platform_admin' || user?.role === 'manager' || user?.role === 'gm' || user?.role === 'foh_manager' || user?.role === 'boh_manager';
 
   const getStatusColor = (status: string) => {
     switch (status) {

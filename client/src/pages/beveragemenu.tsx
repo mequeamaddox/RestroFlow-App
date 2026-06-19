@@ -15,6 +15,7 @@ import { Plus, Search, Martini, DollarSign, Trash2, Eye, Calculator } from "luci
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "@/contexts/LocationContext";
+import { BarUpgradePrompt } from "@/components/bar/bar-upgrade-prompt";
 import { computeLineCost } from "@/lib/unitCost";
 import { z } from "zod";
 import { Link } from "wouter";
@@ -37,7 +38,7 @@ export default function BeverageMenu() {
   const [ingredients, setIngredients] = useState([{ inventoryItemId: '', quantity: 0, unit: 'oz' }]);
   const [targetCostPct, setTargetCostPct] = useState(20); // 20% default pour cost
   const { toast } = useToast();
-  const { currentLocation } = useLocation();
+  const { currentLocation, hasBarAccess } = useLocation();
   const queryClient = useQueryClient();
 
   const { data: menuItems = [], isLoading } = useQuery<any[]>({
@@ -191,6 +192,8 @@ export default function BeverageMenu() {
     };
     return colors[category.toLowerCase()] || 'bg-slate-500/20 text-slate-300';
   };
+
+  if (!hasBarAccess) return <BarUpgradePrompt locationName={currentLocation?.name || "this location"} />;
 
   return (
     <div className="p-3 lg:p-6 space-y-6">

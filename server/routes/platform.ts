@@ -1,6 +1,8 @@
 import type { Express } from 'express';
 import { isAuthenticated, requirePlatformAdmin } from './helpers';
 import { storage } from '../storage';
+import { db } from '../db';
+import { sql } from 'drizzle-orm';
 
 export function registerPlatformRoutes(app: Express): void {
   // All platform routes require platform_admin
@@ -50,6 +52,29 @@ export function registerPlatformRoutes(app: Express): void {
     } catch (error) {
       console.error('Error fetching users:', error);
       res.status(500).json({ message: 'Failed to fetch users' });
+    }
+  });
+
+  // One-time bootstrap: promotes the caller to platform_admin if none exist yet.
+  // Safe to leave in — once a platform_admin exists the endpoint returns 409.
+  app.post('/api/platform/bootstrap', isAuthenticated, async (req: any, res) => {
+    try {
+      const existing = await db.execute(sql`SELECT id FROM users WHERE role = 'platform_admin' LIMIT 1`);
+      if (existing.rows.length > 0) {
+        return res.status(409).json({ message: 'A platform_admin already exists. Bootstrap is disabled.' });
+      }
+      await db.execute(sql`
+        UPDATE users
+        SET role = 'platform_admin',
+            subscription_plan = 'core',
+            subscription_status = 'active',
+            ocr_credits_limit = 999
+        WHERE id = ${req.user.id}
+      `);
+      res.json({ success: true, message: 'Your account has been promoted to platform_admin. Please refresh the page.' });
+    } catch (error) {
+      console.error('Bootstrap error:', error);
+      res.status(500).json({ message: 'Bootstrap failed' });
     }
   });
 }

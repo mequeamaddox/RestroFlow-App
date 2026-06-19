@@ -19,6 +19,7 @@ import { Request, Response, NextFunction } from "express";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { storage } from "./storage";
+import { isOwnerLevel, isManagerLevel } from "@shared/roles";
 
 // ─── Core transaction wrapper ─────────────────────────────────────────────────
 
@@ -120,8 +121,8 @@ export async function verifyLocationAccess(
     const user = await storage.getUser(userId);
     if (!user) return res.status(401).json({ error: "User not found" });
 
-    // Owners and admins can access any location they own
-    if (user.role === "owner" || user.role === "admin") {
+    // Owners, platform_admin, and GM-level users can access any location they own
+    if (isOwnerLevel(user.role) || user.role === "gm" || user.role === "admin") {
       const locations = await storage.getLocations();
       const hasAccess = locations.some((l: { id: string }) => l.id === locationId);
       if (!hasAccess) {
@@ -133,8 +134,8 @@ export async function verifyLocationAccess(
       return next();
     }
 
-    // Employees can only access their assigned location
-    if (user.role === "employee" || user.role === "manager") {
+    // Employees and frontline managers can only access their assigned location
+    if (!isOwnerLevel(user.role) && !isManagerLevel(user.role)) {
       if ((user as any).defaultLocationId !== locationId) {
         return res.status(403).json({
           error: "Location access denied",

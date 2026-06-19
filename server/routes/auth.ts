@@ -3,6 +3,7 @@ import { getAuth } from '@clerk/express';
 import { storage } from '../storage';
 import { isAuthenticated, clerkClient, calculateSubscriptionTotal, requirePlatformAdmin } from './helpers';
 import { requirePermission, Permission } from '../permissions';
+import { isOwnerLevel } from '@shared/roles';
 import { insertInvitationTokenSchema, invitationTokens } from '@shared/schema';
 import { InvitationEmailService } from '../invitationEmailService';
 import { db } from '../db';
@@ -134,7 +135,7 @@ export function registerAuthRoutes(app: Express): void {
     try {
       const userId = req.user!.id;
       const user = await storage.getUser(userId);
-      if (user?.role !== 'owner' && user?.role !== 'admin') {
+      if (!isOwnerLevel(user?.role)) {
         return res.status(403).json({ message: 'Only owners can reset OCR credits' });
       }
       await storage.resetOcrCredits(userId);
@@ -159,22 +160,57 @@ export function registerAuthRoutes(app: Express): void {
   app.post('/api/invitations', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
     try {
       const userId = req.user!.id;
-      const { email, role, locationId, expiresInHours = 72 } = req.body;
+      const { email, role = 'employee', locationId: bodyLocationId, firstName, lastName, departmentId, positionId, hourlyRate, salary, startDate, personalMessage, expiresInHours = 168 } = req.body;
 
-      if (!email || !role) {
-        return res.status(400).json({ message: 'Email and role are required' });
+      if (!email) {
+        return res.status(400).json({ message: 'Email is required' });
       }
 
-      const emailService = new InvitationEmailService();
-      const result = await emailService.createAndSendInvitation({
+      // Resolve locationId — fall back to the user's first owned location
+      let locationId = bodyLocationId;
+      if (!locationId) {
+        const allLocations = await storage.getLocations();
+        const owned = allLocations.find((l: any) => l.ownerId === userId);
+        if (!owned) return res.status(400).json({ message: 'Location ID required and no owned location found' });
+        locationId = owned.id;
+      }
+
+      // Build the token record
+      const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000);
+      const invitation = await storage.createInvitationToken({
         email,
+        firstName: firstName || '',
+        lastName: lastName || '',
         role,
         locationId,
+        departmentId: departmentId || undefined,
+        positionId: positionId || undefined,
+        hourlyRate: hourlyRate || undefined,
+        salary: salary || undefined,
+        startDate: startDate || undefined,
+        personalMessage: personalMessage || undefined,
         invitedBy: userId,
-        expiresInHours,
+        expiresAt,
       });
 
-      res.status(201).json(result);
+      // Send email (non-blocking — log failure but still return the token)
+      const inviter = await storage.getUser(userId);
+      const allLocations = await storage.getLocations();
+      const location = allLocations.find((l: any) => l.id === locationId);
+      const companyName = location?.name || 'RestroFlow';
+      const inviterName = inviter ? `${inviter.firstName || ''} ${inviter.lastName || ''}`.trim() || inviter.email || 'Your manager' : 'Your manager';
+
+      const appUrl = process.env.APP_URL || `${process.env.PROTOCOL || 'https'}://${process.env.RAILWAY_STATIC_URL || 'restroflow.com'}`;
+      const invitationUrl = `${appUrl}/invitation/accept/${invitation.token}`;
+
+      let emailSent = false;
+      try {
+        emailSent = await InvitationEmailService.sendInvitationEmail(invitation, inviterName, companyName, location?.name);
+      } catch (err: any) {
+        console.error('Invitation email send failed (token created):', err?.message);
+      }
+
+      res.status(201).json({ ...invitation, emailSent, invitationUrl });
     } catch (error) {
       console.error('Error creating invitation:', error);
       res.status(500).json({ message: 'Failed to create invitation' });
@@ -232,7 +268,7 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(410).json({ message: 'Invitation has expired' });
       }
 
-      if (invitation.usedAt) {
+      if (invitation.acceptedAt) {
         return res.status(410).json({ message: 'Invitation has already been used' });
       }
 

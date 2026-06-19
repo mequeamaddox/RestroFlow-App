@@ -1,6 +1,6 @@
 import type { Express } from 'express';
 import { storage } from '../storage';
-import { isAuthenticated, csvUpload } from './helpers';
+import { isAuthenticated, csvUpload, PLAN_LOCATION_LIMITS } from './helpers';
 import { requireLocationAccess, assertLocationAccess } from '../securityMiddleware';
 import {
   insertLocationSchema,
@@ -35,6 +35,23 @@ export function registerInventoryRoutes(app: Express): void {
 
   app.post('/api/locations', isAuthenticated, async (req, res) => {
     try {
+      const user = await storage.getUser(req.user!.id);
+      // Enforce per-plan location limits (platform_admin is unlimited)
+      if (req.user!.role !== 'platform_admin') {
+        const plan = (user?.subscriptionPlan || 'free') as string;
+        const limit = PLAN_LOCATION_LIMITS[plan];
+        if (limit !== undefined) {
+          const existing = await storage.getLocations(req.user!.id);
+          if (existing.length >= limit) {
+            return res.status(403).json({
+              message: `Your ${plan === 'free' ? 'free' : 'Core'} plan allows up to ${limit} location${limit > 1 ? 's' : ''}. Upgrade to add more.`,
+              code: 'LOCATION_LIMIT_REACHED',
+              limit,
+              current: existing.length,
+            });
+          }
+        }
+      }
       const locationData = insertLocationSchema.parse(req.body);
       const location = await storage.createLocation({ ...locationData, ownerId: req.user!.id });
       res.status(201).json(location);

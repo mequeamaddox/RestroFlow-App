@@ -65,18 +65,28 @@ export function mapPositionToRole(positionTitle: string | null | undefined): str
 }
 
 // Single source of truth for subscription pricing (USD / month).
-// These must match what Stripe actually charges:
-// RestroFlow Core (Professional) = $179, HR add-on = $79 per location.
 export const PLAN_BASE_PRICE: Record<string, number> = {
   free: 0,
   core: 179,
 };
 export const HR_ADDON_PRICE_PER_LOCATION = 79;
+export const BAR_ADDON_PRICE_PER_LOCATION = 79;
 
-export function calculateSubscriptionTotal(plan: string | null | undefined, hrAddonLocations: number): number {
+// Plan location limits: free = 1, core = 3, platform_admin = unlimited
+export const PLAN_LOCATION_LIMITS: Record<string, number> = {
+  free: 1,
+  core: 3,
+};
+
+export function calculateSubscriptionTotal(
+  plan: string | null | undefined,
+  hrAddonLocations: number,
+  barAddonLocations = 0,
+): number {
   const basePlanCost = PLAN_BASE_PRICE[plan || 'free'] ?? 0;
-  const hrAddonCost = hrAddonLocations * HR_ADDON_PRICE_PER_LOCATION;
-  return basePlanCost + hrAddonCost;
+  return basePlanCost
+    + hrAddonLocations * HR_ADDON_PRICE_PER_LOCATION
+    + barAddonLocations * BAR_ADDON_PRICE_PER_LOCATION;
 }
 
 export function requirePlatformAdmin(req: any, res: any, next: any) {
@@ -88,14 +98,14 @@ export function requirePlatformAdmin(req: any, res: any, next: any) {
 
 export const requireHRAccess = async (req: any, res: any, next: any) => {
   try {
-    const locationId = req.query.locationId as string;
+    const locationId = (req.query.locationId || req.body?.locationId) as string;
     if (!locationId) {
       return res.status(400).json({ message: 'Location ID required', code: 'LOCATION_REQUIRED' });
     }
     const user = req.user;
-    if (user?.role === 'owner') return next();
-    const locations = await storage.getLocations();
-    const location = locations.find((loc: any) => loc.id === locationId);
+    if (user?.role === 'platform_admin') return next();
+    const locs = await storage.getLocations();
+    const location = locs.find((loc: any) => loc.id === locationId);
     if (!location) {
       return res.status(404).json({ message: 'Location not found' });
     }
@@ -103,12 +113,39 @@ export const requireHRAccess = async (req: any, res: any, next: any) => {
       return res.status(403).json({
         message: 'HR add-on not enabled for this location',
         code: 'HR_ADDON_REQUIRED',
-        upgradeUrl: '/upgrade',
+        upgradeUrl: '/subscription',
       });
     }
     next();
   } catch (error) {
     console.error('Error checking HR access:', error);
     res.status(500).json({ message: 'Failed to check HR access' });
+  }
+};
+
+export const requireBarAccess = async (req: any, res: any, next: any) => {
+  try {
+    const locationId = (req.query.locationId || req.body?.locationId) as string;
+    if (!locationId) {
+      return res.status(400).json({ message: 'Location ID required', code: 'LOCATION_REQUIRED' });
+    }
+    const user = req.user;
+    if (user?.role === 'platform_admin') return next();
+    const locs = await storage.getLocations();
+    const location = locs.find((loc: any) => loc.id === locationId);
+    if (!location) {
+      return res.status(404).json({ message: 'Location not found' });
+    }
+    if (!location.barAddonEnabled) {
+      return res.status(403).json({
+        message: 'Bar & Beverage add-on not enabled for this location',
+        code: 'BAR_ADDON_REQUIRED',
+        upgradeUrl: '/subscription',
+      });
+    }
+    next();
+  } catch (error) {
+    console.error('Error checking Bar access:', error);
+    res.status(500).json({ message: 'Failed to check Bar access' });
   }
 };
