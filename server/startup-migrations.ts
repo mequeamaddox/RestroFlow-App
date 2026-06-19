@@ -169,6 +169,36 @@ const migrations: { name: string; sql: string }[] = [
     )`,
   },
   {
+    name: "seed default document templates",
+    sql: `
+      INSERT INTO document_templates (name, type, description, is_required, is_active, requires_signature, sort_order)
+      SELECT name, type::document_type_new, description, is_required, true, requires_signature, sort_order
+      FROM (VALUES
+        ('Federal W-4 — Employee Withholding',      'w4_federal',        'Federal income tax withholding certificate',                      true,  true,  1),
+        ('I-9 — Employment Eligibility',            'i9',                'Verifies identity and authorization to work in the U.S.',          true,  true,  2),
+        ('Direct Deposit Authorization',            'direct_deposit',    'Bank account information for payroll direct deposit',             true,  false, 3),
+        ('Emergency Contact Information',           'emergency_contact', 'Emergency contact names and phone numbers',                        true,  false, 4),
+        ('Employee Handbook Acknowledgment',        'handbook',          'Confirms employee has read and understands the handbook',          true,  true,  5),
+        ('Code of Conduct Agreement',               'code_of_conduct',   'Acknowledgment of company code of conduct',                       true,  true,  6),
+        ('Harassment & Discrimination Policy',      'harassment_policy', 'Acknowledgment of anti-harassment and non-discrimination policy', true,  true,  7),
+        ('Uniform & Appearance Policy',             'uniform_policy',    'Acknowledgment of uniform requirements',                          false, false, 8),
+        ('Food Safety Training Completion',         'safety_training',   'Confirmation of food safety and workplace safety training',        true,  false, 9),
+        ('Confidentiality / NDA',                   'nda',               'Non-disclosure agreement for proprietary business information',    false, true,  10)
+      ) AS v(name, type, description, is_required, requires_signature, sort_order)
+      WHERE NOT EXISTS (SELECT 1 FROM document_templates LIMIT 1)
+    `,
+  },
+  {
+    name: "seed default onboarding template",
+    sql: `
+      INSERT INTO onboarding_templates (name, description, category, is_default, estimated_duration_days, created_by)
+      SELECT 'Standard New Hire Onboarding', 'Default onboarding checklist for all new employees', 'general', true, 14, u.id
+      FROM users u
+      WHERE NOT EXISTS (SELECT 1 FROM onboarding_templates LIMIT 1)
+      LIMIT 1
+    `,
+  },
+  {
     name: "locations fk cascade — add ON DELETE CASCADE to all FKs referencing locations(id)",
     sql: `
       DO $$

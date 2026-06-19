@@ -82,7 +82,7 @@ export function registerDocumentRoutes(app: Express): void {
 
   app.post('/api/employee-documents/assign', isAuthenticated, async (req, res) => {
     try {
-      const assignmentData = { ...req.body, sentBy: req.user!.id, sentAt: new Date(), status: 'assigned' };
+      const assignmentData = { ...req.body, sentBy: req.user!.id, sentAt: new Date(), status: 'sent' };
       const assignment = await storage.createDocumentAssignment(assignmentData);
       const employeeId = assignmentData.employeeId;
       const existingOnboarding = await storage.getEmployeeOnboarding(employeeId);
