@@ -21,7 +21,7 @@ export function registerDocumentRoutes(app: Express): void {
   app.post('/api/test/email', isAuthenticated, async (_req, res) => {
     try {
       const { sendEmail } = await import('../email');
-      await sendEmail({ to: 'mequeamaddox@gmail.com', from: 'mequeamaddox@gmail.com', subject: 'RestroFlow Email Test', text: 'This is a test email from RestroFlow to verify Resend is working.', html: '<p>This is a <strong>test email</strong> from RestroFlow to verify Resend is working.</p>' });
+      await sendEmail({ to: 'mequeamaddox@gmail.com', from: process.env.FROM_EMAIL || 'noreply@restroflowsolutions.com', subject: 'RestroFlow Email Test', text: 'This is a test email from RestroFlow to verify Resend is working.', html: '<p>This is a <strong>test email</strong> from RestroFlow to verify Resend is working.</p>' });
       res.json({ success: true, message: 'Test email sent successfully!' });
     } catch (error) {
       console.error('Test email failed:', error);

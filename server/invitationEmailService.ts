@@ -16,8 +16,8 @@ interface InvitationEmailData {
 }
 
 export class InvitationEmailService {
-  private static readonly FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@restroflow.com';
-  private static readonly APP_URL = process.env.APP_URL || 'https://restroflow.com';
+  private static readonly FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@restroflowsolutions.com';
+  private static readonly APP_URL = process.env.APP_URL || 'https://restroflowsolutions.com';
 
   static generateInvitationHtml(data: InvitationEmailData): string {
     const invitationUrl = `${this.APP_URL}/invitation/accept/${data.invitationToken}`;

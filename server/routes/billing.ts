@@ -334,9 +334,9 @@ export function registerBillingRoutes(app: Express): void {
           }
           if (email) {
             const trialEndDate = new Date(sub.trial_end * 1000).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-            const appUrl = process.env.APP_URL || 'https://app.restroflow.com';
+            const appUrl = process.env.APP_URL || 'https://restroflowsolutions.com';
             await sendEmail({
-              to: email, from: 'billing@restroflow.com', subject: 'Your RestroFlow trial ends soon',
+              to: email, from: process.env.FROM_EMAIL || 'noreply@restroflowsolutions.com', subject: 'Your RestroFlow trial ends soon',
               html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;"><h2 style="color:#f97316;">Your free trial ends on ${trialEndDate}</h2><p>After your trial ends, you'll be charged automatically based on your chosen plan. No action needed if you'd like to continue — your card on file will be billed.</p><p>To update your payment method or cancel before the trial ends, visit your billing portal.</p><a href="${appUrl}/subscription" style="display:inline-block;background:#f97316;color:white;padding:12px 28px;text-decoration:none;border-radius:6px;font-weight:600;margin:16px 0;">Manage Subscription →</a></div>`,
             }).catch(e => console.error('Failed to send trial-ending email:', e));
           }
@@ -345,10 +345,10 @@ export function registerBillingRoutes(app: Express): void {
         case 'invoice.payment_failed': {
           const invoice = event.data.object as any;
           if (invoice.customer_email) {
-            const appUrl = process.env.APP_URL || 'https://app.restroflow.com';
+            const appUrl = process.env.APP_URL || 'https://restroflowsolutions.com';
             await sendEmail({
-              to: invoice.customer_email, from: 'billing@restroflow.com', subject: 'Action Required: Payment Failed for RestroFlow',
-              html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;"><div style="background:#ef444420;border:1px solid #ef4444;border-radius:8px;padding:16px;margin-bottom:24px;"><h2 style="color:#ef4444;margin:0 0 8px;">⚠️ Payment Failed</h2><p style="margin:0;color:#374151;">We were unable to process your RestroFlow subscription payment.</p></div><p>To keep your account active, please update your payment method.</p><a href="${appUrl}/subscription" style="display:inline-block;background:#f97316;color:white;padding:12px 28px;text-decoration:none;border-radius:6px;font-weight:600;margin:16px 0;">Update Payment Method →</a><p style="color:#6b7280;font-size:13px;margin-top:24px;">Questions? Contact <a href="mailto:support@restroflow.com">support@restroflow.com</a></p></div>`,
+              to: invoice.customer_email, from: process.env.FROM_EMAIL || 'noreply@restroflowsolutions.com', subject: 'Action Required: Payment Failed for RestroFlow',
+              html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;"><div style="background:#ef444420;border:1px solid #ef4444;border-radius:8px;padding:16px;margin-bottom:24px;"><h2 style="color:#ef4444;margin:0 0 8px;">⚠️ Payment Failed</h2><p style="margin:0;color:#374151;">We were unable to process your RestroFlow subscription payment.</p></div><p>To keep your account active, please update your payment method.</p><a href="${appUrl}/subscription" style="display:inline-block;background:#f97316;color:white;padding:12px 28px;text-decoration:none;border-radius:6px;font-weight:600;margin:16px 0;">Update Payment Method →</a><p style="color:#6b7280;font-size:13px;margin-top:24px;">Questions? Contact <a href="mailto:support@restroflowsolutions.com">support@restroflowsolutions.com</a></p></div>`,
             }).catch(e => console.error('Failed to send dunning email:', e));
           }
           break;
