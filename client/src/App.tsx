@@ -110,8 +110,8 @@ function Router() {
               <Switch>
                 {/* Owner Onboarding Route - Must be accessible to owners only */}
                 <Route path="/onboarding" component={() => {
-                  // Only allow owners to access onboarding
-                  if (user?.role !== 'owner') {
+                  // Allow owners and platform_admin to access onboarding
+                  if (!['owner', 'platform_admin'].includes(user?.role ?? '')) {
                     return <NotFound />;
                   }
                   return <Onboarding />;

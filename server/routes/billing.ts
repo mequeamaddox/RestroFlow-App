@@ -152,7 +152,11 @@ export function registerBillingRoutes(app: Express): void {
         return res.status(403).json({ message: 'Access denied. Onboarding is only available to business owners.' });
       const onboarding = await storage.getOwnerOnboarding(req.user!.id);
       res.json(onboarding || { userId: req.user!.id, isCompleted: false, currentStep: 'restaurant_info', completedSteps: 0, totalSteps: 5, data: {} });
-    } catch (error) {
+    } catch (error: any) {
+      // If the table doesn't exist yet (first deploy before drizzle-kit push), return the default.
+      if (error?.code === '42P01' || error?.message?.includes('does not exist')) {
+        return res.json({ userId: req.user!.id, isCompleted: false, currentStep: 'restaurant_info', completedSteps: 0, totalSteps: 5, data: {} });
+      }
       console.error('Error fetching onboarding progress:', error);
       res.status(500).json({ message: 'Failed to fetch onboarding progress' });
     }

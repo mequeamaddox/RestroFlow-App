@@ -200,11 +200,17 @@ export function registerAuthRoutes(app: Express): void {
       const companyName = location?.name || 'RestroFlow';
       const inviterName = inviter ? `${inviter.firstName || ''} ${inviter.lastName || ''}`.trim() || inviter.email || 'Your manager' : 'Your manager';
 
-      InvitationEmailService.sendInvitationEmail(invitation, inviterName, companyName, location?.name).catch((err: any) => {
-        console.error('Invitation email send failed (token created):', err?.message);
-      });
+      const appUrl = process.env.APP_URL || `${process.env.PROTOCOL || 'https'}://${process.env.RAILWAY_STATIC_URL || 'restroflow.com'}`;
+      const invitationUrl = `${appUrl}/invitation/accept/${invitation.token}`;
 
-      res.status(201).json(invitation);
+      let emailSent = false;
+      try {
+        emailSent = await InvitationEmailService.sendInvitationEmail(invitation, inviterName, companyName, location?.name);
+      } catch (err: any) {
+        console.error('Invitation email send failed (token created):', err?.message);
+      }
+
+      res.status(201).json({ ...invitation, emailSent, invitationUrl });
     } catch (error) {
       console.error('Error creating invitation:', error);
       res.status(500).json({ message: 'Failed to create invitation' });
@@ -262,7 +268,7 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(410).json({ message: 'Invitation has expired' });
       }
 
-      if (invitation.usedAt) {
+      if (invitation.acceptedAt) {
         return res.status(410).json({ message: 'Invitation has already been used' });
       }
 

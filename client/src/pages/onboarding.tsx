@@ -261,33 +261,60 @@ export default function Onboarding() {
     // Save progress to backend
     await updateStepMutation.mutateAsync({ stepName: currentStepKey, stepData });
 
+    // After restaurant info step: auto-create a location if none exists yet.
+    // This is required for the invitation step to work (invitations need a locationId).
+    if (currentStepKey === 'restaurant_info' && locations.length === 0) {
+      try {
+        await apiRequest('POST', '/api/locations', {
+          name: stepData.name,
+          type: stepData.type || 'restaurant',
+          address: stepData.address,
+          phone: stepData.phone,
+          manager: stepData.manager,
+        });
+        queryClient.invalidateQueries({ queryKey: ['/api/locations'] });
+      } catch {
+        // Non-critical: invitation step will still show a helpful error if needed
+      }
+    }
+
     // If this is the employee invitations step, send the actual invitations
     if (currentStepKey === 'employee_invitations' && stepData?.invitations?.length > 0) {
       const firstLocationId = locations[0]?.id;
-      const sentCount = { success: 0, failed: 0 };
+      const sentCount = { emailSent: 0, tokenOnly: 0, failed: 0 };
+      const inviteLinks: string[] = [];
       for (const invite of stepData.invitations) {
         if (!invite.email) continue;
         try {
-          await apiRequest('POST', '/api/invitations', {
+          const res = await apiRequest('POST', '/api/invitations', {
             email: invite.email,
             role: 'employee',
             firstName: invite.firstName,
             lastName: invite.lastName,
             locationId: firstLocationId,
-            expiresInHours: 168, // 7 days
+            expiresInHours: 168,
           });
-          sentCount.success++;
+          const data = await res.json();
+          if (data.emailSent) {
+            sentCount.emailSent++;
+          } else {
+            sentCount.tokenOnly++;
+            if (data.invitationUrl) inviteLinks.push(`${invite.firstName || invite.email}: ${data.invitationUrl}`);
+          }
         } catch {
           sentCount.failed++;
         }
       }
-      if (sentCount.success > 0) {
+      const total = sentCount.emailSent + sentCount.tokenOnly;
+      if (total > 0) {
         toast({
-          title: `${sentCount.success} invitation${sentCount.success > 1 ? 's' : ''} sent`,
-          description: sentCount.failed > 0 ? `${sentCount.failed} failed to send` : "Team members will receive an email to create their accounts.",
+          title: sentCount.emailSent > 0 ? `${sentCount.emailSent} invitation email${sentCount.emailSent > 1 ? 's' : ''} sent` : "Invitations created",
+          description: sentCount.tokenOnly > 0
+            ? `${sentCount.tokenOnly} invitation${sentCount.tokenOnly > 1 ? 's' : ''} created (email not configured — share links manually from HR → Invitations).`
+            : sentCount.failed > 0 ? `${sentCount.failed} failed to send.` : "Team members will receive an email to create their accounts.",
         });
       } else if (sentCount.failed > 0) {
-        toast({ title: "Invitations failed", description: "Could not send invitations. You can retry from HR → Invitations.", variant: "destructive" });
+        toast({ title: "Invitations failed", description: "Could not create invitations. You can retry from HR → Invitations.", variant: "destructive" });
       }
     }
 
@@ -340,7 +367,7 @@ export default function Onboarding() {
           </CardHeader>
           <CardContent className="text-center">
             <Button
-              onClick={() => { startedRef.current = false; startOnboardingMutation.reset(); }}
+              onClick={() => startOnboardingMutation.mutate()}
               className="bg-orange-500 hover:bg-orange-600"
             >
               Try Again
