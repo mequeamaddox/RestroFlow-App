@@ -23,6 +23,7 @@ import { securityHeaders, apiLimiter } from "./securityMiddleware";
 import { startSpotOnSchedulers } from "./jobs/spoton.scheduler";
 import { startAnalyticsScheduler } from "./jobs/analyticsScheduler";
 import { startCloverScheduler } from "./jobs/clover.scheduler";
+import { startEmailDigestScheduler } from "./jobs/emailDigest";
 
 // Global error handlers — report to Sentry before deciding whether to keep the process alive
 process.on('uncaughtException', (error) => {
@@ -122,6 +123,7 @@ app.use((req, res, next) => {
       startSpotOnSchedulers();
       startAnalyticsScheduler();
       startCloverScheduler();
+      startEmailDigestScheduler();
     } else {
       log('Schedulers disabled (set ENABLE_SCHEDULERS=true to enable)');
     }

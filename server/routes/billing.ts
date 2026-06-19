@@ -3,6 +3,7 @@ import { storage } from '../storage';
 import { isAuthenticated, calculateSubscriptionTotal } from './helpers';
 import { requireLocationAccess } from '../securityMiddleware';
 import { sendEmail } from '../email';
+import { sendWelcomeEmail, sendInvoiceReceiptEmail } from '../transactionalEmails';
 import { isOwnerLevel } from '@shared/roles';
 import {
   stripe,
@@ -276,6 +277,11 @@ export function registerBillingRoutes(app: Express): void {
               stripeSubscriptionId: session.subscription,
               ocrCreditsLimit: 999,
             });
+            const u = await storage.getUser(userId);
+            if (u?.email) {
+              sendWelcomeEmail(u.email, u.firstName ?? undefined)
+                .catch(e => console.error('Failed to send welcome email:', e));
+            }
           }
           break;
         }
@@ -319,6 +325,19 @@ export function registerBillingRoutes(app: Express): void {
               const sub = subscriptions.data[0];
               if (sub?.metadata?.userId) {
                 await storage.updateUserSubscription(sub.metadata.userId, { subscriptionStatus: mapStripeStatusToPlan(sub.status) });
+              }
+              if (invoice.customer_email) {
+                const periodStart = new Date(invoice.period_start * 1000);
+                const periodEnd = new Date(invoice.period_end * 1000);
+                sendInvoiceReceiptEmail(invoice.customer_email, {
+                  invoiceNumber: invoice.number || invoice.id,
+                  amountPaid: invoice.amount_paid / 100,
+                  currency: invoice.currency,
+                  periodStart,
+                  periodEnd,
+                  invoiceUrl: invoice.hosted_invoice_url,
+                  plan: sub?.metadata?.plan,
+                }).catch(e => console.error('Failed to send invoice receipt email:', e));
               }
             } catch (e) { console.error('Failed to refresh subscription after invoice.paid:', e); }
           }
