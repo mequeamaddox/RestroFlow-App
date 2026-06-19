@@ -40,16 +40,6 @@ const app = express();
 // Configure trust proxy for Railway/Replit environment (fix rate limiting warning)
 app.set('trust proxy', 1);
 
-// Redirect www to apex domain so Clerk (authorized on restroflowsolutions.com) always loads
-app.use((req: Request, res: Response, next: NextFunction) => {
-  const host = req.hostname;
-  if (host && host.startsWith('www.')) {
-    const apex = host.slice(4);
-    return res.redirect(301, `${req.protocol}://${apex}${req.originalUrl}`);
-  }
-  next();
-});
-
 // Apply enterprise security middleware
 app.use(securityHeaders);
 app.use('/api/', apiLimiter);
