@@ -47,9 +47,9 @@
     const { toast } = useToast();
 
     const { data: invitation, isLoading: validatingToken, error: validationError } = useQuery<InvitationDetails>({
-      queryKey: ['/api/invitations', token],
+      queryKey: ['/api/invite', token],
       queryFn: async () => {
-        const response = await fetch(`/api/invitations/${token}`);
+        const response = await fetch(`/api/invite/${token}`);
         if (!response.ok) throw new Error('Invalid or expired invitation');
         return response.json();
       },
@@ -63,7 +63,7 @@
 
     const acceptInvitationMutation = useMutation({
       mutationFn: async (data: AcceptInvitationFormData) => {
-        const response = await apiRequest('POST', `/api/invitations/${token}/accept`, {
+        const response = await apiRequest('POST', `/api/invite/${token}/accept`, {
           password: data.password,
         });
         return response.json();
