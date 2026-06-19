@@ -72,6 +72,10 @@ const migrations: { name: string; sql: string }[] = [
     sql: "ALTER TABLE locations ADD COLUMN IF NOT EXISTS bar_addon_enabled boolean DEFAULT false",
   },
   {
+    name: "locations.hr_addon_enabled",
+    sql: "ALTER TABLE locations ADD COLUMN IF NOT EXISTS hr_addon_enabled boolean DEFAULT false",
+  },
+  {
     name: "bar_inventory_counts table",
     sql: `CREATE TABLE IF NOT EXISTS bar_inventory_counts (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
