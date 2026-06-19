@@ -529,7 +529,7 @@ print(json.dumps(rows))
       if (req.body.status === 'delivered' && currentOrder.status !== 'delivered') {
         console.log(`PO ${req.params.id} marked as delivered — processing inventory receiving...`);
         try {
-          const orderItems = await storage.getPurchaseOrderItems(req.params.id);
+          const orderItems = currentOrder.items || [];
           for (const item of orderItems) {
             const inventoryItem = await storage.getInventoryItem(item.inventoryItemId);
             if (inventoryItem) {
@@ -573,8 +573,7 @@ print(json.dumps(rows))
       const order = await storage.getPurchaseOrder(req.params.id);
       if (!order) return res.status(404).json({ message: 'Purchase order not found' });
       if (order.locationId && !await assertLocationAccess(req, res, order.locationId)) return;
-      const items = await storage.getPurchaseOrderItems(req.params.id);
-      res.json(items);
+      res.json(order.items || []);
     } catch (error) {
       console.error('Error fetching purchase order items:', error);
       res.status(500).json({ message: 'Failed to fetch purchase order items' });

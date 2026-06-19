@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
+import { useQuery, QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
@@ -64,6 +64,13 @@ function Router() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { isAuthenticated, isLoading, user } = useAuth();
 
+  const isOwner = user?.role === 'owner' || user?.role === 'platform_admin';
+  const { data: onboardingProgress } = useQuery<{ isCompleted: boolean }>({
+    queryKey: ['/api/owner-onboarding/progress'],
+    enabled: isAuthenticated && isOwner,
+    staleTime: 60_000,
+  });
+
   // Always call hooks in the same order, handle conditions in JSX
   if (isLoading) {
     return (
@@ -118,8 +125,12 @@ function Router() {
                 }} />
                 
                 <Route path="/" component={() => {
-                  // Route employees to their dashboard, others to admin dashboard
-                  return user?.role === 'employee' ? <EmployeeDashboard /> : <Dashboard />;
+                  if (user?.role === 'employee') return <EmployeeDashboard />;
+                  // Redirect owners to onboarding until they complete it
+                  if (isOwner && onboardingProgress && !onboardingProgress.isCompleted) {
+                    return <Redirect to="/onboarding" />;
+                  }
+                  return <Dashboard />;
                 }} />
                 <Route path="/inventory" component={Inventory} />
                 <Route path="/recipes" component={Recipes} />
