@@ -148,15 +148,18 @@ export default function EmployeeDocuments() {
   // Check if user is manager/owner for upload capabilities
   const isManager = user?.role === 'owner' || user?.role === 'platform_admin' || user?.role === 'manager' || user?.role === 'gm' || user?.role === 'foh_manager' || user?.role === 'boh_manager';
 
+  const PENDING_STATUSES = ['sent', 'viewed', 'assigned', 'in_progress'];
+  const DONE_STATUSES = ['completed', 'signed', 'uploaded', 'approved'];
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'approved': return 'bg-green-900/30 text-green-400 border border-green-800';
       case 'uploaded': return 'bg-cyan-900/30 text-cyan-400 border border-cyan-800';
       case 'signed': return 'bg-purple-900/30 text-purple-400 border border-purple-800';
       case 'completed': return 'bg-blue-900/30 text-blue-400 border border-blue-800';
-      case 'in_progress': return 'bg-yellow-900/30 text-yellow-400 border border-yellow-800';
-      case 'assigned': return 'bg-accent text-foreground border-border';
-      case 'rejected': return 'bg-red-900/30 text-red-400 border border-red-800';
+      case 'viewed': case 'in_progress': return 'bg-yellow-900/30 text-yellow-400 border border-yellow-800';
+      case 'sent': case 'assigned': return 'bg-accent text-foreground border-border';
+      case 'declined': case 'rejected': return 'bg-red-900/30 text-red-400 border border-red-800';
       default: return 'bg-accent text-foreground border-border';
     }
   };
@@ -167,28 +170,28 @@ export default function EmployeeDocuments() {
       case 'uploaded': return <Upload className="h-4 w-4 text-cyan-600" />;
       case 'signed': return <PenTool className="h-4 w-4 text-purple-600" />;
       case 'completed': return <Clock className="h-4 w-4 text-blue-600" />;
-      case 'in_progress': return <Target className="h-4 w-4 text-yellow-600" />;
-      case 'assigned': return <FileText className="h-4 w-4 text-muted-foreground" />;
-      case 'rejected': return <AlertTriangle className="h-4 w-4 text-red-600" />;
+      case 'viewed': case 'in_progress': return <Target className="h-4 w-4 text-yellow-600" />;
+      case 'sent': case 'assigned': return <FileText className="h-4 w-4 text-muted-foreground" />;
+      case 'declined': case 'rejected': return <AlertTriangle className="h-4 w-4 text-red-600" />;
       default: return <FileText className="h-4 w-4 text-muted-foreground" />;
     }
   };
 
   const filteredDocuments = documents.filter(doc => {
     if (filter === 'all') return true;
-    if (filter === 'pending') return ['assigned', 'in_progress'].includes(doc.status);
+    if (filter === 'pending') return PENDING_STATUSES.includes(doc.status);
     if (filter === 'overdue') {
-      return doc.deadline && new Date(doc.deadline) < new Date() && !['completed', 'signed', 'uploaded', 'approved'].includes(doc.status);
+      return doc.deadline && new Date(doc.deadline) < new Date() && !DONE_STATUSES.includes(doc.status);
     }
     return doc.status === filter;
   });
 
   const stats = {
     total: documents.length,
-    pending: documents.filter(doc => ['assigned', 'in_progress'].includes(doc.status)).length,
-    completed: documents.filter(doc => ['completed', 'signed', 'uploaded', 'approved'].includes(doc.status)).length,
-    overdue: documents.filter(doc => 
-      doc.deadline && new Date(doc.deadline) < new Date() && !['completed', 'signed', 'uploaded', 'approved'].includes(doc.status)
+    pending: documents.filter(doc => PENDING_STATUSES.includes(doc.status)).length,
+    completed: documents.filter(doc => DONE_STATUSES.includes(doc.status)).length,
+    overdue: documents.filter(doc =>
+      doc.deadline && new Date(doc.deadline) < new Date() && !DONE_STATUSES.includes(doc.status)
     ).length,
   };
 
@@ -391,7 +394,7 @@ export default function EmployeeDocuments() {
               ) : (
                 <div className="space-y-4">
                   {filteredDocuments.map((doc) => {
-                    const isOverdue = doc.deadline && new Date(doc.deadline) < new Date() && !['completed', 'approved'].includes(doc.status);
+                    const isOverdue = doc.deadline && new Date(doc.deadline) < new Date() && !DONE_STATUSES.includes(doc.status);
                     
                     return (
                       <div key={doc.id} className={`border rounded-lg p-6 hover:shadow-md transition-shadow ${isOverdue ? 'border-red-800/50 bg-red-900/20' : ''}`}>
@@ -458,7 +461,7 @@ export default function EmployeeDocuments() {
                           </div>
 
                           <div className="flex flex-col gap-2 ml-4">
-                            {doc.status === 'assigned' && (
+                            {['sent', 'assigned'].includes(doc.status) && (
                               <Button
                                 onClick={() => {
                                   setSelectedDocument(doc);
@@ -471,8 +474,8 @@ export default function EmployeeDocuments() {
                                 Start Document
                               </Button>
                             )}
-                            
-                            {doc.status === 'in_progress' && (
+
+                            {['viewed', 'in_progress'].includes(doc.status) && (
                               <Button
                                 onClick={() => {
                                   setSelectedDocument(doc);
@@ -485,7 +488,7 @@ export default function EmployeeDocuments() {
                               </Button>
                             )}
 
-                            {['completed', 'approved'].includes(doc.status) && doc.filePath && (
+                            {DONE_STATUSES.includes(doc.status) && doc.filePath && (
                               <Button
                                 variant="outline"
                                 onClick={() => window.open(doc.filePath, '_blank')}

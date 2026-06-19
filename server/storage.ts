@@ -365,6 +365,7 @@ export interface IStorage {
   // HR Employee operations
   getEmployees(locationId?: string): Promise<(Employee & { department?: Department; position?: Position })[]>;
   getEmployee(id: string): Promise<(Employee & { department?: Department; position?: Position }) | undefined>;
+  getEmployeeByEmail(email: string): Promise<Employee | undefined>;
   createEmployee(employee: InsertEmployee): Promise<Employee>;
   updateEmployee(id: string, employee: Partial<InsertEmployee>): Promise<Employee>;
   deleteEmployee(id: string): Promise<void>;
@@ -2634,8 +2635,13 @@ export class DatabaseStorage implements IStorage {
     return result ? { 
       ...result.employee, 
       department: result.department || undefined, 
-      position: result.position || undefined 
+      position: result.position || undefined
     } : undefined;
+  }
+
+  async getEmployeeByEmail(email: string): Promise<Employee | undefined> {
+    const [emp] = await db.select().from(employees).where(eq(employees.email, email)).limit(1);
+    return emp;
   }
 
   async createEmployee(employee: InsertEmployee): Promise<Employee> {

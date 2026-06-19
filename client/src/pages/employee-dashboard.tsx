@@ -75,6 +75,11 @@ export default function EmployeeDashboard() {
     enabled: !!userId,
   });
 
+  const { data: onboardingProgress } = useQuery<any>({
+    queryKey: ['/api/employees/me/onboarding'],
+    enabled: !!userId,
+  });
+
   const { data: myTasks = [] } = useQuery<Task[]>({
     queryKey: [`/api/employees/${userId}/tasks`],
     enabled: !!userId,
@@ -95,14 +100,14 @@ export default function EmployeeDashboard() {
     enabled: !!userId,
   });
 
-  // Calculate stats
-  const pendingDocuments = assignedDocuments.filter(doc => 
-    ['assigned', 'in_progress'].includes(doc.status)
+  // Calculate stats — 'sent' and 'viewed' are the real pending statuses from the API
+  const pendingDocuments = assignedDocuments.filter(doc =>
+    ['sent', 'viewed', 'assigned', 'in_progress'].includes(doc.status)
   );
-  
-  const overdueDocs = assignedDocuments.filter(doc => 
-    doc.deadline && new Date(doc.deadline) < new Date() && 
-    !['completed', 'approved'].includes(doc.status)
+
+  const overdueDocs = assignedDocuments.filter(doc =>
+    doc.deadline && new Date(doc.deadline) < new Date() &&
+    !['completed', 'signed', 'approved'].includes(doc.status)
   );
 
   const todayTasks = myTasks.filter(task => 
@@ -116,17 +121,17 @@ export default function EmployeeDashboard() {
 
   const unreadMessages = recentMessages.filter(msg => !msg.isRead).length;
 
-  const completionRate = assignedDocuments.length > 0 
-    ? Math.round((assignedDocuments.filter(doc => ['completed', 'approved'].includes(doc.status)).length / assignedDocuments.length) * 100)
+  const completionRate = assignedDocuments.length > 0
+    ? Math.round((assignedDocuments.filter(doc => ['completed', 'signed', 'approved'].includes(doc.status)).length / assignedDocuments.length) * 100)
     : 0;
 
   const getDocumentStatusColor = (status: string) => {
     switch (status) {
       case 'approved': return 'bg-green-900/30 text-green-400 border border-green-800';
-      case 'completed': return 'bg-blue-900/30 text-blue-400 border border-blue-800';
-      case 'in_progress': return 'bg-yellow-900/30 text-yellow-400 border border-yellow-800';
-      case 'assigned': return 'bg-accent text-foreground border-border';
-      case 'rejected': return 'bg-red-900/30 text-red-400 border border-red-800';
+      case 'completed': case 'signed': return 'bg-blue-900/30 text-blue-400 border border-blue-800';
+      case 'viewed': case 'in_progress': return 'bg-yellow-900/30 text-yellow-400 border border-yellow-800';
+      case 'sent': case 'assigned': return 'bg-accent text-foreground border-border';
+      case 'declined': case 'rejected': return 'bg-red-900/30 text-red-400 border border-red-800';
       default: return 'bg-accent text-foreground border-border';
     }
   };
@@ -233,6 +238,59 @@ export default function EmployeeDashboard() {
         </Card>
       </div>
 
+      {/* Onboarding Progress */}
+      {onboardingProgress && onboardingProgress.status !== 'completed' && (
+        <Card className="border-orange-700/50 bg-gradient-to-r from-orange-900/20 to-amber-900/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-orange-400" />
+              Onboarding Progress
+              {onboardingProgress.status === 'in-progress' && (
+                <Badge className="bg-orange-500/20 text-orange-300 border-orange-700 ml-2">In Progress</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {(() => {
+                const steps: any[] = onboardingProgress.steps || [];
+                const completed = steps.filter((s: any) => s.status === 'completed').length;
+                const total = steps.length || onboardingProgress.totalSteps || 1;
+                const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+                return (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">{completed} of {total} steps complete</span>
+                      <span className="text-xl font-bold text-orange-400">{pct}%</span>
+                    </div>
+                    <Progress value={pct} className="h-2" />
+                    {steps.length > 0 && (
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {steps.map((step: any) => (
+                          <div key={step.id} className="flex items-center gap-3 text-sm p-2 rounded">
+                            {step.status === 'completed'
+                              ? <CheckCircle className="h-4 w-4 text-green-400 shrink-0" />
+                              : <Clock className="h-4 w-4 text-muted-foreground shrink-0" />}
+                            <span className={step.status === 'completed' ? 'line-through text-muted-foreground' : ''}>
+                              {step.title || step.stepName}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <Link href="/employee/documents">
+                      <Button size="sm" className="bg-orange-600 hover:bg-orange-700 text-white w-full">
+                        Continue Onboarding
+                      </Button>
+                    </Link>
+                  </>
+                );
+              })()}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Completion Progress */}
       {assignedDocuments.length > 0 && (
         <Card>
@@ -250,7 +308,7 @@ export default function EmployeeDashboard() {
               </div>
               <Progress value={completionRate} className="h-3" />
               <p className="text-sm text-muted-foreground">
-                {assignedDocuments.filter(doc => ['completed', 'approved'].includes(doc.status)).length} of {assignedDocuments.length} documents completed
+                {assignedDocuments.filter(doc => ['completed', 'signed', 'approved'].includes(doc.status)).length} of {assignedDocuments.length} documents completed
               </p>
             </div>
           </CardContent>
@@ -415,7 +473,7 @@ export default function EmployeeDashboard() {
                           <Badge className={getDocumentStatusColor(doc.status)}>
                             {doc.status.replace('_', ' ').toUpperCase()}
                           </Badge>
-                          {doc.deadline && new Date(doc.deadline) < new Date() && !['completed', 'approved'].includes(doc.status) && (
+                          {doc.deadline && new Date(doc.deadline) < new Date() && !['completed', 'signed', 'approved'].includes(doc.status) && (
                             <Badge variant="destructive">Overdue</Badge>
                           )}
                         </div>
@@ -427,13 +485,17 @@ export default function EmployeeDashboard() {
                         )}
                       </div>
                       <div className="flex gap-2">
-                        {doc.status === 'assigned' && (
-                          <Button size="sm">Start</Button>
+                        {['sent', 'assigned'].includes(doc.status) && (
+                          <Link href="/employee/documents">
+                            <Button size="sm">Start</Button>
+                          </Link>
                         )}
-                        {doc.status === 'in_progress' && (
-                          <Button size="sm" variant="outline">Continue</Button>
+                        {['viewed', 'in_progress'].includes(doc.status) && (
+                          <Link href="/employee/documents">
+                            <Button size="sm" variant="outline">Continue</Button>
+                          </Link>
                         )}
-                        {['completed', 'approved'].includes(doc.status) && (
+                        {['completed', 'signed', 'approved'].includes(doc.status) && (
                           <Button size="sm" variant="outline">
                             <Download className="h-4 w-4 mr-1" />
                             Download

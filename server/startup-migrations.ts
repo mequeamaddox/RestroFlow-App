@@ -72,6 +72,10 @@ const migrations: { name: string; sql: string }[] = [
     sql: "ALTER TABLE locations ADD COLUMN IF NOT EXISTS bar_addon_enabled boolean DEFAULT false",
   },
   {
+    name: "locations.hr_addon_enabled",
+    sql: "ALTER TABLE locations ADD COLUMN IF NOT EXISTS hr_addon_enabled boolean DEFAULT false",
+  },
+  {
     name: "bar_inventory_counts table",
     sql: `CREATE TABLE IF NOT EXISTS bar_inventory_counts (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -163,6 +167,58 @@ const migrations: { name: string; sql: string }[] = [
       created_at timestamp DEFAULT now(),
       updated_at timestamp DEFAULT now()
     )`,
+  },
+  {
+    name: "seed default document templates",
+    sql: `
+      INSERT INTO document_templates (name, type, description, is_required, is_active, requires_signature, sort_order)
+      SELECT name, type::document_type_new, description, is_required, true, requires_signature, sort_order
+      FROM (VALUES
+        ('Federal W-4 — Employee Withholding',      'w4_federal',        'Federal income tax withholding certificate',                      true,  true,  1),
+        ('I-9 — Employment Eligibility',            'i9',                'Verifies identity and authorization to work in the U.S.',          true,  true,  2),
+        ('Direct Deposit Authorization',            'direct_deposit',    'Bank account information for payroll direct deposit',             true,  false, 3),
+        ('Emergency Contact Information',           'emergency_contact', 'Emergency contact names and phone numbers',                        true,  false, 4),
+        ('Employee Handbook Acknowledgment',        'handbook',          'Confirms employee has read and understands the handbook',          true,  true,  5),
+        ('Code of Conduct Agreement',               'code_of_conduct',   'Acknowledgment of company code of conduct',                       true,  true,  6),
+        ('Harassment & Discrimination Policy',      'harassment_policy', 'Acknowledgment of anti-harassment and non-discrimination policy', true,  true,  7),
+        ('Uniform & Appearance Policy',             'uniform_policy',    'Acknowledgment of uniform requirements',                          false, false, 8),
+        ('Food Safety Training Completion',         'safety_training',   'Confirmation of food safety and workplace safety training',        true,  false, 9),
+        ('Confidentiality / NDA',                   'nda',               'Non-disclosure agreement for proprietary business information',    false, true,  10)
+      ) AS v(name, type, description, is_required, requires_signature, sort_order)
+      WHERE NOT EXISTS (SELECT 1 FROM document_templates LIMIT 1)
+    `,
+  },
+  {
+    name: "seed default onboarding template",
+    sql: `
+      INSERT INTO onboarding_templates (name, description, category, is_default, estimated_duration_days, created_by)
+      SELECT 'Standard New Hire Onboarding', 'Default onboarding checklist for all new employees', 'general', true, 14, u.id
+      FROM users u
+      WHERE NOT EXISTS (SELECT 1 FROM onboarding_templates LIMIT 1)
+      LIMIT 1
+    `,
+  },
+  {
+    name: "seed default onboarding steps",
+    sql: `
+      INSERT INTO onboarding_steps (template_id, title, description, category, is_required, step_order, estimated_duration_hours)
+      SELECT t.id, v.title, v.description, v.category, v.is_required, v.step_order, v.est_hours
+      FROM onboarding_templates t
+      CROSS JOIN (VALUES
+        ('Complete Personal Information Form',     'Fill in your personal details including address, date of birth, and emergency contact information', 'documentation', true,  1, 0.25),
+        ('Submit Federal W-4 Withholding Form',    'Complete and sign the Federal W-4 Employee Withholding Certificate for tax purposes',               'documentation', true,  2, 0.25),
+        ('Complete I-9 Employment Eligibility',    'Verify your identity and authorization to work in the United States',                               'documentation', true,  3, 0.25),
+        ('Set Up Direct Deposit',                  'Provide bank account information for payroll direct deposit',                                       'documentation', false, 4, 0.25),
+        ('Read and Sign Employee Handbook',        'Review the employee handbook and sign acknowledgment confirming you understand company policies',    'training',      true,  5, 0.5),
+        ('Sign Code of Conduct Agreement',         'Review and acknowledge the company code of conduct',                                                'training',      true,  6, 0.25),
+        ('Sign Harassment & Discrimination Policy','Acknowledge the anti-harassment and non-discrimination policy',                                     'training',      true,  7, 0.25),
+        ('Complete Food Safety Training',          'Complete the required food safety and workplace safety training module',                             'training',      true,  8, 1.0),
+        ('Meet Your Manager / Team',               'Schedule an orientation meeting with your direct manager and meet your team',                        'orientation',   true,  9, 0.5),
+        ('Set Up Timeclock Access',                'Confirm you can log in to the employee portal and use the timeclock feature',                        'orientation',   true,  10, 0.25)
+      ) AS v(title, description, category, is_required, step_order, est_hours)
+      WHERE t.is_default = true
+        AND NOT EXISTS (SELECT 1 FROM onboarding_steps WHERE template_id = t.id LIMIT 1)
+    `,
   },
   {
     name: "locations fk cascade — add ON DELETE CASCADE to all FKs referencing locations(id)",
