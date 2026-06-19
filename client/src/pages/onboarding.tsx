@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -135,16 +135,27 @@ interface OnboardingData {
   employee_invitations?: z.infer<typeof employeeInvitationsSchema>;
 }
 
+interface OnboardingProgress {
+  id?: string;
+  userId: string;
+  isCompleted: boolean;
+  currentStep: string;
+  completedSteps: number;
+  totalSteps: number;
+  data: Record<string, any>;
+}
+
 export default function Onboarding() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  
+
   const [currentStep, setCurrentStep] = useState(0);
   const [onboardingData, setOnboardingData] = useState<OnboardingData>({});
   const [isCompleting, setIsCompleting] = useState(false);
-  
+  const startedRef = useRef(false);
+
   const isOwnerLevel = (role?: string) => role === 'owner' || role === 'platform_admin';
 
   // Redirect if not owner
@@ -159,19 +170,17 @@ export default function Onboarding() {
     }
   }, [user, setLocation, toast]);
 
-  interface OnboardingProgress {
-    userId: string;
-    isCompleted: boolean;
-    currentStep: string;
-    completedSteps: number;
-    totalSteps: number;
-    data: Record<string, any>;
-  }
-
   // Get onboarding progress
-  const { data: progress, isLoading: isLoadingProgress } = useQuery<OnboardingProgress>({
+  const { data: progress, isLoading: isLoadingProgress, error: progressError } = useQuery<OnboardingProgress>({
     queryKey: ['/api/owner-onboarding/progress'],
-    enabled: isOwnerLevel(user?.role)
+    enabled: isOwnerLevel(user?.role),
+    retry: false,
+  });
+
+  // Get user's locations so we can pass locationId when sending invitations
+  const { data: locations = [] } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ['/api/locations'],
+    enabled: isOwnerLevel(user?.role),
   });
 
   // Start onboarding mutation
@@ -184,6 +193,13 @@ export default function Onboarding() {
       setOnboardingData(data.data || {});
       const stepIndex = ONBOARDING_STEPS.findIndex(step => step.key === data.currentStep);
       setCurrentStep(Math.max(0, stepIndex));
+    },
+    onError: () => {
+      toast({
+        title: "Setup Error",
+        description: "Could not start onboarding. Please refresh and try again.",
+        variant: "destructive"
+      });
     }
   });
 
@@ -195,10 +211,6 @@ export default function Onboarding() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/owner-onboarding/progress'] });
-      toast({
-        title: "Progress Saved",
-        description: "Your progress has been saved successfully."
-      });
     }
   });
 
@@ -217,16 +229,29 @@ export default function Onboarding() {
     }
   });
 
-  // Initialize onboarding on mount
+  // Initialize onboarding once when progress query settles
   useEffect(() => {
-    if (isOwnerLevel(user?.role) && !progress && !startOnboardingMutation.isPending) {
+    if (!isOwnerLevel(user?.role)) return;
+    if (isLoadingProgress) return;
+    if (startedRef.current) return;
+    startedRef.current = true;
+
+    if (progressError) {
+      // Server error (e.g. table not ready) — mutate will handle retry
       startOnboardingMutation.mutate();
-    } else if (progress) {
+      return;
+    }
+
+    if (progress?.id) {
+      // Existing DB record — resume from saved state
       setOnboardingData(progress.data || {});
       const stepIndex = ONBOARDING_STEPS.findIndex(step => step.key === progress.currentStep);
       setCurrentStep(Math.max(0, stepIndex));
+    } else {
+      // No record yet (server returned default) — create one
+      startOnboardingMutation.mutate();
     }
-  }, [user, progress, startOnboardingMutation]);
+  }, [user?.role, isLoadingProgress, progress, progressError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleStepComplete = async (stepData: any) => {
     const currentStepKey = ONBOARDING_STEPS[currentStep].key;
@@ -235,6 +260,36 @@ export default function Onboarding() {
 
     // Save progress to backend
     await updateStepMutation.mutateAsync({ stepName: currentStepKey, stepData });
+
+    // If this is the employee invitations step, send the actual invitations
+    if (currentStepKey === 'employee_invitations' && stepData?.invitations?.length > 0) {
+      const firstLocationId = locations[0]?.id;
+      const sentCount = { success: 0, failed: 0 };
+      for (const invite of stepData.invitations) {
+        if (!invite.email) continue;
+        try {
+          await apiRequest('POST', '/api/invitations', {
+            email: invite.email,
+            role: 'employee',
+            firstName: invite.firstName,
+            lastName: invite.lastName,
+            locationId: firstLocationId,
+            expiresInHours: 168, // 7 days
+          });
+          sentCount.success++;
+        } catch {
+          sentCount.failed++;
+        }
+      }
+      if (sentCount.success > 0) {
+        toast({
+          title: `${sentCount.success} invitation${sentCount.success > 1 ? 's' : ''} sent`,
+          description: sentCount.failed > 0 ? `${sentCount.failed} failed to send` : "Team members will receive an email to create their accounts.",
+        });
+      } else if (sentCount.failed > 0) {
+        toast({ title: "Invitations failed", description: "Could not send invitations. You can retry from HR → Invitations.", variant: "destructive" });
+      }
+    }
 
     // Move to next step or complete
     if (currentStep < ONBOARDING_STEPS.length - 1) {
@@ -263,10 +318,43 @@ export default function Onboarding() {
 
   const progressPercent = ((currentStep + 1) / ONBOARDING_STEPS.length) * 100;
 
-  if (isLoadingProgress || !user || !isOwnerLevel(user.role)) {
+  const isInitializing = isLoadingProgress || startOnboardingMutation.isPending;
+
+  if (!user || !isOwnerLevel(user.role)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading onboarding...</div>
+      </div>
+    );
+  }
+
+  if (startOnboardingMutation.isError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <Card className="w-full max-w-md mx-4 bg-slate-800 border-slate-700">
+          <CardHeader className="text-center">
+            <CardTitle className="text-red-400">Setup Unavailable</CardTitle>
+            <CardDescription className="text-slate-300">
+              We couldn't connect to the onboarding service. This is usually a temporary issue.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <Button
+              onClick={() => { startedRef.current = false; startOnboardingMutation.reset(); }}
+              className="bg-orange-500 hover:bg-orange-600"
+            >
+              Try Again
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-white text-xl">Setting up your workspace...</div>
       </div>
     );
   }
