@@ -1,15 +1,20 @@
 import { useEffect, useState } from "react";
 import { SignIn, useUser } from "@clerk/clerk-react";
+import { useLocation } from "wouter";
 
 export default function Auth() {
   const { isSignedIn, isLoaded } = useUser();
+  const [, setLocation] = useLocation();
   const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
-    if (isSignedIn) {
-      window.location.href = '/';
+    // Wait for Clerk to finish loading before redirecting.
+    // Use client-side navigation (no page reload) so the Clerk session cookie
+    // is already committed before /api/auth/me is fetched.
+    if (isLoaded && isSignedIn) {
+      setLocation('/');
     }
-  }, [isSignedIn]);
+  }, [isLoaded, isSignedIn]);
 
   useEffect(() => {
     const t = setTimeout(() => {

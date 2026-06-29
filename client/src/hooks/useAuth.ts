@@ -28,10 +28,23 @@ export function useAuth() {
     return () => clearTimeout(t);
   }, []);
 
-  const fetchUserData = async () => {
+  const fetchUserData = async (attempt = 0): Promise<User | null> => {
     if (!clerkUser) return null;
     try {
       const token = await getToken();
+
+      // getToken() can return null briefly after sign-in while Clerk finalises the session.
+      // Retry up to twice before giving up.
+      if (!token) {
+        if (attempt < 2) {
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          return fetchUserData(attempt + 1);
+        }
+        console.warn('useAuth: getToken() returned null after retries; clearing session');
+        setUser(null);
+        return null;
+      }
+
       const response = await fetch('/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -48,13 +61,23 @@ export function useAuth() {
         }
       }
 
+      // Retry on server errors (5xx) — don't retry on 401/403 (genuinely not authed).
+      if (response.status >= 500 && attempt < 2) {
+        await new Promise(r => setTimeout(r, 1500));
+        return fetchUserData(attempt + 1);
+      }
+
       // /api/auth/me failed — do not assume any role. Treat as unauthenticated.
       console.warn('useAuth: /api/auth/me returned non-ok response; clearing user session');
       setUser(null);
       return null;
     } catch (error) {
       console.error('useAuth: failed to fetch user data:', error);
-      // Network/server error — do not assume any role.
+      // Network error — retry before giving up
+      if (attempt < 2) {
+        await new Promise(r => setTimeout(r, 1500));
+        return fetchUserData(attempt + 1);
+      }
       setUser(null);
       return null;
     }
@@ -79,8 +102,7 @@ export function useAuth() {
   }, [isLoaded, isSignedIn, clerkUser?.id]);
 
   const refreshAuth = async () => {
-    const result = await fetchUserData();
-    return result;
+    return fetchUserData(0);
   };
 
   return {
