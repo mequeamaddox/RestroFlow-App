@@ -52,10 +52,28 @@ export function registerDocumentRoutes(app: Express): void {
 
   app.get('/api/employees/:employeeId/documents', isAuthenticated, async (req, res) => {
     try {
-      const employee = await storage.getEmployee(req.params.employeeId);
+      const requesterId = req.user!.id;
+      const paramId = req.params.employeeId;
+
+      // Resolve employee — param may be a UUID (manager lookup) or a Clerk user ID (employee self-service)
+      let employee = await (async () => {
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(paramId);
+        if (isUUID) {
+          try { return await storage.getEmployee(paramId); } catch {}
+        }
+        // Fall back: Clerk user ID → look up by email
+        const user = await storage.getUser(paramId);
+        if (user?.email) return storage.getEmployeeByEmail(user.email);
+        return undefined;
+      })();
+
       if (!employee) return res.status(404).json({ message: 'Employee not found' });
-      if (employee.locationId) {
-        const userId = req.user!.id;
+
+      // Access control: employee can view their own docs; managers need location access
+      const isSelf = requesterId === paramId ||
+        (req.user!.role === 'employee' && !!employee);
+      if (!isSelf && employee.locationId) {
+        const userId = requesterId;
         const userRole = req.user!.role;
         let hasAccess = false;
         if (userRole === 'owner') {
@@ -63,7 +81,7 @@ export function registerDocumentRoutes(app: Express): void {
           hasAccess = !!(loc && loc.ownerId === userId);
         } else {
           const perms = await storage.getUserPermissions(userId);
-          hasAccess = perms.some((p: any) => p.locationId === employee.locationId && p.isActive);
+          hasAccess = perms.some((p: any) => p.locationId === employee!.locationId && p.isActive);
         }
         if (!hasAccess) return res.status(404).json({ message: 'Employee not found' });
       }

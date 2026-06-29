@@ -945,6 +945,49 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
+  // Employee self-service onboarding endpoints (no requireHRAccess)
+  app.get('/api/employees/me/onboarding', isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const user = await storage.getUser(userId);
+      if (!user?.email) return res.status(404).json({ message: 'Employee not found' });
+      const employee = await storage.getEmployeeByEmail(user.email);
+      if (!employee) return res.status(404).json({ message: 'No employee record linked to your account' });
+      const onboardingRecords = await storage.getEmployeeOnboarding(employee.id);
+      const active = onboardingRecords.find((o: any) => o.status === 'in-progress') || onboardingRecords[0];
+      if (!active) return res.json(null);
+      const steps = await storage.getEmployeeOnboardingSteps(active.id);
+      const documents = await storage.getEmployeeDocuments(employee.id);
+      res.json({ ...active, steps, documents });
+    } catch (error) {
+      console.error('Error fetching employee onboarding:', error);
+      res.status(500).json({ message: 'Failed to fetch onboarding progress' });
+    }
+  });
+
+  app.put('/api/employees/me/onboarding-steps/:stepId', isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const user = await storage.getUser(userId);
+      if (!user?.email) return res.status(403).json({ message: 'Access denied' });
+      const employee = await storage.getEmployeeByEmail(user.email);
+      if (!employee) return res.status(403).json({ message: 'Access denied' });
+      const [existingStep] = await db.select().from(employeeOnboardingSteps).where(eq(employeeOnboardingSteps.id, req.params.stepId)).limit(1);
+      if (!existingStep) return res.status(404).json({ message: 'Step not found' });
+      const [onboarding] = await db.select().from(employeeOnboarding).where(eq(employeeOnboarding.id, existingStep.employeeOnboardingId)).limit(1);
+      if (!onboarding || onboarding.employeeId !== employee.id) return res.status(403).json({ message: 'Access denied' });
+      const step = await storage.updateEmployeeOnboardingStep(req.params.stepId, {
+        ...req.body,
+        completedBy: userId,
+        completedDate: req.body.status === 'completed' ? new Date() : req.body.completedDate,
+      });
+      res.json(step);
+    } catch (error) {
+      console.error('Error updating onboarding step:', error);
+      res.status(500).json({ message: 'Failed to update onboarding step' });
+    }
+  });
+
   // Employee profile & password (self-service)
   app.get('/api/employees/:id/profile', isAuthenticated, async (req, res) => {
     try {

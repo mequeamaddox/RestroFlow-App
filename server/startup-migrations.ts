@@ -199,6 +199,28 @@ const migrations: { name: string; sql: string }[] = [
     `,
   },
   {
+    name: "seed default onboarding steps",
+    sql: `
+      INSERT INTO onboarding_steps (template_id, title, description, category, is_required, step_order, estimated_duration_hours)
+      SELECT t.id, v.title, v.description, v.category, v.is_required, v.step_order, v.est_hours
+      FROM onboarding_templates t
+      CROSS JOIN (VALUES
+        ('Complete Personal Information Form',     'Fill in your personal details including address, date of birth, and emergency contact information', 'documentation', true,  1, 0.25),
+        ('Submit Federal W-4 Withholding Form',    'Complete and sign the Federal W-4 Employee Withholding Certificate for tax purposes',               'documentation', true,  2, 0.25),
+        ('Complete I-9 Employment Eligibility',    'Verify your identity and authorization to work in the United States',                               'documentation', true,  3, 0.25),
+        ('Set Up Direct Deposit',                  'Provide bank account information for payroll direct deposit',                                       'documentation', false, 4, 0.25),
+        ('Read and Sign Employee Handbook',        'Review the employee handbook and sign acknowledgment confirming you understand company policies',    'training',      true,  5, 0.5),
+        ('Sign Code of Conduct Agreement',         'Review and acknowledge the company code of conduct',                                                'training',      true,  6, 0.25),
+        ('Sign Harassment & Discrimination Policy','Acknowledge the anti-harassment and non-discrimination policy',                                     'training',      true,  7, 0.25),
+        ('Complete Food Safety Training',          'Complete the required food safety and workplace safety training module',                             'training',      true,  8, 1.0),
+        ('Meet Your Manager / Team',               'Schedule an orientation meeting with your direct manager and meet your team',                        'orientation',   true,  9, 0.5),
+        ('Set Up Timeclock Access',                'Confirm you can log in to the employee portal and use the timeclock feature',                        'orientation',   true,  10, 0.25)
+      ) AS v(title, description, category, is_required, step_order, est_hours)
+      WHERE t.is_default = true
+        AND NOT EXISTS (SELECT 1 FROM onboarding_steps WHERE template_id = t.id LIMIT 1)
+    `,
+  },
+  {
     name: "locations fk cascade — add ON DELETE CASCADE to all FKs referencing locations(id)",
     sql: `
       DO $$
