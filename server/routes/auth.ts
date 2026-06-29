@@ -13,7 +13,20 @@ export function registerAuthRoutes(app: Express): void {
   app.get('/api/auth/me', async (req, res) => {
     try {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-      const { userId, sessionClaims } = getAuth(req);
+
+      // getAuth() throws when the Authorization header contains a malformed token
+      // (e.g. "Bearer null" sent while Clerk is still initialising on the client).
+      // Catch that and return 401 rather than falling through to the 500 handler.
+      let userId: string | null | undefined;
+      let sessionClaims: Record<string, unknown> | null | undefined;
+      try {
+        const auth = getAuth(req);
+        userId = auth.userId;
+        sessionClaims = auth.sessionClaims as Record<string, unknown>;
+      } catch {
+        return res.status(401).json({ ok: false, message: 'Not authenticated' });
+      }
+
       if (!userId) {
         return res.status(401).json({ ok: false, message: 'Not authenticated' });
       }
@@ -21,7 +34,7 @@ export function registerAuthRoutes(app: Express): void {
       let user = await storage.getUser(userId);
 
       if (!user) {
-        const email = sessionClaims?.email as string || '';
+        const email = (sessionClaims?.email as string) || '';
         if (email) user = await storage.getUserByEmail(email);
       }
 
