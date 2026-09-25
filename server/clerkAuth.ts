@@ -129,24 +129,8 @@ export async function requireAuth(
       user = await storage.getUser(userId).catch(() => null);
     }
 
-    // If still not found, check invited employees
+    // If still not found, auto-provision — invitation check determines role only, never blocks
     if (!user && email) {
-      console.log('🔍 User not in DB, checking invitations:', email);
-      const employees = await storage.getEmployees();
-      const invitedEmployee = employees.find(emp =>
-        emp.email?.toLowerCase() === email.toLowerCase()
-      );
-
-      if (!invitedEmployee) {
-        console.log('❌ User not invited:', email);
-        return res.status(403).json({
-          message: 'Not invited',
-          error: 'This user has not been invited to access the system'
-        });
-      }
-
-      // Auto-provision user for invited employee
-      console.log('✅ Provisioning user for invited employee:', email);
       const clerkClient = getClerkClient();
       let firstName = '';
       let lastName = '';
@@ -158,15 +142,19 @@ export async function requireAuth(
         } catch {}
       }
 
-      await storage.upsertUser({
+      // Check if there's an invited employee record — use their role; otherwise default to 'owner'
+      const employees = await storage.getEmployees();
+      const invitedEmployee = employees.find(emp =>
+        emp.email?.toLowerCase() === email.toLowerCase()
+      );
+
+      user = await storage.upsertUser({
         id: userId,
         email,
         firstName,
         lastName,
-        role: invitedEmployee.role || 'employee',
+        role: invitedEmployee?.role || 'owner',
       });
-
-      user = await storage.getUserByEmail(email);
     }
 
     if (!user) {
