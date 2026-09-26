@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { Switch, Route, Redirect } from "wouter";
+import { useState, useEffect } from "react";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { useQuery, QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
+import { useUser } from "@clerk/clerk-react";
 import { LocationProvider } from "@/contexts/LocationContext";
 import { PermissionProvider } from "@/contexts/PermissionContext";
 import NotFound from "@/pages/not-found";
@@ -59,10 +60,57 @@ import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import MobileBottomNav from "@/components/layout/mobile-bottom-nav";
 
+function AuthFailureDiag() {
+  const [diag, setDiag] = useState<any>(null);
+  const { isSignedIn } = useUser();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    fetch('/api/auth/diag').then(r => r.json()).then(setDiag).catch(() => {});
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+      <div style={{ background: '#1e293b', border: '1px solid #ef4444', borderRadius: 12, padding: '2rem', maxWidth: 520, width: '100%', fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ color: '#ef4444', fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.75rem' }}>
+          Login issue — could not load your account
+        </div>
+        <p style={{ color: '#cbd5e1', marginBottom: '1rem', lineHeight: 1.6, fontSize: '0.9rem' }}>
+          Clerk says you're signed in, but the server couldn't verify your session.
+          Check your Railway Variables tab — <code style={{ color: '#f472b6' }}>CLERK_SECRET_KEY</code> must be set.
+        </p>
+        {diag && (
+          <div style={{ background: '#0f172a', borderRadius: 8, padding: '0.875rem', marginBottom: '1rem', fontSize: '0.8rem' }}>
+            <p style={{ color: '#94a3b8', fontWeight: 600, marginBottom: '0.5rem' }}>Server diagnostic:</p>
+            <ul style={{ color: '#94a3b8', paddingLeft: '1rem', lineHeight: 2 }}>
+              <li>publishableKey type: <b style={{ color: diag.pk === 'missing' ? '#ef4444' : '#4ade80' }}>{diag.pk}</b></li>
+              <li>secretKey type: <b style={{ color: diag.sk === 'missing' ? '#ef4444' : '#4ade80' }}>{diag.sk}</b></li>
+              <li>keys match: <b style={{ color: diag.pkSk_match ? '#4ade80' : '#ef4444' }}>{String(diag.pkSk_match)}</b></li>
+              <li>bearer token: <b style={{ color: diag.bearer === 'present' ? '#4ade80' : '#ef4444' }}>{diag.bearer}</b></li>
+              <li>clerk userId: <b style={{ color: diag.clerkUserId ? '#4ade80' : '#ef4444' }}>{diag.clerkUserId ?? 'null'}</b></li>
+            </ul>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button onClick={() => setLocation('/login')} style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.875rem' }}>
+            Try again
+          </button>
+          {isSignedIn && (
+            <button onClick={() => fetch('/api/auth/logout', { method: 'POST' }).then(() => setLocation('/login'))} style={{ background: '#475569', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.875rem' }}>
+              Sign out & retry
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Router() {
   // Always call useState hooks first to maintain consistent order
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { isAuthenticated, isLoading, user } = useAuth();
+  const { isSignedIn, isLoaded: clerkLoaded } = useUser();
 
   const isOwner = user?.role === 'owner';
   const { data: onboardingProgress } = useQuery<{ isCompleted: boolean }>({
@@ -78,6 +126,11 @@ function Router() {
         <div className="text-white text-xl">Loading...</div>
       </div>
     );
+  }
+
+  // Clerk says signed in but backend couldn't verify — show helpful diagnostics
+  if (clerkLoaded && isSignedIn && !isAuthenticated) {
+    return <AuthFailureDiag />;
   }
 
   if (!isAuthenticated) {

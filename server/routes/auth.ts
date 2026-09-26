@@ -95,6 +95,37 @@ export function registerAuthRoutes(app: Express): void {
     res.json({ success: true, message: 'Logout successful' });
   });
 
+  // Public diagnostic endpoint — never logs secret values, only presence/type
+  app.get('/api/auth/diag', (req, res) => {
+    const pk = process.env.CLERK_PUBLISHABLE_KEY || process.env.VITE_CLERK_PUBLISHABLE_KEY || '';
+    const sk = process.env.CLERK_SECRET_KEY || '';
+    const keyType = (k: string) =>
+      k.startsWith('pk_live_') || k.startsWith('sk_live_') ? 'live'
+      : k.startsWith('pk_test_') || k.startsWith('sk_test_') ? 'test'
+      : 'missing';
+    let bearerStatus = 'none';
+    const authHeader = req.headers.authorization || '';
+    if (authHeader.startsWith('Bearer ')) {
+      const tok = authHeader.slice(7);
+      bearerStatus = tok === 'null' ? 'null-literal' : tok.length > 0 ? 'present' : 'empty';
+    }
+    let userId: string | null = null;
+    try {
+      const auth = getAuth(req);
+      userId = auth.userId ?? null;
+    } catch (e: any) {
+      userId = `error:${e?.message?.slice(0, 60)}`;
+    }
+    res.json({
+      pk: keyType(pk),
+      sk: keyType(sk),
+      pkSk_match: keyType(pk) !== 'missing' && keyType(sk) !== 'missing' && keyType(pk) === keyType(sk),
+      bearer: bearerStatus,
+      clerkUserId: userId,
+      node_env: process.env.NODE_ENV || 'unset',
+    });
+  });
+
   app.post('/api/admin/create-employee', isAuthenticated, async (_req, res) => {
     res.status(410).json({
       message: 'This endpoint is deprecated. Please use /api/hr/employees for employee creation.',
