@@ -40,16 +40,17 @@ export function useAuth() {
           await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
           return fetchUserData(attempt + 1);
         }
-        console.warn('useAuth: getToken() returned null after retries; clearing session');
-        setUser(null);
-        return null;
+        // Bearer token unavailable even after retries — fall back to cookie auth.
+        // clerkMiddleware on the server will authenticate via __session cookie instead.
+        console.warn('useAuth: getToken() returned null after retries — falling back to cookie auth');
       }
 
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const response = await fetch('/api/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers,
+        credentials: 'include',
         cache: 'no-store',
       });
 
