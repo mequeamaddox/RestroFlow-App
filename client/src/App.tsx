@@ -5,7 +5,7 @@ import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
-import { useUser } from "@clerk/clerk-react";
+import { useUser, useClerk } from "@clerk/clerk-react";
 import { LocationProvider } from "@/contexts/LocationContext";
 import { PermissionProvider } from "@/contexts/PermissionContext";
 import NotFound from "@/pages/not-found";
@@ -62,12 +62,29 @@ import MobileBottomNav from "@/components/layout/mobile-bottom-nav";
 
 function AuthFailureDiag() {
   const [diag, setDiag] = useState<any>(null);
+  const [retrying, setRetrying] = useState(false);
   const { isSignedIn } = useUser();
-  const [, setLocation] = useLocation();
+  const { signOut } = useClerk();
+  const { refreshAuth } = useAuth();
 
   useEffect(() => {
     fetch('/api/auth/diag').then(r => r.json()).then(setDiag).catch(() => {});
   }, []);
+
+  const handleRetry = async () => {
+    setRetrying(true);
+    try {
+      await refreshAuth();
+    } finally {
+      // Force a full reload so all hooks reinitialise with the latest session state
+      window.location.reload();
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    window.location.href = '/login';
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
@@ -92,11 +109,11 @@ function AuthFailureDiag() {
           </div>
         )}
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <button onClick={() => setLocation('/login')} style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.875rem' }}>
-            Try again
+          <button onClick={handleRetry} disabled={retrying} style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.875rem', opacity: retrying ? 0.7 : 1 }}>
+            {retrying ? 'Retrying...' : 'Try again'}
           </button>
           {isSignedIn && (
-            <button onClick={() => fetch('/api/auth/logout', { method: 'POST' }).then(() => setLocation('/login'))} style={{ background: '#475569', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.875rem' }}>
+            <button onClick={handleSignOut} style={{ background: '#475569', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.875rem' }}>
               Sign out & retry
             </button>
           )}
