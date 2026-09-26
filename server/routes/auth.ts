@@ -123,6 +123,12 @@ export function registerAuthRoutes(app: Express): void {
     } catch (e: any) {
       userId = `error:${e?.message?.slice(0, 60)}`;
     }
+    // Extract just the host from DATABASE_URL (no credentials)
+    let dbHost = 'unset';
+    const rawDb = process.env.DATABASE_URL || process.env.NEON_DATABASE_URL || '';
+    if (rawDb) {
+      try { dbHost = new URL(rawDb).host; } catch { dbHost = 'parse-error'; }
+    }
     res.json({
       pk: keyType(pk),
       sk: keyType(sk),
@@ -130,6 +136,7 @@ export function registerAuthRoutes(app: Express): void {
       bearer: bearerStatus,
       clerkUserId: userId,
       node_env: process.env.NODE_ENV || 'unset',
+      dbHost,
     });
   });
 

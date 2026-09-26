@@ -111,6 +111,7 @@ function AuthFailureDiag() {
               <li>keys match: <b style={{ color: diag.pkSk_match ? '#4ade80' : '#ef4444' }}>{String(diag.pkSk_match)}</b></li>
               <li>bearer token: <b style={{ color: diag.bearer === 'present' ? '#4ade80' : '#ef4444' }}>{diag.bearer}</b></li>
               <li>clerk userId: <b style={{ color: diag.clerkUserId ? '#4ade80' : '#ef4444' }}>{diag.clerkUserId ?? 'null'}</b></li>
+              <li>db host: <b style={{ color: diag.dbHost && diag.dbHost !== 'unset' ? '#4ade80' : '#ef4444' }}>{diag.dbHost ?? 'unset'}</b></li>
             </ul>
           </div>
         )}
