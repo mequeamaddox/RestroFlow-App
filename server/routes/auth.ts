@@ -31,11 +31,17 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(401).json({ ok: false, message: 'Not authenticated' });
       }
 
-      let user = await storage.getUser(userId);
+      let user = await storage.getUser(userId).catch((e: any) => {
+        throw new Error(`getUser(${userId}) failed: ${e?.message ?? e}`);
+      });
 
       if (!user) {
         const email = (sessionClaims?.email as string) || '';
-        if (email) user = await storage.getUserByEmail(email);
+        if (email) {
+          user = await storage.getUserByEmail(email).catch((e: any) => {
+            throw new Error(`getUserByEmail(${email}) failed: ${e?.message ?? e}`);
+          });
+        }
       }
 
       if (!user) {
@@ -64,7 +70,7 @@ export function registerAuthRoutes(app: Express): void {
           }
         } catch (clerkErr) {
           console.error('❌ /api/auth/me provisioning failed:', clerkErr instanceof Error ? clerkErr.message : clerkErr);
-          return res.status(401).json({ ok: false, message: 'User not found' });
+          return res.status(401).json({ ok: false, message: 'User not found', detail: clerkErr instanceof Error ? clerkErr.message : String(clerkErr) });
         }
       }
 
@@ -85,8 +91,9 @@ export function registerAuthRoutes(app: Express): void {
         },
       });
     } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
       console.error('Error getting user info:', error);
-      res.status(500).json({ message: 'Failed to get user info' });
+      res.status(500).json({ message: 'Failed to get user info', detail });
     }
   });
 
