@@ -264,6 +264,7 @@ function Router() {
                 <Route path="/employee/settings" component={EmployeeSettings} />
                 {/* Platform Admin Routes */}
                 <Route path="/platform/settings" component={PlatformSettings} />
+                <Route path="/login"><Redirect to="/" /></Route>
                 <Route component={NotFound} />
               </Switch>
             </main>
