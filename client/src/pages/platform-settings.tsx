@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Shield, CheckCircle, XCircle, Edit2, Save, X, CreditCard, Sliders, Zap } from "lucide-react";
+import { Shield, CheckCircle, XCircle, Edit2, Save, X, CreditCard, Sliders, Zap, Database, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -174,6 +174,19 @@ export default function PlatformSettings() {
   const [editValue, setEditValue] = useState("");
 
   const isPlatformAdmin = (user as any)?.role === "platform_admin";
+  const [seedResult, setSeedResult] = useState<string | null>(null);
+
+  const seedDemo = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/platform/seed-demo", {}),
+    onSuccess: (data: any) => {
+      setSeedResult(data?.message ?? "Demo data created.");
+      toast({ title: "Demo data ready", description: "Riverside Grill is set up and ready to demo." });
+    },
+    onError: (err: any) => {
+      setSeedResult(null);
+      toast({ title: "Seed failed", description: err?.message || "Unknown error", variant: "destructive" });
+    },
+  });
 
   const { data: platformData, isLoading: settingsLoading } =
     useQuery<PlatformSettingsResponse>({
@@ -397,6 +410,46 @@ export default function PlatformSettings() {
           </Card>
         ))
       )}
+
+      {/* Demo Data */}
+      <Card className="bg-slate-800/80 border-slate-700">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-white text-base flex items-center gap-2">
+            <Database className="h-4 w-4 text-purple-400" />
+            Demo Data
+          </CardTitle>
+          <CardDescription className="text-slate-400 text-xs">
+            Seeds a realistic restaurant (Riverside Grill) with 30 days of sales, inventory, invoices, and budgets under your account
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-4">
+            <Button
+              onClick={() => seedDemo.mutate()}
+              disabled={seedDemo.isPending}
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+            >
+              {seedDemo.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Seeding…
+                </>
+              ) : (
+                "Seed Demo Data"
+              )}
+            </Button>
+            {seedResult && (
+              <span className="text-green-400 text-sm flex items-center gap-1.5">
+                <CheckCircle className="h-4 w-4" />
+                {seedResult}
+              </span>
+            )}
+          </div>
+          <p className="text-slate-500 text-xs mt-3">
+            Safe to run once — returns a conflict error if Riverside Grill already exists.
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Users */}
       <Card className="bg-slate-800/80 border-slate-700">
