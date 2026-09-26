@@ -88,9 +88,14 @@ export function useAuth() {
     if (!isLoaded) return;
 
     if (!isSignedIn || !clerkUser) {
-      setUser(null);
-      setIsLoading(false);
-      return;
+      // Debounce before clearing — Clerk briefly flips isSignedIn during mobile
+      // browser chrome transitions (URL bar hide/show). Without the delay the whole
+      // app unmounts and remounts, which looks like a page reload to the user.
+      const t = setTimeout(() => {
+        setUser(null);
+        setIsLoading(false);
+      }, 800);
+      return () => clearTimeout(t);
     }
 
     const init = async () => {
