@@ -91,53 +91,14 @@ export function registerAuthRoutes(app: Express): void {
         },
       });
     } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
       console.error('Error getting user info:', error);
-      res.status(500).json({ message: 'Failed to get user info', detail });
+      res.status(500).json({ message: 'Failed to get user info' });
     }
   });
 
   app.post('/api/auth/logout', (_req, res) => {
     res.clearCookie('__session');
     res.json({ success: true, message: 'Logout successful' });
-  });
-
-  // Public diagnostic endpoint — never logs secret values, only presence/type
-  app.get('/api/auth/diag', (req, res) => {
-    const pk = process.env.CLERK_PUBLISHABLE_KEY || process.env.VITE_CLERK_PUBLISHABLE_KEY || '';
-    const sk = process.env.CLERK_SECRET_KEY || '';
-    const keyType = (k: string) =>
-      k.startsWith('pk_live_') || k.startsWith('sk_live_') ? 'live'
-      : k.startsWith('pk_test_') || k.startsWith('sk_test_') ? 'test'
-      : 'missing';
-    let bearerStatus = 'none';
-    const authHeader = req.headers.authorization || '';
-    if (authHeader.startsWith('Bearer ')) {
-      const tok = authHeader.slice(7);
-      bearerStatus = tok === 'null' ? 'null-literal' : tok.length > 0 ? 'present' : 'empty';
-    }
-    let userId: string | null = null;
-    try {
-      const auth = getAuth(req);
-      userId = auth.userId ?? null;
-    } catch (e: any) {
-      userId = `error:${e?.message?.slice(0, 60)}`;
-    }
-    // Extract just the host from DATABASE_URL (no credentials)
-    let dbHost = 'unset';
-    const rawDb = process.env.DATABASE_URL || process.env.NEON_DATABASE_URL || '';
-    if (rawDb) {
-      try { dbHost = new URL(rawDb).host; } catch { dbHost = 'parse-error'; }
-    }
-    res.json({
-      pk: keyType(pk),
-      sk: keyType(sk),
-      pkSk_match: keyType(pk) !== 'missing' && keyType(sk) !== 'missing' && keyType(pk) === keyType(sk),
-      bearer: bearerStatus,
-      clerkUserId: userId,
-      node_env: process.env.NODE_ENV || 'unset',
-      dbHost,
-    });
   });
 
   app.post('/api/admin/create-employee', isAuthenticated, async (_req, res) => {
