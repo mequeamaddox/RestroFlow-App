@@ -2282,11 +2282,11 @@ export class DatabaseStorage implements IStorage {
         .from(purchaseOrders)
         .where(and(...conditions));
 
-      const monthlySpend = monthlyOrders.reduce((sum, order) => sum + parseFloat(order.total), 0);
-      
+      const monthlySpend = monthlyOrders.reduce((sum, order) => sum + parseFloat(order.totalAmount ?? '0'), 0);
+
       // Get budget from budgets table if exists
       const budgetData = await db.select().from(budgets);
-      const totalBudget = budgetData.reduce((sum, budget) => sum + parseFloat(budget.amount), 0);
+      const totalBudget = budgetData.reduce((sum, budget) => sum + parseFloat(budget.budgetAmount), 0);
       const spendVariance = totalBudget > 0 ? ((monthlySpend - totalBudget) / totalBudget * 100) : 0;
 
       const categoryBreakdown: any = {};
@@ -4316,96 +4316,98 @@ export class DatabaseStorage implements IStorage {
     createdBy: string
   ): Promise<string> {
     try {
-      // Create the sales transaction
-      const [salesTransaction] = await db.insert(sales).values({
-        locationId,
-        totalAmount: totalAmount.toString(),
-        paymentMethod,
-        customerCount,
-        posTransactionId,
-        saleDate: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date()
-      }).returning();
+      return await db.transaction(async (tx) => {
+        // Create the sales transaction
+        const [salesTransaction] = await tx.insert(sales).values({
+          locationId,
+          totalAmount: totalAmount.toString(),
+          paymentMethod,
+          customerCount,
+          posTransactionId,
+          saleDate: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }).returning();
 
-      const transactionId = salesTransaction.id;
+        const transactionId = salesTransaction.id;
 
-      // Process each sales item and deduct from inventory
-      for (const item of items) {
-        const totalPrice = item.quantity * item.unitPrice;
+        // Process each sales item and deduct from inventory
+        for (const item of items) {
+          const totalPrice = item.quantity * item.unitPrice;
 
-        // Get inventory cost for profit calculation if linked to inventory
-        let costOfGoods: number | null = null;
-        if (item.inventoryItemId) {
-          const [inventoryItem] = await db
-            .select()
-            .from(inventoryItems)
-            .where(eq(inventoryItems.id, item.inventoryItemId));
-          
-          if (inventoryItem) {
-            const costPerRecipeUnit = this.calculateCostPerRecipeUnit(inventoryItem);
-            costOfGoods = item.quantity * costPerRecipeUnit;
-          }
-        }
-
-        const profitAmount = costOfGoods !== null ? totalPrice - costOfGoods : null;
-        const profitMargin = profitAmount !== null && totalPrice > 0 
-          ? (profitAmount / totalPrice) * 100 
-          : null;
-
-        // Create sales item record
-        await db.insert(salesItems).values({
-          saleId: transactionId,
-          menuItemId: item.menuItemId || null,
-          recipeId: item.recipeId || null,
-          itemName: item.itemName,
-          quantity: Math.floor(item.quantity),
-          unitPrice: item.unitPrice.toString(),
-          totalPrice: totalPrice.toString(),
-          costOfGoods: costOfGoods?.toString() || null,
-          profitAmount: profitAmount?.toString() || null,
-          profitMargin: profitMargin?.toString() || null
-        });
-
-        // Deduct from inventory if linked to an inventory item
-        if (item.inventoryItemId) {
-          const [inventoryItem] = await db
-            .select()
-            .from(inventoryItems)
-            .where(eq(inventoryItems.id, item.inventoryItemId));
-
-          if (inventoryItem) {
-            // Convert sales quantity (in recipe units) to purchase units for inventory deduction
-            const purchaseUnitsToDeduct = this.convertRecipeToPurchaseUnits(inventoryItem, item.quantity);
-
-            // Update inventory quantity (subtract from purchase units)
-            const currentQuantity = parseFloat(inventoryItem.quantity);
-            const newQuantity = Math.max(0, currentQuantity - purchaseUnitsToDeduct);
-
-            await db
-              .update(inventoryItems)
-              .set({ 
-                quantity: newQuantity.toString(),
-                updatedAt: new Date() 
-              })
+          // Get inventory cost for profit calculation if linked to inventory
+          let costOfGoods: number | null = null;
+          if (item.inventoryItemId) {
+            const [inventoryItem] = await tx
+              .select()
+              .from(inventoryItems)
               .where(eq(inventoryItems.id, item.inventoryItemId));
 
-            // Record inventory transaction for audit trail
-            await db.insert(inventoryTransactions).values({
-              inventoryItemId: item.inventoryItemId,
-              locationId,
-              type: 'out',
-              quantity: (-purchaseUnitsToDeduct).toString(),
-              unitCost: inventoryItem.costPerPurchaseUnit || inventoryItem.costPerUnit,
-              totalCost: (-(purchaseUnitsToDeduct * parseFloat(inventoryItem.costPerPurchaseUnit || inventoryItem.costPerUnit))).toString(),
-              reference: `Sales Transaction: ${transactionId}`,
-              createdBy
-            });
+            if (inventoryItem) {
+              const costPerRecipeUnit = this.calculateCostPerRecipeUnit(inventoryItem);
+              costOfGoods = item.quantity * costPerRecipeUnit;
+            }
+          }
+
+          const profitAmount = costOfGoods !== null ? totalPrice - costOfGoods : null;
+          const profitMargin = profitAmount !== null && totalPrice > 0
+            ? (profitAmount / totalPrice) * 100
+            : null;
+
+          // Create sales item record
+          await tx.insert(salesItems).values({
+            saleId: transactionId,
+            menuItemId: item.menuItemId || null,
+            recipeId: item.recipeId || null,
+            itemName: item.itemName,
+            quantity: Math.floor(item.quantity),
+            unitPrice: item.unitPrice.toString(),
+            totalPrice: totalPrice.toString(),
+            costOfGoods: costOfGoods?.toString() || null,
+            profitAmount: profitAmount?.toString() || null,
+            profitMargin: profitMargin?.toString() || null
+          });
+
+          // Deduct from inventory if linked to an inventory item
+          if (item.inventoryItemId) {
+            const [inventoryItem] = await tx
+              .select()
+              .from(inventoryItems)
+              .where(eq(inventoryItems.id, item.inventoryItemId));
+
+            if (inventoryItem) {
+              // Convert sales quantity (in recipe units) to purchase units for inventory deduction
+              const purchaseUnitsToDeduct = this.convertRecipeToPurchaseUnits(inventoryItem, item.quantity);
+
+              // Update inventory quantity (subtract from purchase units)
+              const currentQuantity = parseFloat(inventoryItem.quantity);
+              const newQuantity = Math.max(0, currentQuantity - purchaseUnitsToDeduct);
+
+              await tx
+                .update(inventoryItems)
+                .set({
+                  quantity: newQuantity.toString(),
+                  updatedAt: new Date()
+                })
+                .where(eq(inventoryItems.id, item.inventoryItemId));
+
+              // Record inventory transaction for audit trail
+              await tx.insert(inventoryTransactions).values({
+                inventoryItemId: item.inventoryItemId,
+                locationId,
+                type: 'out',
+                quantity: (-purchaseUnitsToDeduct).toString(),
+                unitCost: inventoryItem.costPerPurchaseUnit || inventoryItem.costPerUnit,
+                totalCost: (-(purchaseUnitsToDeduct * parseFloat(inventoryItem.costPerPurchaseUnit || inventoryItem.costPerUnit))).toString(),
+                reference: `Sales Transaction: ${transactionId}`,
+                createdBy
+              });
+            }
           }
         }
-      }
 
-      return transactionId;
+        return transactionId;
+      });
     } catch (error) {
       console.error('Error recording sales transaction:', error);
       throw error;

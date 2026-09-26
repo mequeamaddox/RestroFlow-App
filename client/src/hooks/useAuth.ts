@@ -7,6 +7,8 @@ type User = {
   firstName?: string;
   lastName?: string;
   role: string;
+  subscriptionPlan?: string | null;
+  subscriptionStatus?: string | null;
 };
 
 export function useAuth() {

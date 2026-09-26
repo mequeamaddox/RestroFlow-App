@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { clerkMiddleware, getAuth, createClerkClient } from '@clerk/express';
 import { storage } from './storage';
+import { db } from './db';
+import { invitationTokens } from '@shared/schema';
+import { eq } from 'drizzle-orm';
 
 declare global {
   namespace Express {
@@ -142,18 +145,19 @@ export async function requireAuth(
         } catch {}
       }
 
-      // Check if there's an invited employee record — use their role; otherwise default to 'owner'
-      const employees = await storage.getEmployees();
-      const invitedEmployee = employees.find(emp =>
-        emp.email?.toLowerCase() === email.toLowerCase()
-      );
+      // Check for a pending invitation — if one exists, use its role; otherwise this is an owner signup
+      const [pendingInvite] = await db
+        .select()
+        .from(invitationTokens)
+        .where(eq(invitationTokens.email, email))
+        .limit(1);
 
       user = await storage.upsertUser({
         id: userId,
         email,
         firstName,
         lastName,
-        role: invitedEmployee?.role || 'owner',
+        role: (pendingInvite?.role as any) || 'owner',
       });
     }
 

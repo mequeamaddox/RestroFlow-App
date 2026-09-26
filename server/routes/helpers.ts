@@ -1,6 +1,7 @@
 import { createClerkClient } from '@clerk/express';
 import { requireAuth } from '../clerkAuth';
 import { storage } from '../storage';
+import { assertLocationAccess } from '../securityMiddleware';
 import multer from 'multer';
 
 export const clerkClient = createClerkClient({
@@ -104,8 +105,11 @@ export const requireHRAccess = async (req: any, res: any, next: any) => {
     }
     const user = req.user;
     if (user?.role === 'platform_admin') return next();
-    const locs = await storage.getLocations();
-    const location = locs.find((loc: any) => loc.id === locationId);
+
+    // assertLocationAccess handles owner + manager/employee cross-tenant checks
+    if (!await assertLocationAccess(req, res, locationId)) return;
+
+    const location = await storage.getLocationById(locationId);
     if (!location) {
       return res.status(404).json({ message: 'Location not found' });
     }
@@ -131,8 +135,11 @@ export const requireBarAccess = async (req: any, res: any, next: any) => {
     }
     const user = req.user;
     if (user?.role === 'platform_admin') return next();
-    const locs = await storage.getLocations();
-    const location = locs.find((loc: any) => loc.id === locationId);
+
+    // assertLocationAccess handles owner + manager/employee cross-tenant checks
+    if (!await assertLocationAccess(req, res, locationId)) return;
+
+    const location = await storage.getLocationById(locationId);
     if (!location) {
       return res.status(404).json({ message: 'Location not found' });
     }

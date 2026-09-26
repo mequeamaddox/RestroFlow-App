@@ -58,14 +58,21 @@ export function registerAuthRoutes(app: Express): void {
           // current Clerk userId after a Clerk app/key change. Re-fetching by userId then
           // returns null and surfaces a false "User not found" on an otherwise valid login.
           if (!existingByEmail) {
-            user = await storage.upsertUser({ id: userId, email, firstName, lastName, role: 'owner' });
+            // Check for a pending invitation — if one exists, use its role; otherwise this is an owner signup
+            const [pendingInvite] = await db
+              .select()
+              .from(invitationTokens)
+              .where(eq(invitationTokens.email, email))
+              .limit(1);
+            const role = (pendingInvite?.role as any) || 'owner';
+            user = await storage.upsertUser({ id: userId, email, firstName, lastName, role });
           } else {
             user = await storage.upsertUser({
               id: userId,
               email: existingByEmail.email || email,
               firstName: existingByEmail.firstName || firstName,
               lastName: existingByEmail.lastName || lastName,
-              role: existingByEmail.role || 'owner',
+              role: existingByEmail.role || 'employee',
             });
           }
         } catch (clerkErr) {
@@ -249,9 +256,21 @@ export function registerAuthRoutes(app: Express): void {
 
   app.put('/api/invitations/:id', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
     try {
+      const userId = req.user!.id;
+      const [existing] = await db.select().from(invitationTokens).where(eq(invitationTokens.id, req.params.id));
+      if (!existing) return res.status(404).json({ message: 'Invitation not found' });
+
+      const location = await storage.getLocationById(existing.locationId);
+      if (!location || location.ownerId !== userId) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const parsed = insertInvitationTokenSchema.partial().safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: 'Invalid data', errors: parsed.error.errors });
+
       const [updated] = await db
         .update(invitationTokens)
-        .set(req.body)
+        .set(parsed.data)
         .where(eq(invitationTokens.id, req.params.id))
         .returning();
       res.json(updated);

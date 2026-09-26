@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Shield, CheckCircle, XCircle, Edit2, Save, X } from "lucide-react";
+import { Shield, CheckCircle, XCircle, Edit2, Save, X, CreditCard, Sliders, Zap, Database, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -45,33 +45,111 @@ interface UserRow {
   createdAt: string | null;
 }
 
-const quickConfigItems = [
+interface ConfigItem {
+  key: string;
+  label: string;
+  description: string;
+  type: "text" | "number" | "toggle";
+  defaultValue?: string;
+}
+
+interface ConfigSection {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  items: ConfigItem[];
+}
+
+const CONFIG_SECTIONS: ConfigSection[] = [
   {
-    key: "stripe_price_core",
-    label: "Stripe Price ID — Core Plan",
-    description: "Stripe Price ID for RestroFlow Core plan (price_xxx)",
-    type: "text",
+    title: "Stripe & Billing",
+    description: "Stripe integration, pricing, and checkout settings",
+    icon: <CreditCard className="h-4 w-4 text-green-400" />,
+    items: [
+      {
+        key: "stripe_price_core",
+        label: "Stripe Price ID — Core Plan",
+        description: "Stripe Price ID (price_xxx) used for checkout and webhook plan mapping",
+        type: "text",
+      },
+      {
+        key: "core_plan_price",
+        label: "Core Plan Price ($/mo)",
+        description: "Displayed monthly price for the Core plan",
+        type: "number",
+        defaultValue: "179",
+      },
+      {
+        key: "hr_addon_price",
+        label: "HR Add-on Price ($/location/mo)",
+        description: "Displayed monthly price per location for the HR add-on",
+        type: "number",
+        defaultValue: "79",
+      },
+      {
+        key: "bar_addon_price",
+        label: "Bar Add-on Price ($/location/mo)",
+        description: "Displayed monthly price per location for the Bar & Beverage add-on",
+        type: "number",
+        defaultValue: "79",
+      },
+      {
+        key: "trial_days",
+        label: "Trial Days",
+        description: "Free trial days on new Core subscriptions (0 = no trial)",
+        type: "number",
+        defaultValue: "0",
+      },
+      {
+        key: "billing_enabled",
+        label: "Billing Enabled",
+        description: "Enable Stripe checkout flow — disable to pause new signups without code changes",
+        type: "toggle",
+        defaultValue: "true",
+      },
+    ],
   },
   {
-    key: "ocr_free_credits",
-    label: "OCR Free Credits",
-    description: "OCR credits allocated to free plan users",
-    type: "number",
-    defaultValue: "5",
+    title: "Plan Limits",
+    description: "Quotas and caps applied per subscription plan",
+    icon: <Sliders className="h-4 w-4 text-blue-400" />,
+    items: [
+      {
+        key: "core_location_limit",
+        label: "Core Plan — Max Locations",
+        description: "Maximum number of locations a Core plan owner can create",
+        type: "number",
+        defaultValue: "3",
+      },
+      {
+        key: "core_ocr_credits",
+        label: "Core Plan — OCR Credits",
+        description: "OCR invoice credits for Core plan users (999 = effectively unlimited)",
+        type: "number",
+        defaultValue: "999",
+      },
+    ],
   },
   {
-    key: "trial_days",
-    label: "Trial Days",
-    description: "Trial days for new Core subscriptions",
-    type: "number",
-    defaultValue: "0",
-  },
-  {
-    key: "billing_enabled",
-    label: "Billing Enabled",
-    description: "Enable Stripe billing/checkout flow",
-    type: "toggle",
-    defaultValue: "true",
+    title: "Feature Flags",
+    description: "Enable or disable platform-wide features without a code deploy",
+    icon: <Zap className="h-4 w-4 text-yellow-400" />,
+    items: [
+      {
+        key: "feature_ocr_enabled",
+        label: "OCR Processing",
+        description: "Allow invoice OCR processing across all accounts",
+        type: "toggle",
+        defaultValue: "true",
+      },
+      {
+        key: "feature_maintenance_mode",
+        label: "Maintenance Mode",
+        description: "Block new account signups — existing users are unaffected",
+        type: "toggle",
+        defaultValue: "false",
+      },
+    ],
   },
 ];
 
@@ -96,6 +174,19 @@ export default function PlatformSettings() {
   const [editValue, setEditValue] = useState("");
 
   const isPlatformAdmin = (user as any)?.role === "platform_admin";
+  const [seedResult, setSeedResult] = useState<string | null>(null);
+
+  const seedDemo = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/platform/seed-demo", {}),
+    onSuccess: (data: any) => {
+      setSeedResult(data?.message ?? "Demo data created.");
+      toast({ title: "Demo data ready", description: "Riverside Grill is set up and ready to demo." });
+    },
+    onError: (err: any) => {
+      setSeedResult(null);
+      toast({ title: "Seed failed", description: err?.message || "Unknown error", variant: "destructive" });
+    },
+  });
 
   const { data: platformData, isLoading: settingsLoading } =
     useQuery<PlatformSettingsResponse>({
@@ -115,7 +206,7 @@ export default function PlatformSettings() {
     onSuccess: (_data, { key }) => {
       toast({
         title: "Setting saved",
-        description: `${key} has been updated.`,
+        description: `${key} updated.`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/platform/settings"] });
       setEditingKey(null);
@@ -164,8 +255,81 @@ export default function PlatformSettings() {
     return settings[key]?.value ?? defaultValue ?? "";
   }
 
+  function renderItemControl(item: ConfigItem) {
+    const currentValue = getSettingValue(item.key, item.defaultValue);
+    const isEditing = editingKey === item.key;
+
+    if (item.type === "toggle") {
+      return (
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={currentValue === "true"}
+            onCheckedChange={(checked) =>
+              updateSetting.mutate({ key: item.key, value: String(checked) })
+            }
+            disabled={updateSetting.isPending}
+          />
+          <span className="text-slate-300 text-sm w-16">
+            {currentValue === "true" ? "On" : "Off"}
+          </span>
+        </div>
+      );
+    }
+
+    if (isEditing) {
+      return (
+        <div className="flex items-center gap-1.5">
+          <Input
+            type={item.type}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            className="bg-slate-700 border-slate-600 text-white w-44 h-8 text-sm"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveEdit(item.key);
+              if (e.key === "Escape") cancelEdit();
+            }}
+            autoFocus
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => saveEdit(item.key)}
+            disabled={updateSetting.isPending}
+            className="h-8 text-green-400 hover:text-green-300 px-2"
+          >
+            <Save className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={cancelEdit}
+            className="h-8 text-slate-400 hover:text-slate-300 px-2"
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-slate-300 text-sm font-mono min-w-[80px] text-right">
+          {currentValue || <span className="text-slate-500 italic">not set</span>}
+        </span>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => startEdit(item.key, currentValue)}
+          className="h-8 text-slate-400 hover:text-white px-2"
+        >
+          <Edit2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
+    <div className="p-6 space-y-6 max-w-5xl mx-auto">
       {/* Page Header */}
       <div className="flex items-center gap-3">
         <div className="p-2 bg-red-500/20 rounded-lg">
@@ -184,20 +348,23 @@ export default function PlatformSettings() {
 
       {/* System Status */}
       <Card className="bg-slate-800/80 border-slate-700">
-        <CardHeader>
-          <CardTitle className="text-white text-lg">System Status</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-white text-base">System Status</CardTitle>
+          <CardDescription className="text-slate-400 text-xs">
+            Environment variables — must be set in Railway, never stored in the database
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {env ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
               <StatusIndicator ok={env.stripeConfigured} label="Stripe Secret Key" />
+              <StatusIndicator ok={env.clerkConfigured} label="Clerk Secret Key" />
+              <StatusIndicator ok={env.encryptionConfigured} label="PII Encryption Key" />
+              <StatusIndicator ok={env.sentryConfigured} label="Sentry DSN" />
               <StatusIndicator
                 ok={env.stripePriceCoreEnv === "set"}
                 label={`Stripe Price Core (env: ${env.stripePriceCoreEnv})`}
               />
-              <StatusIndicator ok={env.clerkConfigured} label="Clerk Secret Key" />
-              <StatusIndicator ok={env.encryptionConfigured} label="PII Encryption Key" />
-              <StatusIndicator ok={env.sentryConfigured} label="Sentry DSN" />
             </div>
           ) : (
             <p className="text-slate-400 text-sm">Loading...</p>
@@ -205,215 +372,89 @@ export default function PlatformSettings() {
         </CardContent>
       </Card>
 
-      {/* Quick Config */}
-      <Card className="bg-slate-800/80 border-slate-700">
-        <CardHeader>
-          <CardTitle className="text-white text-lg">Quick Config</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {settingsLoading ? (
-            <p className="text-slate-400 text-sm">Loading settings...</p>
-          ) : (
-            quickConfigItems.map((item) => {
-              const currentValue = getSettingValue(item.key, item.defaultValue);
-              const isEditing = editingKey === item.key;
-
-              return (
+      {/* Config Sections */}
+      {settingsLoading ? (
+        <p className="text-slate-400 text-sm">Loading settings...</p>
+      ) : (
+        CONFIG_SECTIONS.map((section) => (
+          <Card key={section.title} className="bg-slate-800/80 border-slate-700">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-white text-base flex items-center gap-2">
+                {section.icon}
+                {section.title}
+              </CardTitle>
+              <CardDescription className="text-slate-400 text-xs">
+                {section.description}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {section.items.map((item) => (
                 <div
                   key={item.key}
-                  className="flex items-start gap-4 p-4 bg-slate-900/50 rounded-lg border border-slate-700/50"
+                  className="flex items-center gap-4 px-4 py-3 bg-slate-900/50 rounded-lg border border-slate-700/50"
                 >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-white font-medium text-sm">
                         {item.label}
                       </span>
-                      <code className="text-xs text-slate-400 bg-slate-700/50 px-1.5 py-0.5 rounded">
-                        {item.key}
-                      </code>
                     </div>
-                    <p className="text-slate-400 text-xs">{item.description}</p>
+                    <p className="text-slate-500 text-xs truncate">{item.description}</p>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    {item.type === "toggle" ? (
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={currentValue === "true"}
-                          onCheckedChange={(checked) => {
-                            updateSetting.mutate({
-                              key: item.key,
-                              value: String(checked),
-                            });
-                          }}
-                          disabled={updateSetting.isPending}
-                        />
-                        <span className="text-slate-300 text-sm">
-                          {currentValue === "true" ? "Enabled" : "Disabled"}
-                        </span>
-                      </div>
-                    ) : isEditing ? (
-                      <>
-                        <Input
-                          type={item.type}
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          className="bg-slate-700 border-slate-600 text-white w-48 h-8 text-sm"
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") saveEdit(item.key);
-                            if (e.key === "Escape") cancelEdit();
-                          }}
-                          autoFocus
-                        />
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => saveEdit(item.key)}
-                          disabled={updateSetting.isPending}
-                          className="h-8 text-green-400 hover:text-green-300"
-                        >
-                          <Save className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={cancelEdit}
-                          className="h-8 text-slate-400 hover:text-slate-300"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-slate-300 text-sm font-mono min-w-[80px] text-right">
-                          {currentValue || (
-                            <span className="text-slate-500 italic">not set</span>
-                          )}
-                        </span>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => startEdit(item.key, currentValue)}
-                          className="h-8 text-slate-400 hover:text-white"
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </>
-                    )}
+                  <div className="shrink-0">
+                    {renderItemControl(item)}
                   </div>
                 </div>
-              );
-            })
-          )}
-        </CardContent>
-      </Card>
+              ))}
+            </CardContent>
+          </Card>
+        ))
+      )}
 
-      {/* All Platform Settings */}
+      {/* Demo Data */}
       <Card className="bg-slate-800/80 border-slate-700">
-        <CardHeader>
-          <CardTitle className="text-white text-lg">
-            All Settings
-            <span className="ml-2 text-sm font-normal text-slate-400">
-              ({Object.keys(settings).length} stored)
-            </span>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-white text-base flex items-center gap-2">
+            <Database className="h-4 w-4 text-purple-400" />
+            Demo Data
           </CardTitle>
+          <CardDescription className="text-slate-400 text-xs">
+            Seeds a realistic restaurant (Riverside Grill) with 30 days of sales, inventory, invoices, and budgets under your account
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {Object.keys(settings).length === 0 ? (
-            <p className="text-slate-400 text-sm">
-              No settings stored yet. Use Quick Config above to add some.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="border-slate-700">
-                  <TableHead className="text-slate-400">Key</TableHead>
-                  <TableHead className="text-slate-400">Value</TableHead>
-                  <TableHead className="text-slate-400">Description</TableHead>
-                  <TableHead className="text-slate-400">Updated</TableHead>
-                  <TableHead className="text-slate-400 w-20">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {Object.entries(settings).map(([key, row]) => {
-                  const isEditing = editingKey === key;
-                  return (
-                    <TableRow key={key} className="border-slate-700/50">
-                      <TableCell className="text-white font-mono text-xs">
-                        {key}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <div className="flex items-center gap-2">
-                            <Input
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              className="bg-slate-700 border-slate-600 text-white h-7 text-xs w-40"
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") saveEdit(key);
-                                if (e.key === "Escape") cancelEdit();
-                              }}
-                              autoFocus
-                            />
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => saveEdit(key)}
-                              disabled={updateSetting.isPending}
-                              className="h-7 text-green-400 hover:text-green-300"
-                            >
-                              <Save className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={cancelEdit}
-                              className="h-7 text-slate-400 hover:text-slate-300"
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <span className="text-slate-300 font-mono text-xs">
-                            {row.value ?? (
-                              <span className="text-slate-500 italic">null</span>
-                            )}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-slate-400 text-xs">
-                        {row.description ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-slate-500 text-xs">
-                        {row.updatedAt
-                          ? new Date(row.updatedAt).toLocaleDateString()
-                          : "—"}
-                      </TableCell>
-                      <TableCell>
-                        {!isEditing && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => startEdit(key, row.value)}
-                            className="h-7 text-slate-400 hover:text-white"
-                          >
-                            <Edit2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
+          <div className="flex items-center gap-4">
+            <Button
+              onClick={() => seedDemo.mutate()}
+              disabled={seedDemo.isPending}
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+            >
+              {seedDemo.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Seeding…
+                </>
+              ) : (
+                "Seed Demo Data"
+              )}
+            </Button>
+            {seedResult && (
+              <span className="text-green-400 text-sm flex items-center gap-1.5">
+                <CheckCircle className="h-4 w-4" />
+                {seedResult}
+              </span>
+            )}
+          </div>
+          <p className="text-slate-500 text-xs mt-3">
+            Safe to run once — returns a conflict error if Riverside Grill already exists.
+          </p>
         </CardContent>
       </Card>
 
       {/* Users */}
       <Card className="bg-slate-800/80 border-slate-700">
-        <CardHeader>
-          <CardTitle className="text-white text-lg">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-white text-base">
             All Users
             {usersData && (
               <span className="ml-2 text-sm font-normal text-slate-400">
@@ -445,8 +486,7 @@ export default function PlatformSettings() {
                         {u.email ?? "—"}
                       </TableCell>
                       <TableCell className="text-slate-300 text-sm">
-                        {[u.firstName, u.lastName].filter(Boolean).join(" ") ||
-                          "—"}
+                        {[u.firstName, u.lastName].filter(Boolean).join(" ") || "—"}
                       </TableCell>
                       <TableCell>
                         <Badge
@@ -469,7 +509,7 @@ export default function PlatformSettings() {
                               : "bg-slate-600/40 text-slate-300 border-slate-600"
                           }
                         >
-                          {u.subscriptionPlan ?? "free"}
+                          {u.subscriptionPlan ?? "none"}
                         </Badge>
                       </TableCell>
                       <TableCell>

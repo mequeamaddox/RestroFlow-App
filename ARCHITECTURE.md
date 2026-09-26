@@ -22,7 +22,7 @@ analytics, POS integration, and an HR/payroll add-on. Tenancy is anchored on
 | Auth        | Clerk (`@clerk/express`) |
 | Monitoring  | Sentry |
 | Billing     | Stripe (see [BILLING](BILLING.md)) |
-| Other       | SendGrid (email), AWS S3 / Replit Object Storage, AWS Textract + Tesseract.js (OCR) |
+| Other       | Resend (email), AWS S3 (object storage), AWS Textract + Tesseract.js (OCR) |
 
 ## Directory layout
 

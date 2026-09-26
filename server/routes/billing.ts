@@ -38,12 +38,21 @@ export function registerBillingRoutes(app: Express): void {
   // ─── Subscriptions ────────────────────────────────────────────────────────
 
   app.get('/api/subscriptions/plans', async (_req, res) => {
+    const [corePriceDb, hrAddonPriceDb, barAddonPriceDb] = await Promise.all([
+      storage.getPlatformSetting('core_plan_price'),
+      storage.getPlatformSetting('hr_addon_price'),
+      storage.getPlatformSetting('bar_addon_price'),
+    ]);
+    const corePrice = corePriceDb ? parseInt(corePriceDb) : 179;
+    const hrAddonPrice = hrAddonPriceDb ? parseInt(hrAddonPriceDb) : 79;
+    const barAddonPrice = barAddonPriceDb ? parseInt(barAddonPriceDb) : 79;
+
     res.json({
       plans: [
         {
           id: 'core',
           name: 'RestroFlow Core',
-          price: 179,
+          price: corePrice,
           billingCycle: 'MONTHLY',
           popular: true,
           locationLimit: 3,
@@ -63,7 +72,7 @@ export function registerBillingRoutes(app: Express): void {
         },
       ],
       hrAddon: {
-        pricePerLocation: 79,
+        pricePerLocation: hrAddonPrice,
         description: 'HR Management Add-on — Employee scheduling, time tracking, payroll, and document management',
         features: [
           'Employee scheduling & time tracking',
@@ -77,7 +86,7 @@ export function registerBillingRoutes(app: Express): void {
         ],
       },
       barAddon: {
-        pricePerLocation: 79,
+        pricePerLocation: barAddonPrice,
         description: 'Bar & Beverage Add-on — Cocktail recipe costing, pour cost analysis, and liquor inventory',
         features: [
           'Liquor inventory tracking by oz/ml',
@@ -213,10 +222,22 @@ export function registerBillingRoutes(app: Express): void {
         return res.status(400).json({ message: 'Invalid plan. Must be core.' });
       if (!isStripeEnabled)
         return res.status(503).json({ message: 'Stripe billing is not yet configured. Please contact support.', configured: false });
+
+      // Respect billing_enabled flag set in platform admin
+      const billingEnabled = await storage.getPlatformSetting('billing_enabled');
+      if (billingEnabled === 'false')
+        return res.status(503).json({ message: 'Billing is temporarily disabled. Please try again later.', configured: false });
+
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: 'User not found' });
       const host = `${req.protocol}://${req.get('host')}`;
-      const trialDays = req.body.trialDays ? parseInt(req.body.trialDays) : undefined;
+
+      // trial_days: DB setting overrides request body
+      const trialDaysSetting = await storage.getPlatformSetting('trial_days');
+      const trialDays = trialDaysSetting !== null
+        ? parseInt(trialDaysSetting)
+        : req.body.trialDays ? parseInt(req.body.trialDays) : undefined;
+
       const checkoutUrl = await createCheckoutSession({
         userId, email: user.email!, plan: plan as StripePlan, stripeCustomerId: user.stripeCustomerId,
         successUrl: `${host}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
@@ -259,9 +280,16 @@ export function registerBillingRoutes(app: Express): void {
       console.error('Stripe webhook signature verification failed:', err.message);
       return res.status(400).json({ error: `Webhook Error: ${err.message}` });
     }
-    // C1: Idempotency — skip already-processed Stripe events
-    if (await storage.hasProcessedWebhook(event.id)) {
-      return res.json({ received: true });
+    // C1: Idempotency — claim the event ID before processing to prevent concurrent retries
+    try {
+      await storage.markWebhookProcessed(event.id, {
+        provider: 'stripe',
+        integrationId: event.type,
+        receivedAt: new Date().toISOString(),
+      });
+    } catch (dupErr: any) {
+      if (dupErr?.code === '23505') return res.json({ received: true });
+      throw dupErr;
     }
 
     try {
@@ -290,8 +318,11 @@ export function registerBillingRoutes(app: Express): void {
           const { userId } = sub.metadata || {};
           const mappedStatus = mapStripeStatusToPlan(sub.status);
           const priceId: string = sub.items?.data?.[0]?.price?.id;
+          // Read stripe_price_core from DB admin settings; fall back to env var
+          const stripePriceCoreDb = await storage.getPlatformSetting('stripe_price_core');
+          const stripePriceCore = stripePriceCoreDb || process.env.STRIPE_PRICE_CORE;
           let plan: 'core' | undefined;
-          if (priceId === process.env.STRIPE_PRICE_CORE) plan = 'core';
+          if (priceId && stripePriceCore && priceId === stripePriceCore) plan = 'core';
           if (userId) {
             await storage.updateUserSubscription(userId, {
               ...(plan ? { subscriptionPlan: plan, ocrCreditsLimit: 999 } : {}),
@@ -375,12 +406,6 @@ export function registerBillingRoutes(app: Express): void {
         default:
           console.log(`Unhandled Stripe event: ${event.type}`);
       }
-      // C1: Record event ID so retries are deduplicated
-      await storage.markWebhookProcessed(event.id, {
-        provider: 'stripe',
-        integrationId: event.type,
-        receivedAt: new Date().toISOString(),
-      });
       res.json({ received: true });
     } catch (err) {
       console.error('Stripe webhook processing error:', err);

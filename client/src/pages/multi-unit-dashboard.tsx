@@ -82,19 +82,16 @@ export default function MultiUnitDashboard() {
     
     setIsRecordingSale(true);
     try {
-      await apiRequest(`/api/sales/transactions`, {
-        method: 'POST',
-        body: {
-          locationId: currentLocation.id,
-          totalAmount: quantity * unitPrice,
-          paymentMethod: 'cash',
-          customerName: 'Walk-in Customer',
-          salesItems: [{
-            inventoryItemId: item.id,
-            quantitySold: quantity,
-            unitPrice: unitPrice
-          }]
-        }
+      await apiRequest('POST', '/api/sales/transactions', {
+        locationId: currentLocation.id,
+        totalAmount: quantity * unitPrice,
+        paymentMethod: 'cash',
+        customerName: 'Walk-in Customer',
+        salesItems: [{
+          inventoryItemId: item.id,
+          quantitySold: quantity,
+          unitPrice: unitPrice
+        }]
       });
 
       toast({
