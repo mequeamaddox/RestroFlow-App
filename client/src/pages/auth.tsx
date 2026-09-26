@@ -54,7 +54,13 @@ export default function Auth() {
           </p>
         </div>
       ) : (
-        <SignIn routing="hash" />
+        <div className="flex flex-col items-center gap-4 w-full max-w-md">
+          <div className="w-full rounded-xl bg-slate-800/60 border border-slate-700 px-5 py-4 text-sm text-slate-300 leading-relaxed">
+            <strong className="text-white block mb-1">Already have an invitation?</strong>
+            Use the invitation link your manager sent to your email — that link creates your account automatically. Don't sign up here.
+          </div>
+          <SignIn routing="hash" />
+        </div>
       )}
     </div>
   );

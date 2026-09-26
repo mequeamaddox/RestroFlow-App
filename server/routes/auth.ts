@@ -58,7 +58,14 @@ export function registerAuthRoutes(app: Express): void {
           // current Clerk userId after a Clerk app/key change. Re-fetching by userId then
           // returns null and surfaces a false "User not found" on an otherwise valid login.
           if (!existingByEmail) {
-            user = await storage.upsertUser({ id: userId, email, firstName, lastName, role: 'employee' });
+            // Check for a pending invitation — if one exists, use its role; otherwise this is an owner signup
+            const [pendingInvite] = await db
+              .select()
+              .from(invitationTokens)
+              .where(eq(invitationTokens.email, email))
+              .limit(1);
+            const role = (pendingInvite?.role as any) || 'owner';
+            user = await storage.upsertUser({ id: userId, email, firstName, lastName, role });
           } else {
             user = await storage.upsertUser({
               id: userId,

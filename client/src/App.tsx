@@ -65,10 +65,14 @@ function HRGuard({ component: Component }: { component: React.ComponentType }) {
   return <Component />;
 }
 
+// Paths an unsubscribed owner is still allowed to visit
+const SUBSCRIPTION_FREE_PATHS = ['/subscription', '/pricing', '/onboarding', '/settings', '/platform', '/login'];
+
 function Router() {
   // Always call useState hooks first to maintain consistent order
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { isAuthenticated, isLoading, user } = useAuth();
+  const [currentPath] = useLocation();
 
   const isOwner = user?.role === 'owner';
   const { data: onboardingProgress } = useQuery<{ isCompleted: boolean }>({
@@ -98,6 +102,14 @@ function Router() {
         <Route component={Landing} />
       </Switch>
     );
+  }
+
+  // Owners without an active subscription are gated to subscription/settings/onboarding only
+  const hasActiveSubscription = user?.subscriptionStatus === 'active';
+  const isSubscriptionFreePath = SUBSCRIPTION_FREE_PATHS.some(p => currentPath.startsWith(p));
+
+  if (isOwner && !hasActiveSubscription && !isSubscriptionFreePath) {
+    return <Redirect to="/subscription" />;
   }
 
   return (
