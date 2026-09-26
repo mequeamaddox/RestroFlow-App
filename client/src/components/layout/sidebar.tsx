@@ -108,7 +108,7 @@ export default function Sidebar({ isMobileMenuOpen = false, setIsMobileMenuOpen 
   const [internalMobileMenuOpen, setInternalMobileMenuOpen] = useState(false);
   const { user } = useAuth();
   const { signOut } = useClerk();
-  const { currentLocation, setCurrentLocation, locations, isLoading, hasBarAccess } = useLocation();
+  const { currentLocation, setCurrentLocation, locations, isLoading, hasBarAccess, hasHRAccess } = useLocation();
   const { hasPermission } = usePermissions();
   
   // Get employee profile data for position title
@@ -120,7 +120,7 @@ export default function Sidebar({ isMobileMenuOpen = false, setIsMobileMenuOpen 
     queryKey: [`/api/employees/${userId}/profile`],
     enabled: !!userId && isEmployee,
   });
-  const isHREnabled = hasPermission(Permission.VIEW_ALL_EMPLOYEES) || hasPermission(Permission.MANAGE_EMPLOYEES);
+  const isHREnabled = hasHRAccess && (hasPermission(Permission.VIEW_ALL_EMPLOYEES) || hasPermission(Permission.MANAGE_EMPLOYEES));
   
   // Use external state if provided, otherwise use internal state
   const mobileMenuOpen = isMobileMenuOpen || internalMobileMenuOpen;

@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { useUser, useClerk } from "@clerk/clerk-react";
-import { LocationProvider } from "@/contexts/LocationContext";
+import { LocationProvider, useLocation as useLocationCtx } from "@/contexts/LocationContext";
 import { PermissionProvider } from "@/contexts/PermissionContext";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
@@ -137,6 +137,12 @@ function AuthFailureDiag() {
   );
 }
 
+function HRGuard({ component: Component }: { component: React.ComponentType }) {
+  const { hasHRAccess } = useLocationCtx();
+  if (!hasHRAccess) return <Redirect to="/subscription" />;
+  return <Component />;
+}
+
 function Router() {
   // Always call useState hooks first to maintain consistent order
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -236,21 +242,21 @@ function Router() {
                 <Route path="/bar/waste-log" component={BarWasteLog} />
                 <Route path="/bar/purchase-orders" component={BarPurchaseOrders} />
                 <Route path="/settings" component={Settings} />
-                {/* HR Employee Management Add-on Routes */}
-                <Route path="/hr/dashboard" component={HRDashboard} />
-                <Route path="/hr/employees" component={HREmployees} />
-                <Route path="/employees" component={HREmployees} />
-                <Route path="/employees/:id" component={EmployeeProfile} />
-                <Route path="/hr/analytics" component={HRAnalytics} />
-                <Route path="/hr/time-clock" component={HRTimeClock} />
-                <Route path="/hr/tasks" component={HRTasks} />
-                <Route path="/hr/messaging" component={HRMessaging} />
-                <Route path="/hr/scheduling" component={HRScheduling} />
-                <Route path="/hr/time-off" component={HRTimeOff} />
-                <Route path="/hr/departments" component={HRDepartments} />
-                <Route path="/hr/positions" component={HRPositions} />
-                <Route path="/hr/documents" component={HRDocuments} />
-                <Route path="/hr/invitations" component={HRInvitations} />
+                {/* HR Employee Management Add-on Routes — require HR subscription */}
+                <Route path="/hr/dashboard">{() => <HRGuard component={HRDashboard} />}</Route>
+                <Route path="/hr/employees">{() => <HRGuard component={HREmployees} />}</Route>
+                <Route path="/employees">{() => <HRGuard component={HREmployees} />}</Route>
+                <Route path="/employees/:id">{() => <HRGuard component={EmployeeProfile} />}</Route>
+                <Route path="/hr/analytics">{() => <HRGuard component={HRAnalytics} />}</Route>
+                <Route path="/hr/time-clock">{() => <HRGuard component={HRTimeClock} />}</Route>
+                <Route path="/hr/tasks">{() => <HRGuard component={HRTasks} />}</Route>
+                <Route path="/hr/messaging">{() => <HRGuard component={HRMessaging} />}</Route>
+                <Route path="/hr/scheduling">{() => <HRGuard component={HRScheduling} />}</Route>
+                <Route path="/hr/time-off">{() => <HRGuard component={HRTimeOff} />}</Route>
+                <Route path="/hr/departments">{() => <HRGuard component={HRDepartments} />}</Route>
+                <Route path="/hr/positions">{() => <HRGuard component={HRPositions} />}</Route>
+                <Route path="/hr/documents">{() => <HRGuard component={HRDocuments} />}</Route>
+                <Route path="/hr/invitations">{() => <HRGuard component={HRInvitations} />}</Route>
                 {/* Employee Self-Service Portal Routes */}
                 <Route path="/employee/dashboard" component={EmployeeDashboard} />
                 <Route path="/employee/documents" component={EmployeeDocuments} />
