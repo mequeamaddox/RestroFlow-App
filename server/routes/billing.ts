@@ -259,9 +259,16 @@ export function registerBillingRoutes(app: Express): void {
       console.error('Stripe webhook signature verification failed:', err.message);
       return res.status(400).json({ error: `Webhook Error: ${err.message}` });
     }
-    // C1: Idempotency — skip already-processed Stripe events
-    if (await storage.hasProcessedWebhook(event.id)) {
-      return res.json({ received: true });
+    // C1: Idempotency — claim the event ID before processing to prevent concurrent retries
+    try {
+      await storage.markWebhookProcessed(event.id, {
+        provider: 'stripe',
+        integrationId: event.type,
+        receivedAt: new Date().toISOString(),
+      });
+    } catch (dupErr: any) {
+      if (dupErr?.code === '23505') return res.json({ received: true });
+      throw dupErr;
     }
 
     try {
@@ -375,12 +382,6 @@ export function registerBillingRoutes(app: Express): void {
         default:
           console.log(`Unhandled Stripe event: ${event.type}`);
       }
-      // C1: Record event ID so retries are deduplicated
-      await storage.markWebhookProcessed(event.id, {
-        provider: 'stripe',
-        integrationId: event.type,
-        receivedAt: new Date().toISOString(),
-      });
       res.json({ received: true });
     } catch (err) {
       console.error('Stripe webhook processing error:', err);

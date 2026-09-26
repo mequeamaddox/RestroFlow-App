@@ -19,7 +19,7 @@ export function registerInvoiceRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/invoices', isAuthenticated, async (req, res) => {
+  app.post('/api/invoices', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const invoice = await storage.createInvoice(req.body);
       res.status(201).json(invoice);

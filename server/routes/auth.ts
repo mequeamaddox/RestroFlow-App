@@ -256,9 +256,21 @@ export function registerAuthRoutes(app: Express): void {
 
   app.put('/api/invitations/:id', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
     try {
+      const userId = req.user!.id;
+      const [existing] = await db.select().from(invitationTokens).where(eq(invitationTokens.id, req.params.id));
+      if (!existing) return res.status(404).json({ message: 'Invitation not found' });
+
+      const location = await storage.getLocationById(existing.locationId);
+      if (!location || location.ownerId !== userId) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const parsed = insertInvitationTokenSchema.partial().safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: 'Invalid data', errors: parsed.error.errors });
+
       const [updated] = await db
         .update(invitationTokens)
-        .set(req.body)
+        .set(parsed.data)
         .where(eq(invitationTokens.id, req.params.id))
         .returning();
       res.json(updated);
