@@ -67,8 +67,14 @@ function AuthFailureDiag() {
   const { signOut } = useClerk();
   const { refreshAuth } = useAuth();
 
+  const [meResult, setMeResult] = useState<{ status: number; body: any } | null>(null);
+
   useEffect(() => {
     fetch('/api/auth/diag').then(r => r.json()).then(setDiag).catch(() => {});
+    // Also probe /api/auth/me directly with cookie auth to see the exact failure
+    fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' })
+      .then(async r => setMeResult({ status: r.status, body: await r.json().catch(() => ({})) }))
+      .catch(e => setMeResult({ status: 0, body: { error: String(e) } }));
   }, []);
 
   const handleRetry = async () => {
@@ -106,6 +112,13 @@ function AuthFailureDiag() {
               <li>bearer token: <b style={{ color: diag.bearer === 'present' ? '#4ade80' : '#ef4444' }}>{diag.bearer}</b></li>
               <li>clerk userId: <b style={{ color: diag.clerkUserId ? '#4ade80' : '#ef4444' }}>{diag.clerkUserId ?? 'null'}</b></li>
             </ul>
+          </div>
+        )}
+        {meResult && (
+          <div style={{ background: '#0f172a', borderRadius: 8, padding: '0.875rem', marginBottom: '1rem', fontSize: '0.8rem' }}>
+            <p style={{ color: '#94a3b8', fontWeight: 600, marginBottom: '0.5rem' }}>/api/auth/me (cookie auth):</p>
+            <p style={{ color: meResult.status === 200 ? '#4ade80' : '#ef4444', fontWeight: 700 }}>HTTP {meResult.status}</p>
+            <p style={{ color: '#94a3b8', wordBreak: 'break-all' }}>{JSON.stringify(meResult.body)}</p>
           </div>
         )}
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
