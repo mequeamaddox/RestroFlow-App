@@ -58,14 +58,14 @@ export function registerAuthRoutes(app: Express): void {
           // current Clerk userId after a Clerk app/key change. Re-fetching by userId then
           // returns null and surfaces a false "User not found" on an otherwise valid login.
           if (!existingByEmail) {
-            user = await storage.upsertUser({ id: userId, email, firstName, lastName, role: 'owner' });
+            user = await storage.upsertUser({ id: userId, email, firstName, lastName, role: 'employee' });
           } else {
             user = await storage.upsertUser({
               id: userId,
               email: existingByEmail.email || email,
               firstName: existingByEmail.firstName || firstName,
               lastName: existingByEmail.lastName || lastName,
-              role: existingByEmail.role || 'owner',
+              role: existingByEmail.role || 'employee',
             });
           }
         } catch (clerkErr) {

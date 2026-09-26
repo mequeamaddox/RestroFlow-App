@@ -142,7 +142,7 @@ export async function requireAuth(
         } catch {}
       }
 
-      // Check if there's an invited employee record — use their role; otherwise default to 'owner'
+      // Check if there's an invited employee record — use their role; otherwise default to 'employee'
       const employees = await storage.getEmployees();
       const invitedEmployee = employees.find(emp =>
         emp.email?.toLowerCase() === email.toLowerCase()
@@ -153,7 +153,7 @@ export async function requireAuth(
         email,
         firstName,
         lastName,
-        role: invitedEmployee?.role || 'owner',
+        role: invitedEmployee?.role || 'employee',
       });
     }
 

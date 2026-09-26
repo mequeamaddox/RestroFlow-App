@@ -104,11 +104,17 @@ export const requireHRAccess = async (req: any, res: any, next: any) => {
     }
     const user = req.user;
     if (user?.role === 'platform_admin') return next();
-    const locs = await storage.getLocations();
-    const location = locs.find((loc: any) => loc.id === locationId);
+
+    const location = await storage.getLocationById(locationId);
     if (!location) {
       return res.status(404).json({ message: 'Location not found' });
     }
+
+    // Ownership check — prevent cross-tenant access
+    if (location.ownerId !== user?.id) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
     if (!location.hrAddonEnabled) {
       return res.status(403).json({
         message: 'HR add-on not enabled for this location',
@@ -131,11 +137,17 @@ export const requireBarAccess = async (req: any, res: any, next: any) => {
     }
     const user = req.user;
     if (user?.role === 'platform_admin') return next();
-    const locs = await storage.getLocations();
-    const location = locs.find((loc: any) => loc.id === locationId);
+
+    const location = await storage.getLocationById(locationId);
     if (!location) {
       return res.status(404).json({ message: 'Location not found' });
     }
+
+    // Ownership check — prevent cross-tenant access
+    if (location.ownerId !== user?.id) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
     if (!location.barAddonEnabled) {
       return res.status(403).json({
         message: 'Bar & Beverage add-on not enabled for this location',
