@@ -35,7 +35,7 @@ export function registerPosRoutes(app: Express): void {
     try {
       const existing = await storage.getPosIntegration(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Integration not found' });
-      if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
+      if (!await assertLocationAccess(req, res, existing.locationId)) return;
       const success = await posService.testConnection(req.params.id);
       res.json({ success });
     } catch (error) {
@@ -48,7 +48,7 @@ export function registerPosRoutes(app: Express): void {
     try {
       const existing = await storage.getPosIntegration(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Integration not found' });
-      if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
+      if (!await assertLocationAccess(req, res, existing.locationId)) return;
       await posService.syncMenuItems(req.params.id);
       res.json({ message: 'Menu items synced successfully' });
     } catch (error) {
@@ -61,7 +61,7 @@ export function registerPosRoutes(app: Express): void {
     try {
       const existing = await storage.getPosIntegration(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Integration not found' });
-      if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
+      if (!await assertLocationAccess(req, res, existing.locationId)) return;
       const newCount = await posService.syncHistoricalSales(req.params.id);
       res.json({ message: newCount > 0 ? `Successfully synced ${newCount} new sales` : 'All sales are already up to date (0 new sales found)', count: newCount });
     } catch (error) {
@@ -74,7 +74,7 @@ export function registerPosRoutes(app: Express): void {
     try {
       const existing = await storage.getPosIntegration(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Integration not found' });
-      if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
+      if (!await assertLocationAccess(req, res, existing.locationId)) return;
       const integration = await storage.updatePosIntegration(req.params.id, insertPosIntegrationSchema.partial().parse(req.body));
       res.json(integration);
     } catch (error) {
@@ -87,7 +87,7 @@ export function registerPosRoutes(app: Express): void {
     try {
       const existing = await storage.getPosIntegration(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Integration not found' });
-      if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
+      if (!await assertLocationAccess(req, res, existing.locationId)) return;
       await storage.deletePosIntegration(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -146,6 +146,7 @@ export function registerPosRoutes(app: Express): void {
       if (!menuItem) return res.status(404).json({ message: 'Menu item not found' });
       const integration = await storage.getPosIntegration(menuItem.posIntegrationId);
       if (!integration) return res.status(404).json({ message: 'Integration not found' });
+      if (!await assertLocationAccess(req, res, integration.locationId)) return;
       const suggestions = await storage.getSuggestedRecipes(menuItem.name, integration.locationId);
       res.json(suggestions);
     } catch (error) {
