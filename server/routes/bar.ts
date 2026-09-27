@@ -220,7 +220,7 @@ export function registerBarRoutes(app: Express) {
     }
   });
 
-  app.delete('/api/bar/waste-log/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/bar/waste-log/:id', isAuthenticated, requireBarAccess, async (req: any, res) => {
     const { id } = req.params;
     const userId = req.user?.id || req.user?.claims?.sub;
     try {
@@ -238,7 +238,7 @@ export function registerBarRoutes(app: Express) {
 
   // ── Bartender Build Sheets (employee-facing cocktail recipes) ─────────────
 
-  app.get('/api/bar/build-sheets', isAuthenticated, async (req: any, res) => {
+  app.get('/api/bar/build-sheets', isAuthenticated, requireBarAccess, async (req: any, res) => {
     const locationId = req.query.locationId as string;
     if (!locationId) return res.status(400).json({ message: 'locationId required' });
     try {

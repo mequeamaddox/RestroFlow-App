@@ -651,12 +651,16 @@ print(json.dumps(rows))
   app.get('/api/transactions', isAuthenticated, async (req, res) => {
     try {
       const itemId = req.query.itemId as string;
+      const locationId = req.query.locationId as string;
       if (itemId) {
         const item = await storage.getInventoryItem(itemId);
         if (!item) return res.status(404).json({ message: 'Inventory item not found' });
         if (item.locationId && !await assertLocationAccess(req, res, item.locationId)) return;
+      } else {
+        if (!locationId) return res.status(400).json({ message: 'locationId required' });
+        if (!await assertLocationAccess(req, res, locationId)) return;
       }
-      const transactions = await storage.getInventoryTransactions(itemId);
+      const transactions = await storage.getInventoryTransactions(itemId, locationId);
       res.json(transactions);
     } catch (error) {
       console.error('Error fetching inventory transactions:', error);

@@ -23,7 +23,7 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/hr/departments', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      const department = await storage.createDepartment({ ...req.body, locationId: req.query.locationId });
+      const department = await storage.createDepartment({ ...req.body, locationId: req.body.locationId });
       res.status(201).json(department);
     } catch (error) {
       console.error('Error creating department:', error);
@@ -315,7 +315,7 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/hr/tasks', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      const task = await storage.createTask({ ...req.body, locationId: req.query.locationId });
+      const task = await storage.createTask({ ...req.body, locationId: req.body.locationId });
       res.status(201).json(task);
     } catch (error) {
       console.error('Error creating task:', error);

@@ -272,7 +272,7 @@ export interface IStorage {
 
   // Inventory transaction operations
   createInventoryTransaction(transaction: InsertInventoryTransaction): Promise<InventoryTransaction>;
-  getInventoryTransactions(itemId?: string): Promise<(InventoryTransaction & { inventoryItem?: InventoryItem; creator?: User })[]>;
+  getInventoryTransactions(itemId?: string, locationId?: string): Promise<(InventoryTransaction & { inventoryItem?: InventoryItem; creator?: User })[]>;
 
   // Dashboard metrics
   getDashboardMetrics(locationId?: string): Promise<{
@@ -1700,7 +1700,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getInventoryTransactions(itemId?: string): Promise<(InventoryTransaction & { inventoryItem?: InventoryItem; creator?: User })[]> {
+  async getInventoryTransactions(itemId?: string, locationId?: string): Promise<(InventoryTransaction & { inventoryItem?: InventoryItem; creator?: User })[]> {
     let query = db
       .select()
       .from(inventoryTransactions)
@@ -1710,6 +1710,8 @@ export class DatabaseStorage implements IStorage {
 
     if (itemId) {
       query = query.where(eq(inventoryTransactions.inventoryItemId, itemId));
+    } else if (locationId) {
+      query = query.where(eq(inventoryTransactions.locationId, locationId));
     }
 
     return await query.then(rows => rows.map(row => ({
