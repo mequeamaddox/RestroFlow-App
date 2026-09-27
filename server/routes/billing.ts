@@ -19,21 +19,22 @@ import {
 export function registerBillingRoutes(app: Express): void {
   // ─── Sales Integration ────────────────────────────────────────────────────
 
-  app.post('/api/sales/transactions', isAuthenticated, requireLocationAccess(), async (req, res) => {
-    try {
-      const { locationId, totalAmount, paymentMethod, customerCount, posTransactionId, items } = req.body;
-      if (!locationId || !totalAmount || !items || !Array.isArray(items))
-        return res.status(400).json({ message: 'Missing required fields' });
-      const transactionId = await storage.recordSalesTransaction(
-        locationId, parseFloat(totalAmount), paymentMethod || 'cash',
-        customerCount || 1, posTransactionId || null, items, req.user!.id,
-      );
-      res.json({ transactionId, message: 'Sales transaction recorded successfully' });
-    } catch (error) {
-      console.error('Error recording sales transaction:', error);
-      res.status(500).json({ message: 'Failed to record sales transaction' });
-    }
-  });
+  // shadowed by inventory.ts — keeping for reference
+  // app.post('/api/sales/transactions', isAuthenticated, requireLocationAccess(), async (req, res) => {
+  //   try {
+  //     const { locationId, totalAmount, paymentMethod, customerCount, posTransactionId, items } = req.body;
+  //     if (!locationId || !totalAmount || !items || !Array.isArray(items))
+  //       return res.status(400).json({ message: 'Missing required fields' });
+  //     const transactionId = await storage.recordSalesTransaction(
+  //       locationId, parseFloat(totalAmount), paymentMethod || 'cash',
+  //       customerCount || 1, posTransactionId || null, items, req.user!.id,
+  //     );
+  //     res.json({ transactionId, message: 'Sales transaction recorded successfully' });
+  //   } catch (error) {
+  //     console.error('Error recording sales transaction:', error);
+  //     res.status(500).json({ message: 'Failed to record sales transaction' });
+  //   }
+  // });
 
   // ─── Subscriptions ────────────────────────────────────────────────────────
 
@@ -109,6 +110,8 @@ export function registerBillingRoutes(app: Express): void {
       if (!isOwnerLevel(user?.role))
         return res.status(403).json({ message: 'Access denied. Only business owners can access subscription information.' });
       if (!user) return res.status(404).json({ message: 'User not found' });
+      // TODO: replace getLocations() with a scoped getLocationsByOwnerId(userId) query to avoid
+      // loading all tenant locations into memory for in-process filtering.
       const allLocations = await storage.getLocations();
       // Tenant-aware: only count THIS owner's locations, never other tenants'
       const ownedLocations = allLocations.filter((loc: any) => loc.ownerId === userId);

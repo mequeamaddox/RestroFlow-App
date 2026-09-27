@@ -167,7 +167,19 @@ export function registerPosRoutes(app: Express): void {
   });
 
   // Webhooks
-  app.post('/api/pos/webhook', async (req, res) => {
+  app.post('/api/pos/webhook', (req, res, next) => {
+    // If WEBHOOK_SECRET is configured, validate the shared secret header.
+    // Otherwise fall back to requiring an authenticated user session.
+    const webhookSecret = process.env.WEBHOOK_SECRET;
+    if (webhookSecret) {
+      const provided = req.headers['x-webhook-secret'] as string | undefined;
+      if (provided !== webhookSecret) {
+        return res.status(401).json({ message: 'Invalid webhook secret' });
+      }
+      return next();
+    }
+    return isAuthenticated(req, res, next);
+  }, async (req, res) => {
     try {
       await posService.processOrderWebhook(req.body);
       res.status(200).json({ message: 'Webhook processed successfully', timestamp: new Date().toISOString() });

@@ -2,7 +2,9 @@ import type { Express } from 'express';
 import { storage } from '../storage';
 import { isAuthenticated } from './helpers';
 import { requireLocationAccess, assertLocationAccess } from '../securityMiddleware';
-import { insertRecipeSchema, insertMenuItemSchema, insertMenuItemIngredientSchema } from '@shared/schema';
+import { insertRecipeSchema, insertMenuItemSchema, insertMenuItemIngredientSchema, menuItemIngredients, menuItems } from '@shared/schema';
+import { db } from '../db';
+import { eq } from 'drizzle-orm';
 import { varianceService } from '../varianceService';
 import { ObjectStorageService } from '../objectStorage';
 
@@ -128,6 +130,9 @@ export function registerRecipeRoutes(app: Express): void {
 
   app.post('/api/recipes/:id/ingredients', isAuthenticated, async (req, res) => {
     try {
+      const [menuItem] = await db.select().from(menuItems).where(eq(menuItems.id, req.params.id)).limit(1);
+      if (!menuItem) return res.status(404).json({ message: 'Recipe/menu item not found' });
+      if (menuItem.locationId && !await assertLocationAccess(req, res, menuItem.locationId)) return;
       const ingredientData = insertMenuItemIngredientSchema.parse({ ...req.body, menuItemId: req.params.id });
       const ingredient = await storage.addMenuItemIngredient(ingredientData);
       res.status(201).json(ingredient);
@@ -139,6 +144,12 @@ export function registerRecipeRoutes(app: Express): void {
 
   app.delete('/api/menu-item-ingredients/:id', isAuthenticated, async (req, res) => {
     try {
+      const [ingredient] = await db.select().from(menuItemIngredients).where(eq(menuItemIngredients.id, req.params.id)).limit(1);
+      if (!ingredient) return res.status(404).json({ message: 'Ingredient not found' });
+      if (ingredient.menuItemId) {
+        const [menuItem] = await db.select().from(menuItems).where(eq(menuItems.id, ingredient.menuItemId)).limit(1);
+        if (menuItem?.locationId && !await assertLocationAccess(req, res, menuItem.locationId)) return;
+      }
       await storage.removeMenuItemIngredient(req.params.id);
       res.status(204).send();
     } catch (error) {

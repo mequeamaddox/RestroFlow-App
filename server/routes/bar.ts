@@ -10,6 +10,7 @@ import {
   menuItemIngredients,
 } from '../../shared/schema';
 import { isAuthenticated, requireBarAccess } from './helpers';
+import { assertLocationAccess } from '../securityMiddleware';
 
 export function registerBarRoutes(app: Express) {
   // ── Pour Cost Summary (dashboard) ─────────────────────────────────────────
@@ -113,7 +114,8 @@ export function registerBarRoutes(app: Express) {
   });
 
   app.post('/api/bar/inventory-counts', isAuthenticated, requireBarAccess, async (req: any, res) => {
-    const { locationId, shift, notes, items } = req.body;
+    const locationId = req.query.locationId as string;
+    const { shift, notes, items } = req.body;
     const userId = req.user?.id || req.user?.claims?.sub || 'unknown';
     try {
       const [count] = await db.insert(barInventoryCounts).values({
@@ -149,6 +151,7 @@ export function registerBarRoutes(app: Express) {
     try {
       const [count] = await db.select().from(barInventoryCounts).where(eq(barInventoryCounts.id, id));
       if (!count) return res.status(404).json({ message: 'Count not found' });
+      if (!await assertLocationAccess(req, res, count.locationId)) return;
 
       const countItems = await db
         .select({
@@ -226,7 +229,8 @@ export function registerBarRoutes(app: Express) {
     try {
       const [entry] = await db.select().from(barWasteLog).where(eq(barWasteLog.id, id));
       if (!entry) return res.status(404).json({ message: 'Entry not found' });
-      if (entry.loggedBy !== userId && req.user?.role !== 'owner' && req.user?.role !== 'platform_admin') {
+      if (!await assertLocationAccess(req, res, entry.locationId)) return;
+      if (entry.loggedBy !== userId && req.user?.role !== 'platform_admin') {
         return res.status(403).json({ message: 'Not authorized' });
       }
       await db.delete(barWasteLog).where(eq(barWasteLog.id, id));

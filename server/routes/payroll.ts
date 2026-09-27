@@ -30,8 +30,11 @@ export function registerDocumentRoutes(app: Express): void {
   });
 
   // Document management
-  app.get('/api/document-templates', isAuthenticated, async (_req, res) => {
+  app.get('/api/document-templates', isAuthenticated, async (req, res) => {
     try {
+      const { locationId } = req.query;
+      if (!locationId) return res.status(400).json({ message: 'locationId required' });
+      if (!await assertLocationAccess(req, res, locationId as string)) return;
       const templates = await storage.getDocumentTemplates();
       res.json(templates);
     } catch (error) {
