@@ -3,6 +3,7 @@ import { getAuth } from '@clerk/express';
 import { storage } from '../storage';
 import { isAuthenticated, clerkClient, calculateSubscriptionTotal, requirePlatformAdmin } from './helpers';
 import { requirePermission, Permission } from '../permissions';
+import { assertLocationAccess } from '../securityMiddleware';
 import { isOwnerLevel } from '@shared/roles';
 import { insertInvitationTokenSchema, invitationTokens, locations, departments, positions, employees } from '@shared/schema';
 import { InvitationEmailService } from '../invitationEmailService';
@@ -175,7 +176,12 @@ export function registerAuthRoutes(app: Express): void {
   // Invitation token management — requires MANAGE_EMPLOYEES permission on all mutating routes
   app.get('/api/invitations', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
     try {
-      const invitations = await db.select().from(invitationTokens).orderBy(invitationTokens.createdAt);
+      const locationId = req.query.locationId as string;
+      if (!locationId) return res.status(400).json({ message: 'locationId required' });
+      if (!await assertLocationAccess(req, res, locationId)) return;
+      const invitations = await db.select().from(invitationTokens)
+        .where(eq(invitationTokens.locationId, locationId))
+        .orderBy(invitationTokens.createdAt);
       res.json(invitations);
     } catch (error) {
       console.error('Error fetching invitations:', error);
@@ -282,6 +288,9 @@ export function registerAuthRoutes(app: Express): void {
 
   app.delete('/api/invitations/:id', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
     try {
+      const [invitation] = await db.select().from(invitationTokens).where(eq(invitationTokens.id, req.params.id));
+      if (!invitation) return res.status(404).json({ message: 'Invitation not found' });
+      if (!await assertLocationAccess(req, res, invitation.locationId)) return;
       await db.delete(invitationTokens).where(eq(invitationTokens.id, req.params.id));
       res.status(204).send();
     } catch (error) {
