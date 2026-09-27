@@ -5,7 +5,9 @@ import path from "path";
 export default defineConfig({
   plugins: [
     react(),
-    ...(process.env.NODE_ENV !== "production" && process.env.REPL_ID !== undefined
+    // Only load Replit dev plugins inside Replit (requires both REPL_ID and REPL_SLUG).
+    // Never include them in Railway/production builds where REPL_SLUG is absent.
+    ...(process.env.NODE_ENV !== "production" && process.env.REPL_ID && process.env.REPL_SLUG
       ? [
           (await import("@replit/vite-plugin-runtime-error-modal")).default(),
           await import("@replit/vite-plugin-cartographer").then((m) => m.cartographer()),
