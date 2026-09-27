@@ -57,7 +57,7 @@ export default function Inventory() {
 
   const handleAddSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/inventory', currentLocation?.id] });
-    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/metrics'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/metrics', currentLocation?.id] });
     queryClient.invalidateQueries({ queryKey: ['/api/inventory/low-stock', currentLocation?.id] });
     setIsAddDialogOpen(false);
     toast({
@@ -68,7 +68,7 @@ export default function Inventory() {
 
   const handleEditSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/inventory', currentLocation?.id] });
-    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/metrics'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/metrics', currentLocation?.id] });
     queryClient.invalidateQueries({ queryKey: ['/api/inventory/low-stock', currentLocation?.id] });
     setEditingItem(null);
     toast({
@@ -87,9 +87,9 @@ export default function Inventory() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/inventory', currentLocation?.id] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/metrics', currentLocation?.id] });
       queryClient.invalidateQueries({ queryKey: ['/api/inventory/low-stock', currentLocation?.id] });
-      queryClient.invalidateQueries({ queryKey: ['/api/recipes'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/recipes', currentLocation?.id] });
       setEditingItem(null);
       toast({
         title: "Success",

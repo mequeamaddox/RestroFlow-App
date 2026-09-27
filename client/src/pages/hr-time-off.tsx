@@ -88,7 +88,7 @@ export default function HRTimeOff() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Time-off request created successfully" });
-      queryClient.invalidateQueries({ queryKey: ['/api/hr/time-off-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/hr/time-off-requests', currentLocation?.id] });
       setIsCreateDialogOpen(false);
       form.reset();
     },
@@ -103,7 +103,7 @@ export default function HRTimeOff() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Request status updated successfully" });
-      queryClient.invalidateQueries({ queryKey: ['/api/hr/time-off-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/hr/time-off-requests', currentLocation?.id] });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to update request status", variant: "destructive" });

@@ -263,11 +263,10 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/hr/time-off-requests', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      if (req.body.employeeId) {
-        const employee = await storage.getEmployee(req.body.employeeId);
-        if (!employee) return res.status(404).json({ message: 'Employee not found' });
-        if (!await assertLocationAccess(req, res, employee.locationId)) return;
-      }
+      const employeeId = req.body.employeeId;
+      const locationId = req.body.locationId || (employeeId ? (await storage.getEmployee(employeeId))?.locationId : null);
+      if (!locationId) return res.status(400).json({ message: 'locationId required' });
+      if (!await assertLocationAccess(req, res, locationId)) return;
       const request = await storage.createTimeOffRequest(req.body);
       res.status(201).json(request);
     } catch (error) {
@@ -790,6 +789,7 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/hr/onboarding/steps', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      if (req.body.locationId && !await assertLocationAccess(req, res, req.body.locationId)) return;
       const step = await storage.createOnboardingStep(req.body);
       res.status(201).json(step);
     } catch (error) {
@@ -899,7 +899,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/hr/onboarding/invite', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
+  app.post('/api/hr/onboarding/invite', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), requireHRAccess, async (req, res) => {
     try {
       const { employeeId, email, phone, sendMethod = 'email' } = req.body;
       const token = await storage.createOnboardingToken(employeeId, 72);

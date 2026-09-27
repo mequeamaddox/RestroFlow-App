@@ -229,6 +229,7 @@ export function registerRecipeRoutes(app: Express): void {
     try {
       const locationId = req.query.locationId as string;
       if (!locationId) return res.status(400).json({ message: 'Location ID is required' });
+      if (!await assertLocationAccess(req, res, locationId)) return;
       const costing = await varianceService.calculateRecipeCost(req.params.id, locationId);
       if (!costing) return res.status(404).json({ message: 'Recipe not found or unable to calculate cost' });
       res.json(costing);

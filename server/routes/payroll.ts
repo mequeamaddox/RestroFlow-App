@@ -17,18 +17,6 @@ export function registerDocumentRoutes(app: Express): void {
     }
   });
 
-  // Test email
-  app.post('/api/test/email', isAuthenticated, async (_req, res) => {
-    try {
-      const { sendEmail } = await import('../email');
-      await sendEmail({ to: 'mequeamaddox@gmail.com', from: process.env.FROM_EMAIL || 'noreply@restroflowsolutions.com', subject: 'RestroFlow Email Test', text: 'This is a test email from RestroFlow to verify Resend is working.', html: '<p>This is a <strong>test email</strong> from RestroFlow to verify Resend is working.</p>' });
-      res.json({ success: true, message: 'Test email sent successfully!' });
-    } catch (error) {
-      console.error('Test email failed:', error);
-      res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
-    }
-  });
-
   // Document management
   app.get('/api/document-templates', isAuthenticated, async (req, res) => {
     try {
@@ -45,6 +33,9 @@ export function registerDocumentRoutes(app: Express): void {
 
   app.post('/api/document-templates', isAuthenticated, async (req, res) => {
     try {
+      const { locationId } = req.body;
+      if (!locationId) return res.status(400).json({ message: 'locationId required' });
+      if (!await assertLocationAccess(req, res, locationId)) return;
       const template = await storage.createDocumentTemplate({ ...req.body, createdBy: req.user!.id });
       res.status(201).json(template);
     } catch (error) {
@@ -103,6 +94,9 @@ export function registerDocumentRoutes(app: Express): void {
 
   app.post('/api/employee-documents/assign', isAuthenticated, async (req, res) => {
     try {
+      const employee = await storage.getEmployee(req.body.employeeId);
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       const assignmentData = { ...req.body, sentBy: req.user!.id, sentAt: new Date(), status: 'sent' };
       const assignment = await storage.createDocumentAssignment(assignmentData);
       const employeeId = assignmentData.employeeId;
@@ -125,6 +119,11 @@ export function registerDocumentRoutes(app: Express): void {
 
   app.put('/api/employee-documents/:id/status', isAuthenticated, async (req, res) => {
     try {
+      const doc = await storage.getDocumentAssignment(req.params.id);
+      if (!doc) return res.status(404).json({ message: 'Document assignment not found' });
+      const employee = await storage.getEmployee(doc.employeeId);
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       const { status } = req.body;
       const updateData: any = { status };
       if (status === 'viewed') updateData.viewedAt = new Date();
@@ -140,6 +139,11 @@ export function registerDocumentRoutes(app: Express): void {
 
   app.post('/api/employee-documents/:id/signature', isAuthenticated, async (req, res) => {
     try {
+      const doc = await storage.getDocumentAssignment(req.params.id);
+      if (!doc) return res.status(404).json({ message: 'Document assignment not found' });
+      const employee = await storage.getEmployee(doc.employeeId);
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       const { signatureData, signedName, employeeId } = req.body;
       const signature = await storage.createEmployeeSignature({ documentAssignmentId: req.params.id, employeeId, signatureData, signedName, ipAddress: req.ip, userAgent: req.get('User-Agent') });
       await storage.updateDocumentAssignment(req.params.id, { status: 'signed', signedAt: new Date(), signaturePath: `/signatures/${signature.id}` });
@@ -162,6 +166,11 @@ export function registerDocumentRoutes(app: Express): void {
 
   app.put('/api/employee-documents/:id/start', isAuthenticated, async (req, res) => {
     try {
+      const doc = await storage.getDocumentAssignment(req.params.id);
+      if (!doc) return res.status(404).json({ message: 'Document assignment not found' });
+      const employee = await storage.getEmployee(doc.employeeId);
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       const assignment = await storage.updateDocumentAssignment(req.params.id, { status: 'viewed' });
       res.json(assignment);
     } catch (error) {
@@ -172,6 +181,11 @@ export function registerDocumentRoutes(app: Express): void {
 
   app.put('/api/employee-documents/:id/manager-upload', isAuthenticated, async (req, res) => {
     try {
+      const doc = await storage.getDocumentAssignment(req.params.id);
+      if (!doc) return res.status(404).json({ message: 'Document assignment not found' });
+      const employee = await storage.getEmployee(doc.employeeId);
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       const assignment = await storage.updateDocumentAssignment(req.params.id, { status: 'completed', notes: 'Paper copy uploaded by manager' });
       res.json(assignment);
     } catch (error) {
@@ -182,6 +196,11 @@ export function registerDocumentRoutes(app: Express): void {
 
   app.post('/api/employee-documents/:id/upload', isAuthenticated, async (req, res) => {
     try {
+      const doc = await storage.getDocumentAssignment(req.params.id);
+      if (!doc) return res.status(404).json({ message: 'Document assignment not found' });
+      const employee = await storage.getEmployee(doc.employeeId);
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       const assignment = await storage.updateDocumentAssignment(req.params.id, { status: 'completed', completedAt: new Date() });
       res.json(assignment);
     } catch (error) {
@@ -202,6 +221,11 @@ export function registerDocumentRoutes(app: Express): void {
 
   app.get('/api/employee-documents/:id/responses', isAuthenticated, async (req, res) => {
     try {
+      const doc = await storage.getDocumentAssignment(req.params.id);
+      if (!doc) return res.status(404).json({ message: 'Document assignment not found' });
+      const employee = await storage.getEmployee(doc.employeeId);
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       const responses = await storage.getDocumentFormResponses(req.params.id);
       res.json(responses);
     } catch (error) {
@@ -212,6 +236,11 @@ export function registerDocumentRoutes(app: Express): void {
 
   app.post('/api/employee-documents/:id/responses', isAuthenticated, async (req, res) => {
     try {
+      const doc = await storage.getDocumentAssignment(req.params.id);
+      if (!doc) return res.status(404).json({ message: 'Document assignment not found' });
+      const employee = await storage.getEmployee(doc.employeeId);
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       const { fieldId, fieldValue } = req.body;
       const response = await storage.saveDocumentFormResponse({ assignmentId: req.params.id, fieldId, fieldValue });
       res.json(response);
@@ -223,6 +252,11 @@ export function registerDocumentRoutes(app: Express): void {
 
   app.post('/api/employee-documents/:id/complete', isAuthenticated, async (req, res) => {
     try {
+      const doc = await storage.getDocumentAssignment(req.params.id);
+      if (!doc) return res.status(404).json({ message: 'Document assignment not found' });
+      const employee = await storage.getEmployee(doc.employeeId);
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       const assignment = await storage.updateDocumentAssignment(req.params.id, { status: 'completed', completedAt: new Date() });
       res.json(assignment);
     } catch (error) {
