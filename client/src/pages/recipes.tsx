@@ -132,7 +132,7 @@ export default function Recipes() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/auth";
+          window.location.href = "/login";
         }, 500);
         return;
       }
@@ -165,7 +165,7 @@ export default function Recipes() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/auth";
+          window.location.href = "/login";
         }, 500);
         return;
       }
@@ -196,7 +196,7 @@ export default function Recipes() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/auth";
+          window.location.href = "/login";
         }, 500);
         return;
       }

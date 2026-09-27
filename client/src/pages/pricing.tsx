@@ -160,7 +160,7 @@ export default function Pricing() {
   
   const handleSubscribe = (planId: string) => {
     if (!user) {
-      window.location.href = '/api/login';
+      window.location.href = '/login';
       return;
     }
     
@@ -214,7 +214,7 @@ export default function Pricing() {
                 <Button 
                   variant="outline"
                   className="bg-transparent border-2 border-orange-400 text-orange-400 hover:bg-orange-400 hover:text-white px-6 py-2 font-semibold rounded-full transition-all duration-300"
-                  onClick={() => window.location.href = '/api/login'}
+                  onClick={() => window.location.href = '/login'}
                 >
                   Login
                 </Button>
@@ -687,7 +687,7 @@ export default function Pricing() {
             <Button 
               size="lg" 
               className="bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white px-12 py-4 text-lg font-bold rounded-full shadow-2xl transform hover:scale-105 transition-all duration-300"
-              onClick={() => window.location.href = '/api/login'}
+              onClick={() => window.location.href = '/login'}
             >
               Start Your Free Trial Now
             </Button>
