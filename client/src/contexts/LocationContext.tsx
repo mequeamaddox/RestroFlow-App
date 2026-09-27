@@ -22,6 +22,23 @@ export function LocationProvider({ children }: { children: ReactNode }) {
     queryKey: ['/api/locations'],
   });
 
+  // When the logged-in user changes (login/logout/switch), clear the stored
+  // location so a different user doesn't inherit the previous user's selection.
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId) return;
+    try {
+      const storedUserId = localStorage.getItem('restroflow_user_id');
+      if (storedUserId !== userId) {
+        localStorage.removeItem('selectedLocation');
+        localStorage.setItem('restroflow_user_id', userId);
+        setCurrentLocationState(null);
+      }
+    } catch (error) {
+      // localStorage unavailable (private browsing, etc.) — ignore
+    }
+  }, [user?.id]);
+
   // Set first location as default when locations are loaded
   useEffect(() => {
     if (locations.length > 0 && !currentLocation) {
@@ -31,19 +48,23 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 
   const setCurrentLocation = (location: Location) => {
     setCurrentLocationState(location);
-    localStorage.setItem('selectedLocation', JSON.stringify(location));
+    try {
+      localStorage.setItem('selectedLocation', JSON.stringify(location));
+    } catch (error) {
+      // ignore
+    }
   };
 
   // Load saved location from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem('selectedLocation');
-    if (saved) {
-      try {
+    try {
+      const saved = localStorage.getItem('selectedLocation');
+      if (saved) {
         const location = JSON.parse(saved);
         setCurrentLocationState(location);
-      } catch (error) {
-        console.error('Error loading saved location:', error);
       }
+    } catch (error) {
+      console.error('Error loading saved location:', error);
     }
   }, []);
 

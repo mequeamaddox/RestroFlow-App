@@ -227,7 +227,7 @@ export interface IStorage {
   deleteVendor(id: string): Promise<void>;
 
   // Inventory operations
-  getInventoryItems(): Promise<(InventoryItem & { category?: Category; vendor?: Vendor })[]>;
+  getInventoryItems(locationId?: string): Promise<(InventoryItem & { category?: Category; vendor?: Vendor })[]>;
   getInventoryItem(id: string): Promise<(InventoryItem & { category?: Category; vendor?: Vendor }) | undefined>;
   createInventoryItem(item: InsertInventoryItem): Promise<InventoryItem>;
   updateInventoryItem(id: string, item: Partial<InsertInventoryItem>): Promise<InventoryItem>;

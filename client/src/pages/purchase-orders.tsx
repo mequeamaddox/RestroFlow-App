@@ -314,8 +314,8 @@ export default function PurchaseOrders() {
       return response.json();
     },
     onSuccess: (order) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/purchase-orders'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/inventory/low-stock'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/purchase-orders', currentLocation?.id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/inventory/low-stock', currentLocation?.id] });
       toast({
         title: "Success",
         description: `Purchase order ${order.orderNumber} created from ${order.items?.length || 0} low stock items`,
@@ -339,7 +339,7 @@ export default function PurchaseOrders() {
   const deleteOrderMutation = useMutation({
     mutationFn: (id: string) => apiRequest('DELETE', `/api/purchase-orders/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/purchase-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/purchase-orders', currentLocation?.id] });
       toast({
         title: "Success",
         description: "Purchase order deleted successfully",
