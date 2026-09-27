@@ -197,7 +197,9 @@ export const inventoryItems = pgTable("inventory_items", {
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index('inventory_items_location_id_idx').on(table.locationId),
+]);
 
 // Recipes
 export const recipes = pgTable("recipes", {
@@ -270,7 +272,9 @@ export const purchaseOrders = pgTable("purchase_orders", {
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index('purchase_orders_location_id_idx').on(table.locationId),
+]);
 
 // Purchase order items
 export const purchaseOrderItems = pgTable("purchase_order_items", {
@@ -665,7 +669,9 @@ export const employees = pgTable("employees", {
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index('employees_location_id_idx').on(table.locationId),
+]);
 
 // Employee invitation tokens for secure invite system
 export const invitationStatusEnum = pgEnum("invitation_status", ["pending", "accepted", "expired", "cancelled"]);

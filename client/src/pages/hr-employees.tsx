@@ -54,25 +54,11 @@ export default function HREmployees() {
 
   const { data: departments = [] } = useQuery<Array<{ id: string; name: string }>>({
     queryKey: ['/api/hr/departments', currentLocation?.id],
-    queryFn: async () => {
-      const response = await fetch(`/api/hr/departments?locationId=${currentLocation?.id}`, {
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error('Failed to fetch departments');
-      return response.json();
-    },
     enabled: !!currentLocation,
   });
 
   const { data: positions = [] } = useQuery<Array<{ id: string; title: string }>>({
     queryKey: ['/api/hr/positions', currentLocation?.id],
-    queryFn: async () => {
-      const response = await fetch(`/api/hr/positions?locationId=${currentLocation?.id}`, {
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error('Failed to fetch positions');
-      return response.json();
-    },
     enabled: !!currentLocation,
   });
 
@@ -93,7 +79,6 @@ export default function HREmployees() {
           description: "Employee and login account created successfully" 
         });
       }
-      queryClient.invalidateQueries({ queryKey: ['/api/hr/employees'] });
       queryClient.invalidateQueries({ queryKey: ['/api/hr/employees', currentLocation?.id] });
       setIsDialogOpen(false);
       setEditingEmployee(null);
@@ -109,7 +94,7 @@ export default function HREmployees() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Employee updated successfully" });
-      queryClient.invalidateQueries({ queryKey: ['/api/hr/employees'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/hr/employees', currentLocation?.id] });
       setIsDialogOpen(false);
       setEditingEmployee(null);
     },
@@ -124,7 +109,7 @@ export default function HREmployees() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Employee deleted successfully" });
-      queryClient.invalidateQueries({ queryKey: ['/api/hr/employees'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/hr/employees', currentLocation?.id] });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to delete employee", variant: "destructive" });
@@ -138,8 +123,8 @@ export default function HREmployees() {
     onSuccess: (_, variables) => {
       const statusLabels = { active: 'Active', inactive: 'Inactive', terminated: 'Terminated' };
       toast({ title: "Success", description: `Employee marked as ${statusLabels[variables.status]}` });
-      queryClient.invalidateQueries({ queryKey: ['/api/hr/employees'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/hr/analytics'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/hr/employees', currentLocation?.id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/hr/analytics', currentLocation?.id] });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to update employee status", variant: "destructive" });

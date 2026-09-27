@@ -86,45 +86,21 @@ export default function PurchaseOrders() {
 
   const { data: purchaseOrders = [], isLoading } = useQuery({
     queryKey: ['/api/purchase-orders', currentLocation?.id],
-    queryFn: async () => {
-      const params = currentLocation?.id ? `?locationId=${currentLocation.id}` : '';
-      const response = await fetch(`/api/purchase-orders${params}`);
-      if (!response.ok) return [];
-      return response.json();
-    },
     enabled: !!currentLocation,
   });
 
   const { data: vendors = [] } = useQuery({
     queryKey: ['/api/vendors', currentLocation?.id],
-    queryFn: async () => {
-      const params = currentLocation?.id ? `?locationId=${currentLocation.id}` : '';
-      const response = await fetch(`/api/vendors${params}`);
-      if (!response.ok) return [];
-      return response.json();
-    },
     enabled: !!currentLocation,
   });
 
   const { data: inventoryItems = [] } = useQuery({
     queryKey: ['/api/inventory', currentLocation?.id],
-    queryFn: async () => {
-      const params = currentLocation?.id ? `?locationId=${currentLocation.id}` : '';
-      const response = await fetch(`/api/inventory${params}`);
-      if (!response.ok) return [];
-      return response.json();
-    },
     enabled: !!currentLocation,
   });
 
   const { data: lowStockItems = [] } = useQuery({
     queryKey: ['/api/inventory/low-stock', currentLocation?.id],
-    queryFn: async () => {
-      const params = currentLocation?.id ? `?locationId=${currentLocation.id}` : '';
-      const response = await fetch(`/api/inventory/low-stock${params}`);
-      if (!response.ok) return [];
-      return response.json();
-    },
     enabled: !!currentLocation,
   });
 
@@ -221,7 +197,7 @@ export default function PurchaseOrders() {
       return order;
     },
     onSuccess: (order) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/purchase-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/purchase-orders', currentLocation?.id] });
       setIsCreateDialogOpen(false);
       clearForm();
       toast({
@@ -263,7 +239,7 @@ export default function PurchaseOrders() {
       await apiRequest('PUT', `/api/purchase-orders/${selectedOrder.id}`, poData);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/purchase-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/purchase-orders', currentLocation?.id] });
       setIsEditDialogOpen(false);
       setSelectedOrder(null);
       form.reset();
@@ -338,8 +314,8 @@ export default function PurchaseOrders() {
       return response.json();
     },
     onSuccess: (order) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/purchase-orders'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/inventory/low-stock'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/purchase-orders', currentLocation?.id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/inventory/low-stock', currentLocation?.id] });
       toast({
         title: "Success",
         description: `Purchase order ${order.orderNumber} created from ${order.items?.length || 0} low stock items`,
@@ -363,7 +339,7 @@ export default function PurchaseOrders() {
   const deleteOrderMutation = useMutation({
     mutationFn: (id: string) => apiRequest('DELETE', `/api/purchase-orders/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/purchase-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/purchase-orders', currentLocation?.id] });
       toast({
         title: "Success",
         description: "Purchase order deleted successfully",
