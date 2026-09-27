@@ -420,6 +420,7 @@ export interface IStorage {
   // Employee document assignment operations
   getEmployeeDocuments(employeeId: string): Promise<any[]>;
   getAllEmployeeDocuments(): Promise<any[]>;
+  getDocumentAssignment(id: string): Promise<any | undefined>;
   createDocumentAssignment(assignment: any): Promise<any>;
   updateDocumentAssignment(id: string, assignment: Partial<any>): Promise<any>;
   deleteDocumentAssignment(id: string): Promise<void>;
@@ -3927,6 +3928,13 @@ export class DatabaseStorage implements IStorage {
     .orderBy(desc(employeeDocumentAssignments.createdAt));
     
     return documents;
+  }
+
+  async getDocumentAssignment(id: string): Promise<EmployeeDocumentAssignment | undefined> {
+    const [assignment] = await db.select()
+      .from(employeeDocumentAssignments)
+      .where(eq(employeeDocumentAssignments.id, id));
+    return assignment;
   }
 
   async createDocumentAssignment(assignment: InsertEmployeeDocumentAssignment): Promise<EmployeeDocumentAssignment> {

@@ -194,11 +194,10 @@ export function registerPosRoutes(app: Express): void {
   app.post('/api/webhooks/spoton', async (req, res) => {
     try {
       const sig = req.headers['x-spoton-signature'] as string | undefined;
-      if (sig && process.env.SPOTON_WEBHOOK_SECRET) {
-        const crypto = await import('crypto');
-        const expected = `sha256=${crypto.createHmac('sha256', process.env.SPOTON_WEBHOOK_SECRET)
-          .update(JSON.stringify(req.body)).digest('hex')}`;
-        if (sig !== expected) return res.status(401).json({ message: 'Invalid webhook signature' });
+      if (process.env.SPOTON_WEBHOOK_SECRET) {
+        if (!sig || sig !== process.env.SPOTON_WEBHOOK_SECRET) {
+          return res.status(401).json({ message: 'Invalid webhook signature' });
+        }
       }
 
       const locationId = req.body.location_id ?? req.body.locationId;
@@ -218,6 +217,12 @@ export function registerPosRoutes(app: Express): void {
   });
 
   app.post('/api/webhooks/clover', async (req, res) => {
+    const sig = req.headers['x-clover-hmac-sha256'] || req.headers['x-webhook-secret'];
+    if (process.env.CLOVER_WEBHOOK_SECRET) {
+      if (!sig || sig !== process.env.CLOVER_WEBHOOK_SECRET) {
+        return res.status(401).json({ message: 'Invalid webhook signature' });
+      }
+    }
     try {
       await posService.processOrderWebhook(req.body);
       res.status(200).json({ message: 'Clover webhook processed successfully', eventType: req.body.eventType, timestamp: new Date().toISOString() });
@@ -262,7 +267,9 @@ export function registerPosRoutes(app: Express): void {
 
   app.get('/api/pos-employees/unlinked/:locationId', isAuthenticated, async (req, res) => {
     try {
-      const employees = await storage.getUnlinkedPosEmployees(req.params.locationId);
+      const { locationId } = req.params;
+      if (!await assertLocationAccess(req, res, locationId)) return;
+      const employees = await storage.getUnlinkedPosEmployees(locationId);
       res.json(employees);
     } catch (error) {
       console.error('Error fetching unlinked POS employees:', error);

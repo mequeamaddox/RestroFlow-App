@@ -104,7 +104,13 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/auth/logout', (_req, res) => {
+  app.post('/api/auth/logout', async (req, res) => {
+    try {
+      const sessionId = req.auth?.sessionId;
+      if (sessionId) await clerkClient.sessions.revokeSession(sessionId);
+    } catch (e) {
+      // best-effort revocation
+    }
     res.clearCookie('__session');
     res.json({ success: true, message: 'Logout successful' });
   });
@@ -200,7 +206,9 @@ export function registerAuthRoutes(app: Express): void {
 
       // Resolve locationId — fall back to the user's first owned location
       let locationId = bodyLocationId;
+      if (bodyLocationId && !await assertLocationAccess(req, res, bodyLocationId)) return;
       if (!locationId) {
+        // TODO: replace with scoped query — getLocations() is a full-table scan
         const allLocations = await storage.getLocations();
         const owned = allLocations.find((l: any) => l.ownerId === userId);
         if (!owned) return res.status(400).json({ message: 'Location ID required and no owned location found' });
@@ -227,6 +235,7 @@ export function registerAuthRoutes(app: Express): void {
 
       // Send email (non-blocking — log failure but still return the token)
       const inviter = await storage.getUser(userId);
+      // TODO: replace with scoped query — getLocations() is a full-table scan
       const allLocations = await storage.getLocations();
       const location = allLocations.find((l: any) => l.id === locationId);
       const companyName = location?.name || 'RestroFlow';
@@ -253,6 +262,7 @@ export function registerAuthRoutes(app: Express): void {
     try {
       const [invitation] = await db.select().from(invitationTokens).where(eq(invitationTokens.id, req.params.id));
       if (!invitation) return res.status(404).json({ message: 'Invitation not found' });
+      if (!await assertLocationAccess(req, res, invitation.locationId)) return;
       res.json(invitation);
     } catch (error) {
       console.error('Error fetching invitation:', error);
@@ -266,10 +276,7 @@ export function registerAuthRoutes(app: Express): void {
       const [existing] = await db.select().from(invitationTokens).where(eq(invitationTokens.id, req.params.id));
       if (!existing) return res.status(404).json({ message: 'Invitation not found' });
 
-      const location = await storage.getLocationById(existing.locationId);
-      if (!location || location.ownerId !== userId) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
+      if (!await assertLocationAccess(req, res, existing.locationId)) return;
 
       const parsed = insertInvitationTokenSchema.partial().safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: 'Invalid data', errors: parsed.error.errors });

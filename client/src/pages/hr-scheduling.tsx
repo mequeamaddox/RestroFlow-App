@@ -66,39 +66,16 @@ export default function HRScheduling() {
 
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ['/api/hr/employees', currentLocation?.id],
-    queryFn: async () => {
-      const response = await fetch(`/api/hr/employees?locationId=${currentLocation?.id}`, {
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error('Failed to fetch employees');
-      return response.json();
-    },
     enabled: !!currentLocation,
   });
 
   const { data: shifts = [] } = useQuery<Shift[]>({
     queryKey: ['/api/hr/shifts', currentLocation?.id],
-    queryFn: async () => {
-      const response = await fetch(`/api/hr/shifts?locationId=${currentLocation?.id}`, {
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error('Failed to fetch shifts');
-      const data = await response.json();
-      console.log('Loaded shifts:', data);
-      return data;
-    },
     enabled: !!currentLocation,
   });
 
   const { data: departments = [] } = useQuery<any[]>({
     queryKey: ['/api/hr/departments', currentLocation?.id],
-    queryFn: async () => {
-      const response = await fetch(`/api/hr/departments?locationId=${currentLocation?.id}`, {
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error('Failed to fetch departments');
-      return response.json();
-    },
     enabled: !!currentLocation,
   });
 

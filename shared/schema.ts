@@ -88,7 +88,9 @@ export const vendors = pgTable("vendors", {
   address: text("address"),
   locationId: uuid("location_id").references(() => locations.id).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index('vendors_location_id_idx').on(table.locationId),
+]);
 
 // Vendor Price Catalog - tracks multiple vendor prices for the same item
 export const vendorPriceCatalog = pgTable("vendor_price_catalog", {
@@ -214,15 +216,17 @@ export const recipes = pgTable("recipes", {
   instructions: text("instructions").notNull(),
   sellingPrice: decimal("selling_price", { precision: 10, scale: 2 }),
   imageUrl: varchar("image_url", { length: 500 }), // Path to recipe photo
-  
+
   // Cost analysis fields
   totalCost: decimal("total_cost", { precision: 10, scale: 2 }), // Total ingredient cost for recipe
   costPerServing: decimal("cost_per_serving", { precision: 10, scale: 4 }), // Cost per single serving
   profitMargin: decimal("profit_margin", { precision: 5, scale: 2 }), // Profit margin percentage
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index('recipes_location_id_idx').on(table.locationId),
+]);
 
 // Recipe ingredients (junction table)
 export const recipeIngredients = pgTable("recipe_ingredients", {
@@ -300,7 +304,9 @@ export const wasteEntries = pgTable("waste_entries", {
   notes: text("notes"),
   reportedBy: varchar("reported_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index('waste_entries_location_id_idx').on(table.locationId),
+]);
 
 // Sales tracking - for recording sales and automatic inventory deduction
 export const sales = pgTable("sales", {
@@ -628,7 +634,9 @@ export const departments = pgTable("departments", {
   locationId: uuid("location_id").references(() => locations.id).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index('departments_location_id_idx').on(table.locationId),
+]);
 
 // Job positions and roles
 export const positions = pgTable("positions", {
@@ -683,31 +691,34 @@ export const invitationTokens = pgTable("invitation_tokens", {
   firstName: varchar("first_name", { length: 50 }),
   lastName: varchar("last_name", { length: 50 }),
   role: varchar("role", { length: 50 }).notNull(), // employee, manager, team_lead, etc.
-  
+
   // Organization linkage
   locationId: uuid("location_id").references(() => locations.id).notNull(),
   departmentId: uuid("department_id").references(() => departments.id),
   positionId: uuid("position_id").references(() => positions.id),
-  
+
   // Employment details
   hourlyRate: decimal("hourly_rate", { precision: 10, scale: 2 }),
   salary: decimal("salary", { precision: 12, scale: 2 }),
   startDate: date("start_date"),
-  
+
   // Invitation management
   invitedBy: varchar("invited_by").references(() => users.id).notNull(),
   status: invitationStatusEnum("status").default("pending"),
   expiresAt: timestamp("expires_at").notNull(), // Invitation expiry (48 hours)
   acceptedAt: timestamp("accepted_at"),
   employeeId: uuid("employee_id").references(() => employees.id), // Set when invitation is accepted
-  
+
   // Additional data
   personalMessage: text("personal_message"),
   metadata: jsonb("metadata"), // Store additional invitation data
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index('invitation_tokens_email_idx').on(table.email),
+  index('invitation_tokens_location_id_idx').on(table.locationId),
+]);
 
 // Employee schedules and shifts
 export const shifts = pgTable("shifts", {
@@ -725,7 +736,10 @@ export const shifts = pgTable("shifts", {
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index('shifts_location_id_idx').on(table.locationId),
+  index('shifts_employee_id_idx').on(table.employeeId),
+]);
 
 // Employee availability preferences
 export const availability = pgTable("availability", {
@@ -757,7 +771,9 @@ export const timeOffRequests = pgTable("time_off_requests", {
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index('time_off_requests_employee_id_idx').on(table.employeeId),
+]);
 
 // Task assignments and tracking
 export const tasks = pgTable("tasks", {

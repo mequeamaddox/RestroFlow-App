@@ -64,7 +64,7 @@ export default function HREmployees() {
 
   const createEmployeeMutation = useMutation({
     mutationFn: async (employeeData: any) => {
-      return await apiRequest('POST', '/api/hr/employees', employeeData);
+      return await apiRequest('POST', `/api/hr/employees?locationId=${currentLocation?.id}`, { ...employeeData, locationId: currentLocation?.id });
     },
     onSuccess: (data: any) => {
       if (data.warning) {
