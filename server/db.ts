@@ -13,18 +13,6 @@ if (!connectionString) {
   );
 }
 
-// Validate URL format before handing it to the Neon driver.
-// new URL() will throw "Invalid URL" for any malformed string,
-// giving a clear error at startup rather than a cryptic failure on the first query.
-try {
-  new URL(connectionString);
-} catch {
-  throw new Error(
-    `DATABASE_URL is not a valid URL (starts with: ${connectionString.substring(0, 20)}...). ` +
-    "Check the Railway environment variable — it must be a full postgres:// connection string."
-  );
-}
-
 export const pool = new Pool({ connectionString });
 export const db = drizzle({ client: pool, schema });
 
