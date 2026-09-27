@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocation } from "@/contexts/LocationContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer';
+// @react-pdf/renderer is imported dynamically inside generatePDF to avoid adding it to the main bundle.
 
 const shiftFormSchema = z.object({
   employeeId: z.string().min(1, "Employee is required"),
@@ -252,6 +252,7 @@ export default function HRScheduling() {
   };
 
   const generatePDF = async (includeStats: boolean) => {
+    const { Document, Page, Text, View, StyleSheet, pdf } = await import('@react-pdf/renderer');
     const styles = StyleSheet.create({
       page: { padding: 30, backgroundColor: '#ffffff' },
       header: { marginBottom: 20, textAlign: 'center' },

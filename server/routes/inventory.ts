@@ -148,7 +148,10 @@ export function registerInventoryRoutes(app: Express): void {
     try {
       const vendor = await storage.getVendor(req.params.id);
       if (!vendor) return res.status(404).json({ message: 'Vendor not found' });
-      if (vendor.locationId && !await assertLocationAccess(req, res, vendor.locationId)) return;
+      if (!vendor.locationId) {
+        return res.status(400).json({ message: 'Vendor has no location assigned' });
+      }
+      if (!await assertLocationAccess(req, res, vendor.locationId)) return;
       res.json(vendor);
     } catch (error) {
       console.error('Error fetching vendor:', error);
@@ -159,7 +162,10 @@ export function registerInventoryRoutes(app: Express): void {
   app.post('/api/vendors', isAuthenticated, async (req, res) => {
     try {
       const vendorData = insertVendorSchema.parse(req.body);
-      if (vendorData.locationId && !await assertLocationAccess(req, res, vendorData.locationId)) return;
+      if (!vendorData.locationId) {
+        return res.status(400).json({ message: 'Vendor has no location assigned' });
+      }
+      if (!await assertLocationAccess(req, res, vendorData.locationId)) return;
       const vendor = await storage.createVendor(vendorData);
       res.status(201).json(vendor);
     } catch (error) {
@@ -172,7 +178,10 @@ export function registerInventoryRoutes(app: Express): void {
     try {
       const existing = await storage.getVendor(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Vendor not found' });
-      if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
+      if (!existing.locationId) {
+        return res.status(400).json({ message: 'Vendor has no location assigned' });
+      }
+      if (!await assertLocationAccess(req, res, existing.locationId)) return;
       const vendor = await storage.updateVendor(req.params.id, insertVendorSchema.partial().parse(req.body));
       res.json(vendor);
     } catch (error) {
@@ -185,7 +194,10 @@ export function registerInventoryRoutes(app: Express): void {
     try {
       const existing = await storage.getVendor(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Vendor not found' });
-      if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
+      if (!existing.locationId) {
+        return res.status(400).json({ message: 'Vendor has no location assigned' });
+      }
+      if (!await assertLocationAccess(req, res, existing.locationId)) return;
       await storage.deleteVendor(req.params.id);
       res.status(204).send();
     } catch (error) {

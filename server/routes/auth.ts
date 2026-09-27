@@ -128,9 +128,8 @@ export function registerAuthRoutes(app: Express): void {
       const userId = req.user!.id;
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: 'User not found' });
-      const allLocations = await storage.getLocations();
-      // Scope to this owner's locations only — prevents cross-tenant count leak
-      const hrAddonLocations = allLocations.filter((loc: any) => loc.ownerId === userId && loc.hrAddonEnabled).length;
+      const ownedLocations = await storage.getLocations(userId);
+      const hrAddonLocations = ownedLocations.filter((loc: any) => loc.hrAddonEnabled).length;
       res.json({
         plan: user.subscriptionPlan || 'free',
         status: user.subscriptionStatus || 'inactive',
@@ -208,9 +207,8 @@ export function registerAuthRoutes(app: Express): void {
       let locationId = bodyLocationId;
       if (bodyLocationId && !await assertLocationAccess(req, res, bodyLocationId)) return;
       if (!locationId) {
-        // TODO: replace with scoped query — getLocations() is a full-table scan
-        const allLocations = await storage.getLocations();
-        const owned = allLocations.find((l: any) => l.ownerId === userId);
+        const ownedLocations = await storage.getLocations(userId);
+        const owned = ownedLocations[0];
         if (!owned) return res.status(400).json({ message: 'Location ID required and no owned location found' });
         locationId = owned.id;
       }
@@ -234,10 +232,10 @@ export function registerAuthRoutes(app: Express): void {
       });
 
       // Send email (non-blocking — log failure but still return the token)
-      const inviter = await storage.getUser(userId);
-      // TODO: replace with scoped query — getLocations() is a full-table scan
-      const allLocations = await storage.getLocations();
-      const location = allLocations.find((l: any) => l.id === locationId);
+      const [inviter, location] = await Promise.all([
+        storage.getUser(userId),
+        storage.getLocationById(locationId),
+      ]);
       const companyName = location?.name || 'RestroFlow';
       const inviterName = inviter ? `${inviter.firstName || ''} ${inviter.lastName || ''}`.trim() || inviter.email || 'Your manager' : 'Your manager';
 

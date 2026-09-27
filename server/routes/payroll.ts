@@ -23,7 +23,8 @@ export function registerDocumentRoutes(app: Express): void {
       const { locationId } = req.query;
       if (!locationId) return res.status(400).json({ message: 'locationId required' });
       if (!await assertLocationAccess(req, res, locationId as string)) return;
-      const templates = await storage.getDocumentTemplates();
+      const allTemplates = await storage.getDocumentTemplates();
+      const templates = allTemplates.filter((t: any) => t.locationId === locationId);
       res.json(templates);
     } catch (error) {
       console.error('Error fetching document templates:', error);
@@ -65,7 +66,7 @@ export function registerDocumentRoutes(app: Express): void {
 
       // Access control: employee can view their own docs; managers need location access
       const isSelf = requesterId === paramId ||
-        (req.user!.role === 'employee' && !!employee);
+        (req.user!.role === 'employee' && employee.email === req.user!.email);
       if (!isSelf && employee.locationId) {
         const userId = requesterId;
         const userRole = req.user!.role;
@@ -211,6 +212,9 @@ export function registerDocumentRoutes(app: Express): void {
 
   app.get('/api/document-templates/:id/fields', isAuthenticated, async (req, res) => {
     try {
+      const template = await storage.getDocumentTemplate(req.params.id);
+      if (!template) return res.status(404).json({ message: 'Template not found' });
+      if (!await assertLocationAccess(req, res, template.locationId)) return;
       const fields = await storage.getDocumentFormFields(req.params.id);
       res.json(fields);
     } catch (error) {
