@@ -691,31 +691,34 @@ export const invitationTokens = pgTable("invitation_tokens", {
   firstName: varchar("first_name", { length: 50 }),
   lastName: varchar("last_name", { length: 50 }),
   role: varchar("role", { length: 50 }).notNull(), // employee, manager, team_lead, etc.
-  
+
   // Organization linkage
   locationId: uuid("location_id").references(() => locations.id).notNull(),
   departmentId: uuid("department_id").references(() => departments.id),
   positionId: uuid("position_id").references(() => positions.id),
-  
+
   // Employment details
   hourlyRate: decimal("hourly_rate", { precision: 10, scale: 2 }),
   salary: decimal("salary", { precision: 12, scale: 2 }),
   startDate: date("start_date"),
-  
+
   // Invitation management
   invitedBy: varchar("invited_by").references(() => users.id).notNull(),
   status: invitationStatusEnum("status").default("pending"),
   expiresAt: timestamp("expires_at").notNull(), // Invitation expiry (48 hours)
   acceptedAt: timestamp("accepted_at"),
   employeeId: uuid("employee_id").references(() => employees.id), // Set when invitation is accepted
-  
+
   // Additional data
   personalMessage: text("personal_message"),
   metadata: jsonb("metadata"), // Store additional invitation data
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index('invitation_tokens_email_idx').on(table.email),
+  index('invitation_tokens_location_id_idx').on(table.locationId),
+]);
 
 // Employee schedules and shifts
 export const shifts = pgTable("shifts", {
@@ -768,7 +771,9 @@ export const timeOffRequests = pgTable("time_off_requests", {
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index('time_off_requests_employee_id_idx').on(table.employeeId),
+]);
 
 // Task assignments and tracking
 export const tasks = pgTable("tasks", {
