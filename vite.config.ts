@@ -5,10 +5,7 @@ import path from "path";
 export default defineConfig({
   plugins: [
     react(),
-    // Only include Replit dev tools when actually running inside Replit's own infrastructure.
-    // REPLIT_CLUSTER is set exclusively by Replit — never present in Railway or other hosts.
-    // REPL_ID alone is not safe: it may be left over in Railway's env vars from a migration.
-    ...(process.env.NODE_ENV !== "production" && process.env.REPLIT_CLUSTER !== undefined
+    ...(process.env.NODE_ENV !== "production" && process.env.REPL_ID !== undefined
       ? [
           (await import("@replit/vite-plugin-runtime-error-modal")).default(),
           await import("@replit/vite-plugin-cartographer").then((m) => m.cartographer()),
