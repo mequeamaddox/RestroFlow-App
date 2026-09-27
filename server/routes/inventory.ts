@@ -109,7 +109,9 @@ export function registerInventoryRoutes(app: Express): void {
   app.put('/api/categories/:id', isAuthenticated, async (req, res) => {
     try {
       const categoryData = insertCategorySchema.partial().parse(req.body);
-      if (categoryData.locationId && !await assertLocationAccess(req, res, categoryData.locationId)) return;
+      const existing = await storage.getCategory(req.params.id);
+      if (!existing) return res.status(404).json({ message: 'Category not found' });
+      if (!await assertLocationAccess(req, res, categoryData.locationId || existing.locationId)) return;
       const category = await storage.updateCategory(req.params.id, categoryData);
       res.json(category);
     } catch (error) {
@@ -120,6 +122,9 @@ export function registerInventoryRoutes(app: Express): void {
 
   app.delete('/api/categories/:id', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
+      const category = await storage.getCategory(req.params.id);
+      if (!category) return res.status(404).json({ message: 'Category not found' });
+      if (!await assertLocationAccess(req, res, category.locationId)) return;
       await storage.deleteCategory(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -153,7 +158,9 @@ export function registerInventoryRoutes(app: Express): void {
 
   app.post('/api/vendors', isAuthenticated, async (req, res) => {
     try {
-      const vendor = await storage.createVendor(insertVendorSchema.parse(req.body));
+      const vendorData = insertVendorSchema.parse(req.body);
+      if (vendorData.locationId && !await assertLocationAccess(req, res, vendorData.locationId)) return;
+      const vendor = await storage.createVendor(vendorData);
       res.status(201).json(vendor);
     } catch (error) {
       console.error('Error creating vendor:', error);
@@ -504,6 +511,7 @@ print(json.dumps(rows))
         notes: req.body.notes || null,
         createdBy: req.user!.id,
       };
+      if (orderData.locationId && !await assertLocationAccess(req, res, orderData.locationId)) return;
       const order = await storage.createPurchaseOrder(orderData);
       res.status(201).json(order);
     } catch (error) {
@@ -596,6 +604,9 @@ print(json.dumps(rows))
 
   app.delete('/api/purchase-order-items/:id', isAuthenticated, async (req, res) => {
     try {
+      const locationId = req.query.locationId as string;
+      if (!locationId) return res.status(400).json({ message: 'locationId required' });
+      if (!await assertLocationAccess(req, res, locationId)) return;
       await storage.removePurchaseOrderItem(req.params.id);
       res.status(204).send();
     } catch (error) {

@@ -210,7 +210,7 @@ export async function assertLocationAccess(req: any, res: Response, locationId: 
       res.status(404).json({ message: 'Location not found' });
       return false;
     }
-    if (location.ownerId && location.ownerId !== userId) {
+    if (!location.ownerId || location.ownerId !== userId) {
       await logSecurityEvent(req, 'location_access_denied', 'critical', {
         user_id: userId,
         attempted_location: locationId,

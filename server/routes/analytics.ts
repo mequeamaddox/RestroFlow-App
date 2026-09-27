@@ -304,7 +304,8 @@ export function registerAnalyticsRoutes(app: Express): void {
   app.get('/api/waste/summary', isAuthenticated, async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
-      if (locationId && !await assertLocationAccess(req, res, locationId)) return;
+      if (!locationId) return res.status(400).json({ message: 'locationId required' });
+      if (!await assertLocationAccess(req, res, locationId)) return;
 
       const wasteStats = await db
         .select({
