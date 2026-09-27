@@ -41,20 +41,22 @@ export default function HRTasks() {
   const queryClient = useQueryClient();
 
   const { data: tasks = [], isLoading } = useQuery({
-    queryKey: ['/api/hr/tasks'],
+    queryKey: ['/api/hr/tasks', currentLocation?.id],
+    enabled: !!currentLocation,
   });
 
   const { data: employees = [] } = useQuery({
-    queryKey: ['/api/hr/employees'],
+    queryKey: ['/api/hr/employees', currentLocation?.id],
+    enabled: !!currentLocation,
   });
 
   const createTaskMutation = useMutation({
     mutationFn: async (taskData: any) => {
-      return await apiRequest('POST', '/api/hr/tasks', taskData);
+      return await apiRequest('POST', '/api/hr/tasks', { ...taskData, locationId: currentLocation?.id });
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Task created successfully" });
-      queryClient.invalidateQueries({ queryKey: ['/api/hr/tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/hr/tasks', currentLocation?.id] });
       setIsCreateDialogOpen(false);
     },
     onError: () => {

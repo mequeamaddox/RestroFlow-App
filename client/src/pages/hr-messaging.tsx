@@ -55,11 +55,13 @@ export default function HRMessaging() {
   const { currentLocation, hasHRAccess } = useLocation();
 
   const { data: messages = [], isLoading } = useQuery({
-    queryKey: ['/api/hr/messages'],
+    queryKey: ['/api/hr/messages', currentLocation?.id],
+    enabled: !!currentLocation,
   });
 
   const { data: employees = [] } = useQuery({
-    queryKey: ['/api/hr/employees'],
+    queryKey: ['/api/hr/employees', currentLocation?.id],
+    enabled: !!currentLocation,
   });
 
   const { data: departments = [] } = useQuery({
@@ -75,7 +77,8 @@ export default function HRMessaging() {
   });
 
   const { data: teamResources = [] } = useQuery({
-    queryKey: ['/api/hr/team-resources'],
+    queryKey: ['/api/hr/team-resources', currentLocation?.id],
+    enabled: !!currentLocation,
   });
 
   const createMessageMutation = useMutation({

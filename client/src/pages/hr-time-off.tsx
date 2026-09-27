@@ -61,11 +61,13 @@ export default function HRTimeOff() {
   const queryClient = useQueryClient();
 
   const { data: employees = [], isLoading: employeesLoading } = useQuery<Employee[]>({
-    queryKey: ['/api/hr/employees'],
+    queryKey: ['/api/hr/employees', currentLocation?.id],
+    enabled: !!currentLocation,
   });
 
   const { data: timeOffRequests = [], isLoading: requestsLoading } = useQuery<TimeOffRequest[]>({
-    queryKey: ['/api/hr/time-off-requests'],
+    queryKey: ['/api/hr/time-off-requests', currentLocation?.id],
+    enabled: !!currentLocation,
   });
 
   const form = useForm<TimeOffFormData>({
