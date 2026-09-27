@@ -4,7 +4,7 @@ import { isAuthenticated, clerkClient, mapPositionToRole, requireHRAccess } from
 import { requireLocationAccess, assertLocationAccess } from '../securityMiddleware';
 import { requirePermission, requireAnyPermission, Permission } from '../permissions';
 import { isOwnerLevel, isManagerLevel } from '@shared/roles';
-import { teamResources, insertTeamResourceSchema, timeEntries, timeOffRequests, employeeDocuments, employeeOnboarding, employeeOnboardingSteps, recipeAssignments, departments } from '@shared/schema';
+import { teamResources, insertTeamResourceSchema, timeEntries, timeOffRequests, employeeDocuments, employeeOnboarding, employeeOnboardingSteps, recipeAssignments, departments, onboardingTemplates } from '@shared/schema';
 import { db } from '../db';
 import { eq, desc, sql, or, isNull } from 'drizzle-orm';
 
@@ -317,7 +317,8 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/hr/tasks', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      const task = await storage.createTask({ ...req.body, locationId: req.body.locationId });
+      const locationId = req.query.locationId as string;
+      const task = await storage.createTask({ ...req.body, locationId });
       res.status(201).json(task);
     } catch (error) {
       console.error('Error creating task:', error);
@@ -624,7 +625,8 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/hr/messages', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      const message = await storage.createMessage({ ...req.body, senderId: req.user!.id });
+      const locationId = req.query.locationId as string;
+      const message = await storage.createMessage({ ...req.body, locationId, senderId: req.user!.id });
       res.status(201).json(message);
     } catch (error) {
       console.error('Error creating message:', error);
@@ -648,7 +650,8 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/hr/team-resources', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      const resourceData = insertTeamResourceSchema.parse({ ...req.body, uploadedBy: req.user!.id });
+      const locationId = req.query.locationId as string;
+      const resourceData = insertTeamResourceSchema.parse({ ...req.body, locationId, uploadedBy: req.user!.id });
       const [resource] = await db.insert(teamResources).values(resourceData).returning();
       res.status(201).json(resource);
     } catch (error) {
@@ -769,7 +772,8 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/hr/onboarding/templates', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      const template = await storage.createOnboardingTemplate({ ...req.body, createdBy: req.user!.id });
+      const locationId = req.query.locationId as string;
+      const template = await storage.createOnboardingTemplate({ ...req.body, locationId, createdBy: req.user!.id });
       res.status(201).json(template);
     } catch (error) {
       console.error('Error creating onboarding template:', error);
@@ -779,6 +783,9 @@ export function registerHRRoutes(app: Express): void {
 
   app.get('/api/hr/onboarding/templates/:id/steps', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
+      const [template] = await db.select().from(onboardingTemplates).where(eq(onboardingTemplates.id, req.params.id)).limit(1);
+      if (!template) return res.status(404).json({ message: 'Template not found' });
+      if (template.locationId && !await assertLocationAccess(req, res, template.locationId)) return;
       const steps = await storage.getOnboardingSteps(req.params.id);
       res.json(steps);
     } catch (error) {
@@ -789,8 +796,8 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/hr/onboarding/steps', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
-      if (req.body.locationId && !await assertLocationAccess(req, res, req.body.locationId)) return;
-      const step = await storage.createOnboardingStep(req.body);
+      const locationId = req.query.locationId as string;
+      const step = await storage.createOnboardingStep({ ...req.body, locationId });
       res.status(201).json(step);
     } catch (error) {
       console.error('Error creating onboarding step:', error);

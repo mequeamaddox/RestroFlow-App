@@ -319,7 +319,9 @@ export const sales = pgTable("sales", {
   posTransactionId: varchar("pos_transaction_id", { length: 100 }), // POS system transaction ID
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index('sales_location_idx').on(table.locationId),
+]);
 
 // Sales items - individual items sold (for inventory deduction and cost analysis)
 export const salesItems = pgTable("sales_items", {
@@ -351,7 +353,9 @@ export const inventoryTransactions = pgTable("inventory_transactions", {
   notes: text("notes"),
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index('inventory_transactions_location_idx').on(table.locationId),
+]);
 
 // Recipe Production Tracking - Enterprise level production monitoring
 export const recipeProductions = pgTable("recipe_productions", {
@@ -368,7 +372,9 @@ export const recipeProductions = pgTable("recipe_productions", {
   productionDate: timestamp("production_date").defaultNow(),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index('recipe_productions_location_idx').on(table.locationId),
+]);
 
 // Unit Conversion System for Enterprise Multi-Unit Management
 export const unitConversions = pgTable("unit_conversions", {
@@ -397,7 +403,9 @@ export const varianceAnalysis = pgTable("variance_analysis", {
   varianceCategory: varchar("variance_category", { length: 50 }), // waste, theft, over_portioning, etc
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index('variance_analysis_location_idx').on(table.locationId),
+]);
 
 // Recipe Costing History - Track cost changes over time
 export const recipeCostHistory = pgTable("recipe_cost_history", {
@@ -410,7 +418,9 @@ export const recipeCostHistory = pgTable("recipe_cost_history", {
   effectiveDate: timestamp("effective_date").defaultNow(),
   ingredientSnapshot: text("ingredient_snapshot"), // Store ingredient costs JSON at this time
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index('recipe_cost_history_location_idx').on(table.locationId),
+]);
 
 // Inventory Valuation Methods - FIFO, LIFO, Weighted Average
 export const inventoryValuations = pgTable("inventory_valuations", {
@@ -423,7 +433,9 @@ export const inventoryValuations = pgTable("inventory_valuations", {
   weightedAvgValue: decimal("weighted_avg_value", { precision: 12, scale: 2 }),
   currentQuantity: decimal("current_quantity", { precision: 10, scale: 2 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index('inventory_valuations_location_idx').on(table.locationId),
+]);
 
 
 // Relations
@@ -1061,6 +1073,7 @@ export const posSales = pgTable("pos_sales", {
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("pos_sales_cashier_idx").on(table.cashierPosEmployeeId),
+  index("pos_sales_location_idx").on(table.locationId),
 ]);
 
 // Universal POS Sale items

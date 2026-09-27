@@ -94,12 +94,12 @@ export default function HRTimeClock() {
 
   const clockInMutation = useMutation({
     mutationFn: async (employeeId: string) => {
-      return await apiRequest('POST', `/api/hr/time-clock/in/${employeeId}`, {});
+      return await apiRequest('POST', `/api/hr/time-clock/in/${employeeId}?locationId=${currentLocation?.id}`, {});
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Clocked in successfully" });
-      queryClient.invalidateQueries({ queryKey: ['/api/hr/time-entries'] });
-      queryClient.invalidateQueries({ queryKey: [`/api/hr/time-entries?includeHistory=true`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/hr/time-entries', currentLocation?.id] });
+      queryClient.invalidateQueries({ queryKey: [`/api/hr/time-entries?includeHistory=true`, currentLocation?.id] });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to clock in", variant: "destructive" });
@@ -108,12 +108,12 @@ export default function HRTimeClock() {
 
   const clockOutMutation = useMutation({
     mutationFn: async (entryId: string) => {
-      return await apiRequest('POST', `/api/hr/time-clock/out/${entryId}`, {});
+      return await apiRequest('POST', `/api/hr/time-clock/out/${entryId}?locationId=${currentLocation?.id}`, {});
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Clocked out successfully" });
-      queryClient.invalidateQueries({ queryKey: ['/api/hr/time-entries'] });
-      queryClient.invalidateQueries({ queryKey: [`/api/hr/time-entries?includeHistory=true`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/hr/time-entries', currentLocation?.id] });
+      queryClient.invalidateQueries({ queryKey: [`/api/hr/time-entries?includeHistory=true`, currentLocation?.id] });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to clock out", variant: "destructive" });
@@ -122,12 +122,12 @@ export default function HRTimeClock() {
 
   const updateEntryMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string, data: any }) => {
-      return await apiRequest('PUT', `/api/hr/time-entries/${id}`, data);
+      return await apiRequest('PUT', `/api/hr/time-entries/${id}?locationId=${currentLocation?.id}`, data);
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Time entry updated successfully" });
-      queryClient.invalidateQueries({ queryKey: ['/api/hr/time-entries'] });
-      queryClient.invalidateQueries({ queryKey: [`/api/hr/time-entries?includeHistory=true`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/hr/time-entries', currentLocation?.id] });
+      queryClient.invalidateQueries({ queryKey: [`/api/hr/time-entries?includeHistory=true`, currentLocation?.id] });
       setShowEditDialog(false);
       setEditingEntry(null);
     },
@@ -138,12 +138,12 @@ export default function HRTimeClock() {
 
   const deleteEntryMutation = useMutation({
     mutationFn: async (entryId: string) => {
-      return await apiRequest('DELETE', `/api/hr/time-entries/${entryId}`);
+      return await apiRequest('DELETE', `/api/hr/time-entries/${entryId}?locationId=${currentLocation?.id}`);
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Time entry deleted successfully" });
-      queryClient.invalidateQueries({ queryKey: ['/api/hr/time-entries'] });
-      queryClient.invalidateQueries({ queryKey: [`/api/hr/time-entries?includeHistory=true`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/hr/time-entries', currentLocation?.id] });
+      queryClient.invalidateQueries({ queryKey: [`/api/hr/time-entries?includeHistory=true`, currentLocation?.id] });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to delete time entry", variant: "destructive" });
@@ -152,12 +152,12 @@ export default function HRTimeClock() {
 
   const createManualEntryMutation = useMutation({
     mutationFn: async (entryData: any) => {
-      return await apiRequest('POST', '/api/hr/time-entries/manual', entryData);
+      return await apiRequest('POST', `/api/hr/time-entries/manual?locationId=${currentLocation?.id}`, { ...entryData, locationId: currentLocation?.id });
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Manual time entry created successfully" });
-      queryClient.invalidateQueries({ queryKey: ['/api/hr/time-entries'] });
-      queryClient.invalidateQueries({ queryKey: [`/api/hr/time-entries?includeHistory=true`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/hr/time-entries', currentLocation?.id] });
+      queryClient.invalidateQueries({ queryKey: [`/api/hr/time-entries?includeHistory=true`, currentLocation?.id] });
       setShowManualEntryDialog(false);
       setManualEntryForm({
         employeeId: '',

@@ -31,12 +31,12 @@ export default function HRAnalytics() {
   
   const { data: analytics, isLoading } = useQuery<HRAnalytics>({
     queryKey: ['/api/hr/analytics', currentLocation?.id],
-    enabled: !!currentLocation,
+    enabled: !!currentLocation?.id && hasHRAccess,
   });
 
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ['/api/hr/employees', currentLocation?.id],
-    enabled: !!currentLocation,
+    enabled: !!currentLocation?.id && hasHRAccess,
   });
 
   if (isLoading) {

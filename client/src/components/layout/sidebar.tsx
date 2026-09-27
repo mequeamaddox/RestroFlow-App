@@ -461,12 +461,10 @@ export default function Sidebar({ isMobileMenuOpen = false, setIsMobileMenuOpen 
                     credentials: 'include'
                   });
                   
-                  // Redirect to auth page
-                  window.location.href = '/auth';
+                  window.location.href = '/login';
                 } catch (error) {
                   console.error('Logout error:', error);
-                  // Even if there's an error, redirect to auth
-                  window.location.href = '/auth';
+                  window.location.href = '/login';
                 }
               }}
               className="w-full justify-start text-red-400 hover:text-red-300 hover:bg-red-900/20"

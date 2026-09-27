@@ -110,11 +110,7 @@ export function registerBillingRoutes(app: Express): void {
       if (!isOwnerLevel(user?.role))
         return res.status(403).json({ message: 'Access denied. Only business owners can access subscription information.' });
       if (!user) return res.status(404).json({ message: 'User not found' });
-      // TODO: replace getLocations() with a scoped getLocationsByOwnerId(userId) query to avoid
-      // loading all tenant locations into memory for in-process filtering.
-      const allLocations = await storage.getLocations();
-      // Tenant-aware: only count THIS owner's locations, never other tenants'
-      const ownedLocations = allLocations.filter((loc: any) => loc.ownerId === userId);
+      const ownedLocations = await storage.getLocations(userId);
       const hrAddonLocations = ownedLocations.filter((loc: any) => loc.hrAddonEnabled).length;
       const barAddonLocations = ownedLocations.filter((loc: any) => loc.barAddonEnabled).length;
       res.json({
@@ -343,8 +339,7 @@ export function registerBillingRoutes(app: Express): void {
               stripeSubscriptionId: undefined, ocrCreditsLimit: 5,
             });
             // C2: Disable HR addon on all locations owned by this user when subscription is cancelled
-            const allLocations = await storage.getLocations();
-            const ownedLocations = allLocations.filter((loc: any) => loc.ownerId === userId);
+            const ownedLocations = await storage.getLocations(userId);
             await Promise.all(ownedLocations.map((loc: any) =>
               storage.updateLocation(loc.id, { hrAddonEnabled: false }),
             ));

@@ -5,9 +5,10 @@ import path from "path";
 export default defineConfig({
   plugins: [
     react(),
-    // Only load Replit dev plugins inside Replit (requires both REPL_ID and REPL_SLUG).
-    // Never include them in Railway/production builds where REPL_SLUG is absent.
-    ...(process.env.NODE_ENV !== "production" && process.env.REPL_ID && process.env.REPL_SLUG
+    // Only load Replit dev plugins when running inside Replit's own infrastructure.
+    // REPLIT_CLUSTER is set exclusively by Replit — never present in Railway or other hosts.
+    // REPL_ID alone is NOT safe: it may be left over in Railway's env vars from a Replit migration.
+    ...(process.env.NODE_ENV !== "production" && process.env.REPLIT_CLUSTER !== undefined
       ? [
           (await import("@replit/vite-plugin-runtime-error-modal")).default(),
           await import("@replit/vite-plugin-cartographer").then((m) => m.cartographer()),

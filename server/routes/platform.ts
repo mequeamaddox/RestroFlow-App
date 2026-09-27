@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import { isAuthenticated, requirePlatformAdmin } from './helpers';
+import { strictLimiter } from '../securityMiddleware';
 import { storage } from '../storage';
 import { db } from '../db';
 import { sql, eq } from 'drizzle-orm';
@@ -305,7 +306,7 @@ export function registerPlatformRoutes(app: Express): void {
 
   // One-time bootstrap: promotes the caller to platform_admin if none exist yet.
   // Safe to leave in — once a platform_admin exists the endpoint returns 409.
-  app.post('/api/platform/bootstrap', isAuthenticated, async (req: any, res) => {
+  app.post('/api/platform/bootstrap', isAuthenticated, strictLimiter, async (req: any, res) => {
     try {
       const existing = await db.execute(sql`SELECT id FROM users WHERE role = 'platform_admin' LIMIT 1`);
       if (existing.rows.length > 0) {

@@ -210,8 +210,7 @@ export default function Analytics() {
   const { data: alerts = [], isLoading: alertsLoading } = useQuery<Alert[]>({
     queryKey: ["/api/analytics/alerts", currentLocation?.id],
     queryFn: async () => {
-      const response = await fetch(`/api/analytics/alerts?locationId=${currentLocation?.id}`);
-      if (!response.ok) return [];
+      const response = await apiRequest('GET', `/api/analytics/alerts?locationId=${currentLocation?.id}`);
       return response.json();
     },
     enabled: !!currentLocation?.id,
@@ -221,8 +220,7 @@ export default function Analytics() {
   const { data: biData, isLoading: biLoading } = useQuery<BusinessIntelligence | null>({
     queryKey: ["/api/analytics/business-intelligence", currentLocation?.id, selectedPeriod],
     queryFn: async () => {
-      const response = await fetch(`/api/analytics/business-intelligence?locationId=${currentLocation?.id}&period=${selectedPeriod}`);
-      if (!response.ok) return null;
+      const response = await apiRequest('GET', `/api/analytics/business-intelligence?locationId=${currentLocation?.id}&period=${selectedPeriod}`);
       return response.json();
     },
     enabled: !!currentLocation?.id,
@@ -232,8 +230,7 @@ export default function Analytics() {
   const { data: plReport, isLoading: plLoading } = useQuery<PLReport | null>({
     queryKey: ["/api/analytics/profit-loss", currentLocation?.id, selectedPeriod],
     queryFn: async () => {
-      const response = await fetch(`/api/analytics/profit-loss?locationId=${currentLocation?.id}&period=${selectedPeriod}`);
-      if (!response.ok) return null;
+      const response = await apiRequest('GET', `/api/analytics/profit-loss?locationId=${currentLocation?.id}&period=${selectedPeriod}`);
       return response.json();
     },
     enabled: !!currentLocation?.id,
@@ -241,49 +238,58 @@ export default function Analytics() {
 
   // Business Intelligence queries
   const { data: dailyPnL = [] } = useQuery({
-    queryKey: ["/api/business-intelligence/daily-pnl", timeRange, locationFilter],
-    queryFn: () => apiRequest("GET", `/api/business-intelligence/daily-pnl?range=${timeRange}&location=${locationFilter}`).then(r => r.json()),
+    queryKey: ["/api/business-intelligence/daily-pnl", timeRange, currentLocation?.id],
+    queryFn: () => apiRequest("GET", `/api/business-intelligence/daily-pnl?range=${timeRange}&locationId=${currentLocation?.id}`).then(r => r.json()),
+    enabled: !!currentLocation?.id,
   });
 
   const { data: kpiMetrics } = useQuery({
-    queryKey: ["/api/business-intelligence/kpis", timeRange, locationFilter],
-    queryFn: () => apiRequest("GET", `/api/business-intelligence/kpis?range=${timeRange}&location=${locationFilter}`).then(r => r.json()),
+    queryKey: ["/api/business-intelligence/kpis", timeRange, currentLocation?.id],
+    queryFn: () => apiRequest("GET", `/api/business-intelligence/kpis?range=${timeRange}&locationId=${currentLocation?.id}`).then(r => r.json()),
+    enabled: !!currentLocation?.id,
   });
 
   const { data: profitabilityAnalysis = [] } = useQuery({
-    queryKey: ["/api/business-intelligence/profitability", timeRange, locationFilter],
-    queryFn: () => apiRequest("GET", `/api/business-intelligence/profitability?range=${timeRange}&location=${locationFilter}`).then(r => r.json()),
+    queryKey: ["/api/business-intelligence/profitability", timeRange, currentLocation?.id],
+    queryFn: () => apiRequest("GET", `/api/business-intelligence/profitability?range=${timeRange}&locationId=${currentLocation?.id}`).then(r => r.json()),
+    enabled: !!currentLocation?.id,
   });
 
   const { data: menuPerformance = [] } = useQuery({
-    queryKey: ["/api/business-intelligence/menu-performance", timeRange, locationFilter],
-    queryFn: () => apiRequest("GET", `/api/business-intelligence/menu-performance?range=${timeRange}&location=${locationFilter}`).then(r => r.json()),
+    queryKey: ["/api/business-intelligence/menu-performance", timeRange, currentLocation?.id],
+    queryFn: () => apiRequest("GET", `/api/business-intelligence/menu-performance?range=${timeRange}&locationId=${currentLocation?.id}`).then(r => r.json()),
+    enabled: !!currentLocation?.id,
   });
 
   const { data: costAnalysis } = useQuery({
-    queryKey: ["/api/business-intelligence/cost-analysis", timeRange, locationFilter],
-    queryFn: () => apiRequest("GET", `/api/business-intelligence/cost-analysis?range=${timeRange}&location=${locationFilter}`).then(r => r.json()),
+    queryKey: ["/api/business-intelligence/cost-analysis", timeRange, currentLocation?.id],
+    queryFn: () => apiRequest("GET", `/api/business-intelligence/cost-analysis?range=${timeRange}&locationId=${currentLocation?.id}`).then(r => r.json()),
+    enabled: !!currentLocation?.id,
   });
 
   // Cost monitoring queries
   const { data: costAlertsData = [] } = useQuery({
-    queryKey: ["/api/cost-alerts", locationFilter],
-    queryFn: () => apiRequest("GET", `/api/cost-alerts?location=${locationFilter}`).then(r => r.json()),
+    queryKey: ["/api/cost-alerts", currentLocation?.id],
+    queryFn: () => apiRequest("GET", `/api/cost-alerts?locationId=${currentLocation?.id}`).then(r => r.json()),
+    enabled: !!currentLocation?.id,
   });
 
   const { data: priceMonitoring = [] } = useQuery({
-    queryKey: ["/api/price-monitoring", timeRange],
-    queryFn: () => apiRequest("GET", `/api/price-monitoring?range=${timeRange}`).then(r => r.json()),
+    queryKey: ["/api/price-monitoring", timeRange, currentLocation?.id],
+    queryFn: () => apiRequest("GET", `/api/price-monitoring?range=${timeRange}&locationId=${currentLocation?.id}`).then(r => r.json()),
+    enabled: !!currentLocation?.id,
   });
 
   const { data: costTrends = [] } = useQuery({
-    queryKey: ["/api/cost-trends", timeRange, locationFilter],
-    queryFn: () => apiRequest("GET", `/api/cost-trends?range=${timeRange}&location=${locationFilter}`).then(r => r.json()),
+    queryKey: ["/api/cost-trends", timeRange, currentLocation?.id],
+    queryFn: () => apiRequest("GET", `/api/cost-trends?range=${timeRange}&locationId=${currentLocation?.id}`).then(r => r.json()),
+    enabled: !!currentLocation?.id,
   });
 
   const { data: budgetTracking } = useQuery({
-    queryKey: ["/api/budget-tracking", locationFilter],
-    queryFn: () => apiRequest("GET", `/api/budget-tracking?location=${locationFilter}`).then(r => r.json()),
+    queryKey: ["/api/budget-tracking", currentLocation?.id],
+    queryFn: () => apiRequest("GET", `/api/budget-tracking?locationId=${currentLocation?.id}`).then(r => r.json()),
+    enabled: !!currentLocation?.id,
   });
 
   const { data: locations = [] } = useQuery({

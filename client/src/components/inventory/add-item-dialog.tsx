@@ -183,7 +183,7 @@ export default function AddItemDialog({ isOpen, onClose, onSuccess, categories, 
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/auth";
+          window.location.href = "/login";
         }, 500);
         return;
       }

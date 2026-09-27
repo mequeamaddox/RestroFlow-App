@@ -193,11 +193,13 @@ export function registerPosRoutes(app: Express): void {
   // Set SPOTON_WEBHOOK_SECRET env var to enable HMAC-SHA256 signature verification.
   app.post('/api/webhooks/spoton', async (req, res) => {
     try {
+      const SPOTON_SECRET = process.env.SPOTON_WEBHOOK_SECRET;
+      if (!SPOTON_SECRET) {
+        return res.status(503).json({ message: 'SpotOn webhook not configured' });
+      }
       const sig = req.headers['x-spoton-signature'] as string | undefined;
-      if (process.env.SPOTON_WEBHOOK_SECRET) {
-        if (!sig || sig !== process.env.SPOTON_WEBHOOK_SECRET) {
-          return res.status(401).json({ message: 'Invalid webhook signature' });
-        }
+      if (!sig || sig !== SPOTON_SECRET) {
+        return res.status(401).json({ message: 'Invalid webhook signature' });
       }
 
       const locationId = req.body.location_id ?? req.body.locationId;
@@ -217,11 +219,13 @@ export function registerPosRoutes(app: Express): void {
   });
 
   app.post('/api/webhooks/clover', async (req, res) => {
+    const CLOVER_SECRET = process.env.CLOVER_WEBHOOK_SECRET;
+    if (!CLOVER_SECRET) {
+      return res.status(503).json({ message: 'Clover webhook not configured' });
+    }
     const sig = req.headers['x-clover-hmac-sha256'] || req.headers['x-webhook-secret'];
-    if (process.env.CLOVER_WEBHOOK_SECRET) {
-      if (!sig || sig !== process.env.CLOVER_WEBHOOK_SECRET) {
-        return res.status(401).json({ message: 'Invalid webhook signature' });
-      }
+    if (!sig || sig !== CLOVER_SECRET) {
+      return res.status(401).json({ message: 'Invalid webhook signature' });
     }
     try {
       await posService.processOrderWebhook(req.body);
