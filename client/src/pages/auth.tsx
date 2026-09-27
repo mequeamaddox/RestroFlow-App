@@ -59,14 +59,7 @@ export default function Auth() {
             <strong className="text-white block mb-1">Already have an invitation?</strong>
             Use the invitation link your manager sent to your email — that link creates your account automatically. Don't sign up here.
           </div>
-          <SignIn
-            routing="hash"
-            appearance={{
-              elements: {
-                footer: { display: 'none' },
-              },
-            }}
-          />
+          <SignIn routing="hash" />
         </div>
       )}
     </div>
