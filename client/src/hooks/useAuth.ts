@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useUser, useAuth as useClerkAuth } from '@clerk/clerk-react';
+import { useUser, useAuth as useClerkAuth, useClerk } from '@clerk/clerk-react';
 
 type User = {
   id: string;
@@ -14,6 +14,7 @@ type User = {
 export function useAuth() {
   const { user: clerkUser, isLoaded, isSignedIn } = useUser();
   const { getToken } = useClerkAuth();
+  const { signOut } = useClerk();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   // If Clerk hasn't reported isLoaded within 10s, stop blocking the UI
@@ -70,8 +71,12 @@ export function useAuth() {
         return fetchUserData(attempt + 1);
       }
 
-      // /api/auth/me failed — do not assume any role. Treat as unauthenticated.
-      console.warn('useAuth: /api/auth/me returned non-ok response; clearing user session');
+      // /api/auth/me failed with 401 and token was null — broken session.
+      // Force Clerk sign-out so the login page stops redirecting away.
+      if (response.status === 401 && !token) {
+        console.warn('useAuth: broken session (401 + no token) — signing out via Clerk');
+        await signOut();
+      }
       setUser(null);
       return null;
     } catch (error) {
