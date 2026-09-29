@@ -1,10 +1,16 @@
 /**
- * Production database migration script.
+ * Production database migration script — runs as Railway's releaseCommand before each deploy.
  * Uses only production dependencies (@neondatabase/serverless).
  * Every statement is idempotent — safe to run on every deploy.
  *
- * Add new migrations at the bottom of the `migrations` array.
- * Never remove or reorder existing entries.
+ * HOW TO ADD A SCHEMA CHANGE:
+ *   1. Update shared/schema.ts with the new table/column.
+ *   2. Add an idempotent SQL entry at the bottom of the `migrations` array below.
+ *      Use ADD COLUMN IF NOT EXISTS, CREATE TABLE IF NOT EXISTS, etc.
+ *   3. Commit both files together.
+ *
+ * Never remove or reorder existing entries — they serve as a permanent audit trail.
+ * For local dev schema sync: npm run db:push (drizzle-kit push without --force).
  */
 
 import { neon } from "@neondatabase/serverless";
