@@ -99,6 +99,14 @@ const migrations = [
     name: "audit_logs.user_agent",
     sql: `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_agent text`,
   },
+  {
+    name: "pos_provider enum: add square",
+    sql: `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'square' AND enumtypid = 'pos_provider'::regtype) THEN ALTER TYPE pos_provider ADD VALUE 'square'; END IF; END $$`,
+  },
+  {
+    name: "pos_provider enum: add lightspeed",
+    sql: `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'lightspeed' AND enumtypid = 'pos_provider'::regtype) THEN ALTER TYPE pos_provider ADD VALUE 'lightspeed'; END IF; END $$`,
+  },
 ];
 
 async function run() {
