@@ -10,12 +10,23 @@ import { cloverService } from '../cloverService';
 import { db } from '../db';
 import { eq } from 'drizzle-orm';
 
+// Strip API keys and tokens before sending an integration record to the client.
+// The browser only needs status and metadata — never raw credentials.
+function sanitizeIntegration(integration: any) {
+  const { credentials, ...safe } = integration;
+  return {
+    ...safe,
+    // Surface a redacted hint so the UI can show "configured" vs "not set"
+    credentialsSet: credentials != null && Object.keys(credentials).length > 0,
+  };
+}
+
 export function registerPosRoutes(app: Express): void {
   // POS Integrations
   app.get('/api/pos/integrations', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const integrations = await storage.getPosIntegrations(req.query.locationId as string);
-      res.json(integrations);
+      res.json(integrations.map(sanitizeIntegration));
     } catch (error) {
       console.error('Error fetching POS integrations:', error);
       res.status(500).json({ message: 'Failed to fetch POS integrations' });
@@ -25,7 +36,7 @@ export function registerPosRoutes(app: Express): void {
   app.post('/api/pos/integrations', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const integration = await storage.createPosIntegration(insertPosIntegrationSchema.parse(req.body));
-      res.status(201).json(integration);
+      res.status(201).json(sanitizeIntegration(integration));
     } catch (error) {
       console.error('Error creating POS integration:', error);
       res.status(500).json({ message: 'Failed to create POS integration' });
@@ -77,7 +88,7 @@ export function registerPosRoutes(app: Express): void {
       if (!existing) return res.status(404).json({ message: 'Integration not found' });
       if (!await assertLocationAccess(req, res, existing.locationId)) return;
       const integration = await storage.updatePosIntegration(req.params.id, insertPosIntegrationSchema.partial().parse(req.body));
-      res.json(integration);
+      res.json(sanitizeIntegration(integration));
     } catch (error) {
       console.error('Error updating POS integration:', error);
       res.status(500).json({ message: 'Failed to update POS integration' });
