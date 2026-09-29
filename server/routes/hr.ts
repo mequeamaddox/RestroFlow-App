@@ -1134,4 +1134,21 @@ export function registerHRRoutes(app: Express): void {
       res.status(500).json({ error: 'Failed to fetch onboarding data' });
     }
   });
+
+  // GDPR/CCPA: permanently erase PII (SSN, bank account, routing number) for an employee.
+  // Only owners with location access may call this; the action is irreversible.
+  app.delete('/api/employees/:id/onboarding-data', isAuthenticated, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!isOwnerLevel(user?.role)) return res.status(403).json({ error: 'Access denied' });
+      const employee = await storage.getEmployee(req.params.id);
+      if (!employee) return res.status(404).json({ error: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
+      await storage.deleteEmployeeOnboardingData(req.params.id);
+      res.json({ message: 'PII data permanently deleted' });
+    } catch (error) {
+      console.error('Error deleting onboarding data:', error);
+      res.status(500).json({ error: 'Failed to delete onboarding data' });
+    }
+  });
 }

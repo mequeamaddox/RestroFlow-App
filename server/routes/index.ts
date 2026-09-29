@@ -14,6 +14,10 @@ import { registerPlatformRoutes } from './platform';
 import { registerBarRoutes } from './bar';
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  app.get('/health', (_req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
   registerAuthRoutes(app);
   registerObjectRoutes(app);
   registerInvoiceRoutes(app);

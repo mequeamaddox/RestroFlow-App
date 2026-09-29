@@ -409,6 +409,7 @@ export interface IStorage {
   getEmployeeProfile(employeeId: string): Promise<{ employee: Employee; onboardingData?: any; documents?: any[] } | undefined>;
   createOnboardingData(data: any): Promise<any>;
   updateOnboardingData(employeeId: string, data: any): Promise<any>;
+  deleteEmployeeOnboardingData(employeeId: string): Promise<void>;
 
   // Document template operations
   getDocumentTemplates(): Promise<any[]>;
@@ -1152,17 +1153,20 @@ export class DatabaseStorage implements IStorage {
     }
     
     const sales = await query.orderBy(desc(posSales.orderDate));
-    
-    // Get items for each sale
-    const salesWithItems = await Promise.all(
-      sales.map(async (sale) => {
-        const items = await db.select().from(posSaleItems)
-          .where(eq(posSaleItems.posSaleId, sale.id));
-        return { ...sale, items };
-      })
-    );
+    if (sales.length === 0) return [];
 
-    return salesWithItems;
+    const saleIds = sales.map(s => s.id);
+    const allItems = await db.select().from(posSaleItems)
+      .where(inArray(posSaleItems.posSaleId, saleIds));
+
+    const itemsBySaleId = new Map<string, typeof allItems>();
+    for (const item of allItems) {
+      const bucket = itemsBySaleId.get(item.posSaleId) ?? [];
+      bucket.push(item);
+      itemsBySaleId.set(item.posSaleId, bucket);
+    }
+
+    return sales.map(sale => ({ ...sale, items: itemsBySaleId.get(sale.id) ?? [] }));
   }
 
   async getPosSaleByOrderId(integrationId: string, orderId: string): Promise<PosSale | undefined> {
@@ -1431,28 +1435,29 @@ export class DatabaseStorage implements IStorage {
     }
     
     const allRecipes = await query;
-    
-    const recipesWithStats = await Promise.all(allRecipes.map(async (recipe) => {
-      // Get ingredient count and cost
-      const ingredients = await db
-        .select({
-          count: sql<number>`COUNT(*)`,
-          totalCost: sql<number>`COALESCE(SUM(${recipeIngredients.quantity} * ${inventoryItems.costPerUnit}), 0)`
-        })
-        .from(recipeIngredients)
-        .leftJoin(inventoryItems, eq(recipeIngredients.inventoryItemId, inventoryItems.id))
-        .where(eq(recipeIngredients.recipeId, recipe.id));
-      
-      const stats = ingredients[0] || { count: 0, totalCost: 0 };
-      
+    if (allRecipes.length === 0) return [];
+
+    const statsRows = await db
+      .select({
+        recipeId: recipeIngredients.recipeId,
+        count: sql<number>`COUNT(*)`,
+        totalCost: sql<number>`COALESCE(SUM(${recipeIngredients.quantity} * ${inventoryItems.costPerUnit}), 0)`
+      })
+      .from(recipeIngredients)
+      .leftJoin(inventoryItems, eq(recipeIngredients.inventoryItemId, inventoryItems.id))
+      .where(inArray(recipeIngredients.recipeId, allRecipes.map(r => r.id)))
+      .groupBy(recipeIngredients.recipeId);
+
+    const statsMap = new Map(statsRows.map(r => [r.recipeId, r]));
+
+    return allRecipes.map(recipe => {
+      const stats = statsMap.get(recipe.id);
       return {
         ...recipe,
-        ingredientCount: Number(stats.count),
-        estimatedCost: Number(stats.totalCost)
+        ingredientCount: Number(stats?.count ?? 0),
+        estimatedCost: Number(stats?.totalCost ?? 0),
       };
-    }));
-    
-    return recipesWithStats;
+    });
   }
 
   async getRecipe(id: string): Promise<(Recipe & { ingredients: (RecipeIngredient & { inventoryItem: InventoryItem })[] }) | undefined> {
@@ -3832,6 +3837,12 @@ export class DatabaseStorage implements IStorage {
       .where(eq(employeeOnboardingData.employeeId, employeeId))
       .returning();
     return decryptOnboardingPII(updatedData);
+  }
+
+  async deleteEmployeeOnboardingData(employeeId: string): Promise<void> {
+    await db
+      .delete(employeeOnboardingData)
+      .where(eq(employeeOnboardingData.employeeId, employeeId));
   }
 
   async getEmployeeWithOnboardingData(employeeId: string): Promise<{ employee?: Employee; onboardingData?: EmployeeOnboardingData }> {
