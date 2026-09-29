@@ -409,9 +409,10 @@ export interface IStorage {
   getEmployeeProfile(employeeId: string): Promise<{ employee: Employee; onboardingData?: any; documents?: any[] } | undefined>;
   createOnboardingData(data: any): Promise<any>;
   updateOnboardingData(employeeId: string, data: any): Promise<any>;
+  deleteEmployeeOnboardingData(employeeId: string): Promise<void>;
 
   // Document template operations
-  getDocumentTemplates(): Promise<any[]>;
+  getDocumentTemplates(locationId?: string): Promise<any[]>;
   getDocumentTemplate(id: string): Promise<any | undefined>;
   createDocumentTemplate(template: any): Promise<any>;
   updateDocumentTemplate(id: string, template: Partial<any>): Promise<any>;
@@ -1152,17 +1153,20 @@ export class DatabaseStorage implements IStorage {
     }
     
     const sales = await query.orderBy(desc(posSales.orderDate));
-    
-    // Get items for each sale
-    const salesWithItems = await Promise.all(
-      sales.map(async (sale) => {
-        const items = await db.select().from(posSaleItems)
-          .where(eq(posSaleItems.posSaleId, sale.id));
-        return { ...sale, items };
-      })
-    );
+    if (sales.length === 0) return [];
 
-    return salesWithItems;
+    const saleIds = sales.map(s => s.id);
+    const allItems = await db.select().from(posSaleItems)
+      .where(inArray(posSaleItems.posSaleId, saleIds));
+
+    const itemsBySaleId = new Map<string, typeof allItems>();
+    for (const item of allItems) {
+      const bucket = itemsBySaleId.get(item.posSaleId) ?? [];
+      bucket.push(item);
+      itemsBySaleId.set(item.posSaleId, bucket);
+    }
+
+    return sales.map(sale => ({ ...sale, items: itemsBySaleId.get(sale.id) ?? [] }));
   }
 
   async getPosSaleByOrderId(integrationId: string, orderId: string): Promise<PosSale | undefined> {
@@ -1431,28 +1435,29 @@ export class DatabaseStorage implements IStorage {
     }
     
     const allRecipes = await query;
-    
-    const recipesWithStats = await Promise.all(allRecipes.map(async (recipe) => {
-      // Get ingredient count and cost
-      const ingredients = await db
-        .select({
-          count: sql<number>`COUNT(*)`,
-          totalCost: sql<number>`COALESCE(SUM(${recipeIngredients.quantity} * ${inventoryItems.costPerUnit}), 0)`
-        })
-        .from(recipeIngredients)
-        .leftJoin(inventoryItems, eq(recipeIngredients.inventoryItemId, inventoryItems.id))
-        .where(eq(recipeIngredients.recipeId, recipe.id));
-      
-      const stats = ingredients[0] || { count: 0, totalCost: 0 };
-      
+    if (allRecipes.length === 0) return [];
+
+    const statsRows = await db
+      .select({
+        recipeId: recipeIngredients.recipeId,
+        count: sql<number>`COUNT(*)`,
+        totalCost: sql<number>`COALESCE(SUM(${recipeIngredients.quantity} * ${inventoryItems.costPerUnit}), 0)`
+      })
+      .from(recipeIngredients)
+      .leftJoin(inventoryItems, eq(recipeIngredients.inventoryItemId, inventoryItems.id))
+      .where(inArray(recipeIngredients.recipeId, allRecipes.map(r => r.id)))
+      .groupBy(recipeIngredients.recipeId);
+
+    const statsMap = new Map(statsRows.map(r => [r.recipeId, r]));
+
+    return allRecipes.map(recipe => {
+      const stats = statsMap.get(recipe.id);
       return {
         ...recipe,
-        ingredientCount: Number(stats.count),
-        estimatedCost: Number(stats.totalCost)
+        ingredientCount: Number(stats?.count ?? 0),
+        estimatedCost: Number(stats?.totalCost ?? 0),
       };
-    }));
-    
-    return recipesWithStats;
+    });
   }
 
   async getRecipe(id: string): Promise<(Recipe & { ingredients: (RecipeIngredient & { inventoryItem: InventoryItem })[] }) | undefined> {
@@ -1812,18 +1817,53 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async createAuditLog(data: any): Promise<any> {
+  async createAuditLog(data: {
+    userId?: string;
+    actorEmail?: string;
+    locationId?: string;
+    tableName: string;
+    recordId: string;
+    action: 'create' | 'update' | 'delete' | 'view';
+    oldValues?: unknown;
+    newValues?: unknown;
+    changedFields?: unknown;
+    reason?: string;
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<void> {
     try {
-      const result = await db.execute(sql`
-        INSERT INTO audit_logs (user_id, location_id, table_name, record_id, action, old_values, new_values, changed_fields, reason)
-        VALUES (${data.userId}, ${data.locationId}, ${data.tableName}, ${data.recordId}, ${data.action}, ${data.oldValues}, ${data.newValues}, ${data.changedFields}, ${data.reason})
-        RETURNING *
+      await db.execute(sql`
+        INSERT INTO audit_logs
+          (user_id, actor_email, location_id, table_name, record_id, action,
+           old_values, new_values, changed_fields, reason, ip_address, user_agent)
+        VALUES
+          (${data.userId ?? null}, ${data.actorEmail ?? null}, ${data.locationId ?? null},
+           ${data.tableName}, ${data.recordId}, ${data.action},
+           ${data.oldValues ? JSON.stringify(data.oldValues) : null},
+           ${data.newValues ? JSON.stringify(data.newValues) : null},
+           ${data.changedFields ? JSON.stringify(data.changedFields) : null},
+           ${data.reason ?? null}, ${data.ipAddress ?? null}, ${data.userAgent ?? null})
       `);
-      return result.rows[0];
-    } catch (error) {
-      console.error('Failed to create audit log:', error);
-      throw error;
+    } catch (err) {
+      // Audit log failures must never break the main request
+      console.error('Failed to write audit log:', err);
     }
+  }
+
+  async getAuditLogs(locationId: string, options?: { limit?: number; offset?: number; tableName?: string }): Promise<any[]> {
+    const limit = options?.limit ?? 100;
+    const offset = options?.offset ?? 0;
+    const tableFilter = options?.tableName ? sql`AND table_name = ${options.tableName}` : sql``;
+    const result = await db.execute(sql`
+      SELECT id, user_id, actor_email, location_id, table_name, record_id, action,
+             reason, ip_address, created_at
+      FROM audit_logs
+      WHERE location_id = ${locationId}
+        ${tableFilter}
+      ORDER BY created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `);
+    return result.rows as any[];
   }
 
   async getUserPermissions(userId: string): Promise<any[]> {
@@ -3834,6 +3874,12 @@ export class DatabaseStorage implements IStorage {
     return decryptOnboardingPII(updatedData);
   }
 
+  async deleteEmployeeOnboardingData(employeeId: string): Promise<void> {
+    await db
+      .delete(employeeOnboardingData)
+      .where(eq(employeeOnboardingData.employeeId, employeeId));
+  }
+
   async getEmployeeWithOnboardingData(employeeId: string): Promise<{ employee?: Employee; onboardingData?: EmployeeOnboardingData }> {
     const employee = await this.getEmployee(employeeId);
     const onboardingData = await this.getEmployeeOnboardingData(employeeId);
@@ -3845,12 +3891,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Document template operations
-  async getDocumentTemplates(): Promise<DocumentTemplate[]> {
-    const templates = await db.select()
+  async getDocumentTemplates(locationId?: string): Promise<DocumentTemplate[]> {
+    const conditions = [eq(documentTemplates.isActive, true)];
+    if (locationId) {
+      conditions.push(
+        or(
+          eq(documentTemplates.locationId, locationId),
+          isNull(documentTemplates.locationId)
+        )!
+      );
+    }
+    return db.select()
       .from(documentTemplates)
-      .where(eq(documentTemplates.isActive, true))
+      .where(and(...conditions))
       .orderBy(documentTemplates.sortOrder);
-    return templates;
   }
 
   async getDocumentTemplate(id: string): Promise<DocumentTemplate | undefined> {

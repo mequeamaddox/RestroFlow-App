@@ -123,7 +123,7 @@ export async function verifyLocationAccess(
 
     // Owners, platform_admin, and GM-level users can access any location they own
     if (isOwnerLevel(user.role) || user.role === "gm" || user.role === "admin") {
-      const locations = await storage.getLocations();
+      const locations = await storage.getLocations(userId);
       const hasAccess = locations.some((l: { id: string }) => l.id === locationId);
       if (!hasAccess) {
         return res.status(403).json({

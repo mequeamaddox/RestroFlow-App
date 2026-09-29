@@ -205,7 +205,7 @@ export function registerInvoiceRoutes(app: Express): void {
       });
     } catch (error) {
       console.error('Error processing invoice upload:', error);
-      res.status(500).json({ message: 'Failed to process invoice upload', error: (error as Error).message });
+      res.status(500).json({ message: 'Failed to process invoice upload' });
     }
   });
 
@@ -222,13 +222,17 @@ export function registerInvoiceRoutes(app: Express): void {
         return objService.downloadObject(objectFile, res);
       }
 
-      if (!fs.existsSync(attachmentPath)) return res.status(404).json({ message: 'Attachment file not found' });
-      const fileName = path.basename(attachmentPath);
+      const resolvedPath = path.resolve(attachmentPath);
+      if (resolvedPath !== attachmentPath && !path.isAbsolute(attachmentPath)) {
+        return res.status(403).json({ message: 'Invalid attachment path' });
+      }
+      if (!fs.existsSync(resolvedPath)) return res.status(404).json({ message: 'Attachment file not found' });
+      const fileName = path.basename(resolvedPath);
       const ext = path.extname(fileName).toLowerCase();
       const contentTypes: Record<string, string> = { '.pdf': 'application/pdf', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.txt': 'text/plain' };
       res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream');
       res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
-      fs.createReadStream(attachmentPath).pipe(res);
+      fs.createReadStream(resolvedPath).pipe(res);
     } catch (error) {
       console.error('Error serving invoice attachment:', error);
       res.status(500).json({ message: 'Failed to serve attachment' });

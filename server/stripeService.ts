@@ -3,7 +3,7 @@ import Stripe from 'stripe';
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 
 export const stripe = stripeSecretKey
-  ? new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' })
+  ? new Stripe(stripeSecretKey, { apiVersion: '2025-08-27.basil' })
   : null;
 
 export const isStripeEnabled = !!stripe;

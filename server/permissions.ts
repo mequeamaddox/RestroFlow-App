@@ -223,8 +223,6 @@ export function requirePermission(permission: Permission) {
       if (!hasPermission(userRole, permission)) {
         return res.status(403).json({
           message: "Forbidden - Insufficient permissions",
-          required: permission,
-          userRole
         });
       }
 

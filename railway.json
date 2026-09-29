@@ -5,7 +5,7 @@
     "buildCommand": "npm run build"
   },
   "deploy": {
-    "releaseCommand": "npx drizzle-kit push --force",
+    "releaseCommand": "node scripts/migrate.mjs",
     "startCommand": "npm run start",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3

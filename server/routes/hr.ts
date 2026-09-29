@@ -1,7 +1,7 @@
 import type { Express } from 'express';
 import { storage } from '../storage';
 import { isAuthenticated, clerkClient, mapPositionToRole, requireHRAccess } from './helpers';
-import { requireLocationAccess, assertLocationAccess } from '../securityMiddleware';
+import { requireLocationAccess, assertLocationAccess, strictLimiter } from '../securityMiddleware';
 import { requirePermission, requireAnyPermission, Permission } from '../permissions';
 import { isOwnerLevel, isManagerLevel } from '@shared/roles';
 import { teamResources, insertTeamResourceSchema, timeEntries, timeOffRequests, employeeDocuments, employeeOnboarding, employeeOnboardingSteps, recipeAssignments, departments, onboardingTemplates } from '@shared/schema';
@@ -457,7 +457,12 @@ export function registerHRRoutes(app: Express): void {
       const userId = req.user!.id;
       const user = await storage.getUser(userId);
       const isOwnerOrAdmin = isManagerLevel(user?.role);
-      if (!isOwnerOrAdmin && req.params.employeeId !== userId) return res.status(403).json({ message: 'Access denied - can only view your own time entries' });
+      if (!isOwnerOrAdmin) {
+        const requestingEmployee = user?.email ? await storage.getEmployeeByEmail(user.email) : null;
+        if (!requestingEmployee || requestingEmployee.id !== req.params.employeeId) {
+          return res.status(403).json({ message: 'Access denied - can only view your own time entries' });
+        }
+      }
       const targetEmployee = await storage.getEmployee(req.params.employeeId);
       if (!targetEmployee) return res.status(404).json({ message: 'Employee not found' });
       if (!await assertLocationAccess(req, res, targetEmployee.locationId)) return;
@@ -819,11 +824,10 @@ export function registerHRRoutes(app: Express): void {
   app.get('/api/hr/onboarding', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const { employeeId } = req.query;
-      if (employeeId) {
-        const employee = await storage.getEmployee(employeeId as string);
-        if (!employee) return res.status(404).json({ message: 'Employee not found' });
-        if (!await assertLocationAccess(req, res, employee.locationId)) return;
-      }
+      if (!employeeId) return res.status(400).json({ message: 'employeeId is required' });
+      const employee = await storage.getEmployee(employeeId as string);
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       const onboarding = await storage.getEmployeeOnboarding(employeeId as string);
       res.json(onboarding);
     } catch (error) {
@@ -838,6 +842,9 @@ export function registerHRRoutes(app: Express): void {
       if (!employeeId || !templateId) {
         return res.status(400).json({ message: 'employeeId and templateId are required' });
       }
+      const targetEmployee = await storage.getEmployee(employeeId);
+      if (!targetEmployee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, targetEmployee.locationId)) return;
       // Count steps in the template so totalSteps is never null
       const steps = await storage.getOnboardingSteps(templateId);
       const totalSteps = steps.length > 0 ? steps.length : 1;
@@ -863,7 +870,8 @@ export function registerHRRoutes(app: Express): void {
       const [existing] = await db.select().from(employeeOnboarding).where(eq(employeeOnboarding.id, req.params.id)).limit(1);
       if (!existing) return res.status(404).json({ message: 'Onboarding record not found' });
       const employee = await storage.getEmployee(existing.employeeId);
-      if (employee && !await assertLocationAccess(req, res, employee.locationId)) return;
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       const onboarding = await storage.updateEmployeeOnboarding(req.params.id, req.body);
       res.json(onboarding);
     } catch (error) {
@@ -877,7 +885,8 @@ export function registerHRRoutes(app: Express): void {
       const [existing] = await db.select().from(employeeOnboarding).where(eq(employeeOnboarding.id, req.params.id)).limit(1);
       if (!existing) return res.status(404).json({ message: 'Onboarding record not found' });
       const employee = await storage.getEmployee(existing.employeeId);
-      if (employee && !await assertLocationAccess(req, res, employee.locationId)) return;
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       const steps = await storage.getEmployeeOnboardingSteps(req.params.id);
       res.json(steps);
     } catch (error) {
@@ -891,10 +900,10 @@ export function registerHRRoutes(app: Express): void {
       const [existingStep] = await db.select().from(employeeOnboardingSteps).where(eq(employeeOnboardingSteps.id, req.params.id)).limit(1);
       if (!existingStep) return res.status(404).json({ message: 'Onboarding step not found' });
       const [onboarding] = await db.select().from(employeeOnboarding).where(eq(employeeOnboarding.id, existingStep.employeeOnboardingId)).limit(1);
-      if (onboarding) {
-        const employee = await storage.getEmployee(onboarding.employeeId);
-        if (employee && !await assertLocationAccess(req, res, employee.locationId)) return;
-      }
+      if (!onboarding) return res.status(404).json({ message: 'Onboarding record not found' });
+      const stepEmployee = await storage.getEmployee(onboarding.employeeId);
+      if (!stepEmployee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, stepEmployee.locationId)) return;
       const step = await storage.updateEmployeeOnboardingStep(req.params.id, {
         ...req.body, completedBy: req.user!.id,
         completedDate: req.body.status === 'completed' ? new Date() : req.body.completedDate,
@@ -909,6 +918,10 @@ export function registerHRRoutes(app: Express): void {
   app.post('/api/hr/onboarding/invite', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), requireHRAccess, async (req, res) => {
     try {
       const { employeeId, email, phone, sendMethod = 'email' } = req.body;
+      if (!employeeId) return res.status(400).json({ message: 'employeeId is required' });
+      const inviteTarget = await storage.getEmployee(employeeId);
+      if (!inviteTarget) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, inviteTarget.locationId)) return;
       const token = await storage.createOnboardingToken(employeeId, 72);
       const baseUrl = `${req.protocol}://${req.get('host')}`;
       const inviteUrl = `${baseUrl}/onboarding/${token.token}`;
@@ -940,7 +953,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/onboarding/:token/complete', async (req, res) => {
+  app.post('/api/onboarding/:token/complete', strictLimiter, async (req, res) => {
     try {
       const validation = await storage.validateOnboardingToken(req.params.token);
       if (!validation.isValid) return res.status(404).json({ error: 'Invalid or expired invitation link' });
@@ -1107,6 +1120,19 @@ export function registerHRRoutes(app: Express): void {
       const { employee, onboardingData } = await storage.getEmployeeWithOnboardingData(req.params.id);
       if (!employee) return res.status(404).json({ error: 'Employee not found' });
       if (!await assertLocationAccess(req, res, employee.locationId)) return;
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        actorEmail: user?.email ?? undefined,
+        locationId: employee.locationId,
+        tableName: 'employee_onboarding_data',
+        recordId: req.params.id,
+        action: 'view',
+        reason: 'Owner viewed employee PII',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+      });
+
       res.json({
         employee,
         onboardingData: onboardingData ? {
@@ -1119,6 +1145,56 @@ export function registerHRRoutes(app: Express): void {
     } catch (error) {
       console.error('Error fetching onboarding data:', error);
       res.status(500).json({ error: 'Failed to fetch onboarding data' });
+    }
+  });
+
+  // GDPR/CCPA: permanently erase PII (SSN, bank account, routing number) for an employee.
+  // Only owners with location access may call this; the action is irreversible.
+  app.delete('/api/employees/:id/onboarding-data', isAuthenticated, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!isOwnerLevel(user?.role)) return res.status(403).json({ error: 'Access denied' });
+      const employee = await storage.getEmployee(req.params.id);
+      if (!employee) return res.status(404).json({ error: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        actorEmail: user?.email ?? undefined,
+        locationId: employee.locationId,
+        tableName: 'employee_onboarding_data',
+        recordId: req.params.id,
+        action: 'delete',
+        reason: 'Owner permanently deleted employee PII (GDPR/CCPA erasure)',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+      });
+
+      await storage.deleteEmployeeOnboardingData(req.params.id);
+      res.json({ message: 'PII data permanently deleted' });
+    } catch (error) {
+      console.error('Error deleting onboarding data:', error);
+      res.status(500).json({ error: 'Failed to delete onboarding data' });
+    }
+  });
+
+  // Audit log review — owners can see who accessed or erased PII for their location.
+  app.get('/api/audit-logs', isAuthenticated, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!isOwnerLevel(user?.role)) return res.status(403).json({ error: 'Access denied' });
+      const { locationId, tableName, limit, offset } = req.query;
+      if (!locationId) return res.status(400).json({ error: 'locationId required' });
+      if (!await assertLocationAccess(req, res, locationId as string)) return;
+      const logs = await storage.getAuditLogs(locationId as string, {
+        tableName: tableName as string | undefined,
+        limit: limit ? Math.min(Number(limit), 500) : 100,
+        offset: offset ? Number(offset) : 0,
+      });
+      res.json(logs);
+    } catch (error) {
+      console.error('Error fetching audit logs:', error);
+      res.status(500).json({ error: 'Failed to fetch audit logs' });
     }
   });
 }
