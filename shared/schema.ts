@@ -1663,6 +1663,7 @@ export const documentTypeEnumNew = pgEnum("document_type_new", [
 
 export const documentTemplates = pgTable("document_templates", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  locationId: uuid("location_id").references(() => locations.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
   type: documentTypeEnumNew("type").notNull(),
   description: text("description"),

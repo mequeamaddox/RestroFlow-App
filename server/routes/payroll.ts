@@ -23,8 +23,7 @@ export function registerDocumentRoutes(app: Express): void {
       const { locationId } = req.query;
       if (!locationId) return res.status(400).json({ message: 'locationId required' });
       if (!await assertLocationAccess(req, res, locationId as string)) return;
-      const allTemplates = await storage.getDocumentTemplates();
-      const templates = allTemplates.filter((t: any) => t.locationId === locationId || !t.locationId);
+      const templates = await storage.getDocumentTemplates(locationId as string);
       res.json(templates);
     } catch (error) {
       console.error('Error fetching document templates:', error);
@@ -214,7 +213,7 @@ export function registerDocumentRoutes(app: Express): void {
     try {
       const template = await storage.getDocumentTemplate(req.params.id);
       if (!template) return res.status(404).json({ message: 'Template not found' });
-      if (!await assertLocationAccess(req, res, template.locationId)) return;
+      if (template.locationId && !await assertLocationAccess(req, res, template.locationId)) return;
       const fields = await storage.getDocumentFormFields(req.params.id);
       res.json(fields);
     } catch (error) {

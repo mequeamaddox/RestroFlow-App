@@ -412,7 +412,7 @@ export interface IStorage {
   deleteEmployeeOnboardingData(employeeId: string): Promise<void>;
 
   // Document template operations
-  getDocumentTemplates(): Promise<any[]>;
+  getDocumentTemplates(locationId?: string): Promise<any[]>;
   getDocumentTemplate(id: string): Promise<any | undefined>;
   createDocumentTemplate(template: any): Promise<any>;
   updateDocumentTemplate(id: string, template: Partial<any>): Promise<any>;
@@ -3856,12 +3856,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Document template operations
-  async getDocumentTemplates(): Promise<DocumentTemplate[]> {
-    const templates = await db.select()
+  async getDocumentTemplates(locationId?: string): Promise<DocumentTemplate[]> {
+    const conditions = [eq(documentTemplates.isActive, true)];
+    if (locationId) {
+      conditions.push(
+        or(
+          eq(documentTemplates.locationId, locationId),
+          isNull(documentTemplates.locationId)
+        )!
+      );
+    }
+    return db.select()
       .from(documentTemplates)
-      .where(eq(documentTemplates.isActive, true))
+      .where(and(...conditions))
       .orderBy(documentTemplates.sortOrder);
-    return templates;
   }
 
   async getDocumentTemplate(id: string): Promise<DocumentTemplate | undefined> {

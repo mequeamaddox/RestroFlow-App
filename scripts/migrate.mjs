@@ -83,6 +83,10 @@ const migrations = [
       updated_by varchar
     )`,
   },
+  {
+    name: "document_templates.location_id",
+    sql: `ALTER TABLE document_templates ADD COLUMN IF NOT EXISTS location_id uuid REFERENCES locations(id) ON DELETE CASCADE`,
+  },
 ];
 
 async function run() {
