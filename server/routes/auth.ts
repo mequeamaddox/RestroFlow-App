@@ -3,7 +3,7 @@ import { getAuth } from '@clerk/express';
 import { storage } from '../storage';
 import { isAuthenticated, clerkClient, calculateSubscriptionTotal, requirePlatformAdmin } from './helpers';
 import { requirePermission, Permission } from '../permissions';
-import { assertLocationAccess } from '../securityMiddleware';
+import { assertLocationAccess, strictLimiter } from '../securityMiddleware';
 import { isOwnerLevel } from '@shared/roles';
 import { insertInvitationTokenSchema, invitationTokens, locations, departments, positions, employees } from '@shared/schema';
 import { InvitationEmailService } from '../invitationEmailService';
@@ -194,7 +194,7 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/invitations', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
+  app.post('/api/invitations', isAuthenticated, strictLimiter, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
     try {
       const userId = req.user!.id;
       const { email, role = 'employee', locationId: bodyLocationId, firstName, lastName, departmentId, positionId, hourlyRate, salary, startDate, personalMessage, expiresInHours = 168 } = req.body;

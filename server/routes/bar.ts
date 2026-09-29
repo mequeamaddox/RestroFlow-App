@@ -197,7 +197,8 @@ export function registerBarRoutes(app: Express) {
   });
 
   app.post('/api/bar/waste-log', isAuthenticated, requireBarAccess, async (req: any, res) => {
-    const { locationId, inventoryItemId, menuItemId, itemName, quantity, unit, cost, reason, notes, shift } = req.body;
+    const locationId = req.query.locationId as string;
+    const { inventoryItemId, menuItemId, itemName, quantity, unit, cost, reason, notes, shift } = req.body;
     const userId = req.user?.id || req.user?.claims?.sub || 'unknown';
     if (!itemName || !quantity || !reason) {
       return res.status(400).json({ message: 'itemName, quantity, and reason are required' });

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import type { Express } from 'express';
 import { storage } from '../storage';
 import { isAuthenticated } from './helpers';
@@ -198,7 +199,10 @@ export function registerPosRoutes(app: Express): void {
         return res.status(503).json({ message: 'SpotOn webhook not configured' });
       }
       const sig = req.headers['x-spoton-signature'] as string | undefined;
-      if (!sig || sig !== SPOTON_SECRET) {
+      if (!sig) return res.status(401).json({ message: 'Invalid webhook signature' });
+      const sigBuf = Buffer.from(sig);
+      const secretBuf = Buffer.from(SPOTON_SECRET);
+      if (sigBuf.length !== secretBuf.length || !crypto.timingSafeEqual(sigBuf, secretBuf)) {
         return res.status(401).json({ message: 'Invalid webhook signature' });
       }
 
@@ -223,8 +227,11 @@ export function registerPosRoutes(app: Express): void {
     if (!CLOVER_SECRET) {
       return res.status(503).json({ message: 'Clover webhook not configured' });
     }
-    const sig = req.headers['x-clover-hmac-sha256'] || req.headers['x-webhook-secret'];
-    if (!sig || sig !== CLOVER_SECRET) {
+    const sig = (req.headers['x-clover-hmac-sha256'] || req.headers['x-webhook-secret']) as string | undefined;
+    if (!sig) return res.status(401).json({ message: 'Invalid webhook signature' });
+    const sigBuf = Buffer.from(sig);
+    const secretBuf = Buffer.from(CLOVER_SECRET);
+    if (sigBuf.length !== secretBuf.length || !crypto.timingSafeEqual(sigBuf, secretBuf)) {
       return res.status(401).json({ message: 'Invalid webhook signature' });
     }
     try {
@@ -303,6 +310,7 @@ export function registerPosRoutes(app: Express): void {
       const hrEmployee = await storage.createEmployee({
         firstName, lastName, email: posEmployee.email || '', phone: '', status: 'active',
         hireDate: new Date().toISOString().split('T')[0],
+        locationId: posEmpIntegration.locationId,
         departmentId: req.body.departmentId || null, positionId: req.body.positionId || null,
       });
 
@@ -334,7 +342,7 @@ export function registerPosRoutes(app: Express): void {
           const nameParts = (posEmployee.displayName || '').trim().split(/\s+/);
           const firstName = posEmployee.firstName || nameParts[0] || 'Unknown';
           const lastName = posEmployee.lastName || nameParts.slice(1).join(' ') || '';
-          const hrEmployee = await storage.createEmployee({ firstName, lastName, email: posEmployee.email || null, phone: '', status: 'active', hireDate: new Date().toISOString().split('T')[0], departmentId: null, positionId: null });
+          const hrEmployee = await storage.createEmployee({ firstName, lastName, email: posEmployee.email || null, phone: '', status: 'active', hireDate: new Date().toISOString().split('T')[0], locationId: integration.locationId, departmentId: null, positionId: null });
           await db.insert(posEmployeeMappings).values({ posEmployeeId: posEmployee.id, employeeId: hrEmployee.id, status: 'auto', confidence: '1.00', matchRule: 'Auto-imported during POS sync' });
           autoCreatedCount++;
         } catch (e) { console.error(`Failed to auto-create HR employee for POS employee ${posEmployee.id}:`, e); }

@@ -122,13 +122,11 @@ export function registerBillingRoutes(app: Express): void {
         hrAddonLocations,
         barAddonLocations,
         locationCount: ownedLocations.length,
-        stripeCustomerId: user.stripeCustomerId,
-        stripeSubscriptionId: user.stripeSubscriptionId,
         createdAt: user.createdAt?.toISOString(),
       });
     } catch (error: any) {
       console.error('Error fetching current subscription:', error);
-      res.status(500).json({ message: 'Failed to fetch current subscription', error: error.message });
+      res.status(500).json({ message: 'Failed to fetch current subscription' });
     }
   });
 
@@ -231,11 +229,9 @@ export function registerBillingRoutes(app: Express): void {
       if (!user) return res.status(404).json({ message: 'User not found' });
       const host = `${req.protocol}://${req.get('host')}`;
 
-      // trial_days: DB setting overrides request body
+      // trial_days: server-only setting — never accept from client
       const trialDaysSetting = await storage.getPlatformSetting('trial_days');
-      const trialDays = trialDaysSetting !== null
-        ? parseInt(trialDaysSetting)
-        : req.body.trialDays ? parseInt(req.body.trialDays) : undefined;
+      const trialDays = trialDaysSetting !== null ? parseInt(trialDaysSetting) : undefined;
 
       const checkoutUrl = await createCheckoutSession({
         userId, email: user.email!, plan: plan as StripePlan, stripeCustomerId: user.stripeCustomerId,
@@ -270,7 +266,7 @@ export function registerBillingRoutes(app: Express): void {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     if (!webhookSecret || !isStripeEnabled) {
       console.warn('Stripe webhook received but STRIPE_WEBHOOK_SECRET not configured');
-      return res.status(200).json({ received: true });
+      return res.status(400).json({ received: false, error: 'Webhook not configured' });
     }
     let event;
     try {
