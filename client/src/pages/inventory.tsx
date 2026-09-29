@@ -129,7 +129,7 @@ export default function Inventory() {
   const averageValue = totalItems > 0 ? totalValue / totalItems : 0;
 
   return (
-    <div className="p-3 lg:p-6 space-y-4 lg:space-y-6 bg-slate-950 min-h-screen">
+    <div className="p-3 lg:p-6 space-y-4 lg:space-y-6">
       {/* Location Banner */}
       <LocationBanner />
       
