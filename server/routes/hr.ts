@@ -1120,6 +1120,19 @@ export function registerHRRoutes(app: Express): void {
       const { employee, onboardingData } = await storage.getEmployeeWithOnboardingData(req.params.id);
       if (!employee) return res.status(404).json({ error: 'Employee not found' });
       if (!await assertLocationAccess(req, res, employee.locationId)) return;
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        actorEmail: user?.email ?? undefined,
+        locationId: employee.locationId,
+        tableName: 'employee_onboarding_data',
+        recordId: req.params.id,
+        action: 'view',
+        reason: 'Owner viewed employee PII',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+      });
+
       res.json({
         employee,
         onboardingData: onboardingData ? {
@@ -1144,11 +1157,44 @@ export function registerHRRoutes(app: Express): void {
       const employee = await storage.getEmployee(req.params.id);
       if (!employee) return res.status(404).json({ error: 'Employee not found' });
       if (!await assertLocationAccess(req, res, employee.locationId)) return;
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        actorEmail: user?.email ?? undefined,
+        locationId: employee.locationId,
+        tableName: 'employee_onboarding_data',
+        recordId: req.params.id,
+        action: 'delete',
+        reason: 'Owner permanently deleted employee PII (GDPR/CCPA erasure)',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+      });
+
       await storage.deleteEmployeeOnboardingData(req.params.id);
       res.json({ message: 'PII data permanently deleted' });
     } catch (error) {
       console.error('Error deleting onboarding data:', error);
       res.status(500).json({ error: 'Failed to delete onboarding data' });
+    }
+  });
+
+  // Audit log review — owners can see who accessed or erased PII for their location.
+  app.get('/api/audit-logs', isAuthenticated, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!isOwnerLevel(user?.role)) return res.status(403).json({ error: 'Access denied' });
+      const { locationId, tableName, limit, offset } = req.query;
+      if (!locationId) return res.status(400).json({ error: 'locationId required' });
+      if (!await assertLocationAccess(req, res, locationId as string)) return;
+      const logs = await storage.getAuditLogs(locationId as string, {
+        tableName: tableName as string | undefined,
+        limit: limit ? Math.min(Number(limit), 500) : 100,
+        offset: offset ? Number(offset) : 0,
+      });
+      res.json(logs);
+    } catch (error) {
+      console.error('Error fetching audit logs:', error);
+      res.status(500).json({ error: 'Failed to fetch audit logs' });
     }
   });
 }

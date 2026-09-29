@@ -1817,18 +1817,53 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async createAuditLog(data: any): Promise<any> {
+  async createAuditLog(data: {
+    userId?: string;
+    actorEmail?: string;
+    locationId?: string;
+    tableName: string;
+    recordId: string;
+    action: 'create' | 'update' | 'delete' | 'view';
+    oldValues?: unknown;
+    newValues?: unknown;
+    changedFields?: unknown;
+    reason?: string;
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<void> {
     try {
-      const result = await db.execute(sql`
-        INSERT INTO audit_logs (user_id, location_id, table_name, record_id, action, old_values, new_values, changed_fields, reason)
-        VALUES (${data.userId}, ${data.locationId}, ${data.tableName}, ${data.recordId}, ${data.action}, ${data.oldValues}, ${data.newValues}, ${data.changedFields}, ${data.reason})
-        RETURNING *
+      await db.execute(sql`
+        INSERT INTO audit_logs
+          (user_id, actor_email, location_id, table_name, record_id, action,
+           old_values, new_values, changed_fields, reason, ip_address, user_agent)
+        VALUES
+          (${data.userId ?? null}, ${data.actorEmail ?? null}, ${data.locationId ?? null},
+           ${data.tableName}, ${data.recordId}, ${data.action},
+           ${data.oldValues ? JSON.stringify(data.oldValues) : null},
+           ${data.newValues ? JSON.stringify(data.newValues) : null},
+           ${data.changedFields ? JSON.stringify(data.changedFields) : null},
+           ${data.reason ?? null}, ${data.ipAddress ?? null}, ${data.userAgent ?? null})
       `);
-      return result.rows[0];
-    } catch (error) {
-      console.error('Failed to create audit log:', error);
-      throw error;
+    } catch (err) {
+      // Audit log failures must never break the main request
+      console.error('Failed to write audit log:', err);
     }
+  }
+
+  async getAuditLogs(locationId: string, options?: { limit?: number; offset?: number; tableName?: string }): Promise<any[]> {
+    const limit = options?.limit ?? 100;
+    const offset = options?.offset ?? 0;
+    const tableFilter = options?.tableName ? sql`AND table_name = ${options.tableName}` : sql``;
+    const result = await db.execute(sql`
+      SELECT id, user_id, actor_email, location_id, table_name, record_id, action,
+             reason, ip_address, created_at
+      FROM audit_logs
+      WHERE location_id = ${locationId}
+        ${tableFilter}
+      ORDER BY created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `);
+    return result.rows as any[];
   }
 
   async getUserPermissions(userId: string): Promise<any[]> {

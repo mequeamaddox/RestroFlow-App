@@ -87,6 +87,18 @@ const migrations = [
     name: "document_templates.location_id",
     sql: `ALTER TABLE document_templates ADD COLUMN IF NOT EXISTS location_id uuid REFERENCES locations(id) ON DELETE CASCADE`,
   },
+  {
+    name: "audit_logs.actor_email",
+    sql: `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS actor_email varchar(320)`,
+  },
+  {
+    name: "audit_logs.ip_address",
+    sql: `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS ip_address varchar(45)`,
+  },
+  {
+    name: "audit_logs.user_agent",
+    sql: `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_agent text`,
+  },
 ];
 
 async function run() {

@@ -1267,14 +1267,17 @@ export const securityLogs = pgTable("security_logs", {
 export const auditLogs = pgTable("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id),
+  actorEmail: varchar("actor_email", { length: 320 }),
   locationId: varchar("location_id").references(() => locations.id),
   tableName: varchar("table_name", { length: 100 }).notNull(),
   recordId: varchar("record_id").notNull(),
-  action: varchar("action", { enum: ["create", "update", "delete"] }).notNull(),
+  action: varchar("action", { enum: ["create", "update", "delete", "view"] }).notNull(),
   oldValues: jsonb("old_values"),
   newValues: jsonb("new_values"),
   changedFields: jsonb("changed_fields"),
   reason: varchar("reason", { length: 500 }),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
