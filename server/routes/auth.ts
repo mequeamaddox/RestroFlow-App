@@ -239,7 +239,7 @@ export function registerAuthRoutes(app: Express): void {
       const companyName = location?.name || 'RestroFlow';
       const inviterName = inviter ? `${inviter.firstName || ''} ${inviter.lastName || ''}`.trim() || inviter.email || 'Your manager' : 'Your manager';
 
-      const appUrl = process.env.APP_URL || `${process.env.PROTOCOL || 'https'}://${process.env.RAILWAY_STATIC_URL || 'restroflow.com'}`;
+      const appUrl = process.env.APP_URL || 'https://www.restroflowsolutions.com';
       const invitationUrl = `${appUrl}/invitation/accept/${invitation.token}`;
 
       let emailSent = false;
