@@ -203,6 +203,11 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(400).json({ message: 'Email is required' });
       }
 
+      const ALLOWED_ROLES = ['employee', 'team_lead', 'foh_manager', 'boh_manager', 'gm', 'owner'];
+      if (!ALLOWED_ROLES.includes(role)) {
+        return res.status(400).json({ message: `Invalid role. Must be one of: ${ALLOWED_ROLES.join(', ')}` });
+      }
+
       // Resolve locationId — fall back to the user's first owned location
       let locationId = bodyLocationId;
       if (bodyLocationId && !await assertLocationAccess(req, res, bodyLocationId)) return;

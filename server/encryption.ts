@@ -109,6 +109,26 @@ export function logEncryptionStatus(): void {
   }
 }
 
+/**
+ * Encrypts POS credentials before DB storage. Stores as {"enc":"enc:v1:..."}
+ * so the jsonb column stays valid while the payload is opaque.
+ * Legacy plaintext objects are accepted on read and migrated on next write.
+ */
+export function encryptPosCredentials(credentials: Record<string, any>): Record<string, any> {
+  return { enc: encryptField(JSON.stringify(credentials)) };
+}
+
+export function decryptPosCredentials(stored: Record<string, any> | null | undefined): Record<string, any> {
+  if (!stored) return {};
+  if ('enc' in stored) {
+    const decrypted = decryptField(stored.enc as string);
+    if (!decrypted) return {};
+    try { return JSON.parse(decrypted); } catch { return {}; }
+  }
+  // Legacy plaintext — return as-is; will be encrypted on next write
+  return stored;
+}
+
 // Fields on employee_onboarding_data that must be encrypted at rest.
 const PII_FIELDS = [
   "socialSecurityNumber",

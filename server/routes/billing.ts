@@ -326,6 +326,7 @@ export function registerBillingRoutes(app: Express): void {
             await storage.updateUserSubscription(userId, {
               ...(plan ? { subscriptionPlan: plan, ocrCreditsLimit: 999 } : {}),
               subscriptionStatus: mappedStatus,
+              subscriptionEndDate: sub.current_period_end ? new Date(sub.current_period_end * 1000) : undefined,
             });
           }
           break;
@@ -337,6 +338,7 @@ export function registerBillingRoutes(app: Express): void {
             await storage.updateUserSubscription(userId, {
               subscriptionPlan: 'free', subscriptionStatus: 'inactive',
               stripeSubscriptionId: undefined, ocrCreditsLimit: 5,
+              subscriptionEndDate: sub.current_period_end ? new Date(sub.current_period_end * 1000) : undefined,
             });
             // C2: Disable HR addon on all locations owned by this user when subscription is cancelled
             const ownedLocations = await storage.getLocations(userId);

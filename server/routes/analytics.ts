@@ -268,7 +268,7 @@ export function registerAnalyticsRoutes(app: Express): void {
           orders: sql<number>`COUNT(*)`,
         })
         .from(posSales)
-        .where(sql`${posSales.orderDate} >= CURRENT_DATE - INTERVAL '${sql.raw(days.toString())} days'
+        .where(sql`${posSales.orderDate} >= CURRENT_DATE - (${days} * INTERVAL '1 day')
           ${locationId ? sql`AND ${posSales.locationId} = ${locationId}` : sql``}`)
         .groupBy(sql`DATE(${posSales.orderDate})`)
         .orderBy(sql`DATE(${posSales.orderDate})`);
