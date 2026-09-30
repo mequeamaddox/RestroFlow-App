@@ -77,36 +77,17 @@ export default function Pricing() {
   const fallbackData: SubscriptionData = {
     plans: [
       {
-        id: "free",
-        name: "Free",
-        price: 0,
-        billingCycle: "MONTHLY",
-        features: [
-          "5 OCR invoice processes/month",
-          "Basic text extraction (PDFs only)",
-          "Real-time inventory tracking",
-          "Recipe costing & management",
-          "Purchase order automation",
-          "Comprehensive waste tracking",
-          "Daily P&L statements",
-          "Email support",
-          "1 location only"
-        ]
-      },
-      {
         id: "core",
         name: "RestroFlow Core",
         price: 179,
         billingCycle: "MONTHLY",
         features: [
-          "Everything in Free",
+          "Up to 3 locations",
           "Unlimited OCR invoice processing",
           "Advanced image OCR (scanned invoices)",
           "Support for all file types (PDF, Images)",
           "Advanced analytics dashboard",
-          "Unlimited locations",
           "All POS/accounting integrations",
-          "Automated invoice processing (24-48hr)",
           "Budget tracking & variance analysis",
           "Theoretical vs actual reporting",
           "Menu engineering analysis",
@@ -149,26 +130,16 @@ export default function Pricing() {
       ...plan,
       displayPrice,
       originalPrice: plan.price,
-      icon: plan.id === 'free' ? ChefHat : plan.id === 'core' ? Star : Crown,
-      color: plan.id === 'free' ? 'from-slate-500 to-gray-500' :
-             plan.id === 'core' ? 'from-orange-500 to-red-500' :
-             'from-purple-500 to-pink-500',
+      icon: plan.id === 'core' ? Star : Crown,
+      color: plan.id === 'core' ? 'from-orange-500 to-red-500' : 'from-purple-500 to-pink-500',
       popular: plan.id === 'core',
-      competitorPrice: plan.id === 'free' ? 0 : plan.id === 'core' ? 330 : 480
+      competitorPrice: plan.id === 'core' ? 330 : 480
     };
   };
   
   const handleSubscribe = (planId: string) => {
     if (!user) {
       window.location.href = '/login';
-      return;
-    }
-    
-    if (planId === 'free') {
-      toast({
-        title: "Free Plan Active",
-        description: "You're already on the free plan! Upgrade to unlock premium features.",
-      });
       return;
     }
     
@@ -346,18 +317,18 @@ export default function Pricing() {
             {/* Trust Indicators */}
             <div className="flex items-center justify-center space-x-8 mb-16">
               <div className="text-center">
-                <div className="text-2xl font-bold text-green-400">14-Day</div>
-                <div className="text-sm text-slate-400">Free Trial</div>
-              </div>
-              <div className="w-px h-8 bg-slate-600"></div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-400">No Setup</div>
+                <div className="text-2xl font-bold text-green-400">No Setup</div>
                 <div className="text-sm text-slate-400">Fees</div>
               </div>
               <div className="w-px h-8 bg-slate-600"></div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-purple-400">Cancel</div>
+                <div className="text-2xl font-bold text-blue-400">Cancel</div>
                 <div className="text-sm text-slate-400">Anytime</div>
+              </div>
+              <div className="w-px h-8 bg-slate-600"></div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-purple-400">6 POS</div>
+                <div className="text-sm text-slate-400">Integrations</div>
               </div>
             </div>
           </div>
@@ -498,7 +469,7 @@ export default function Pricing() {
             )}
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
             {plans.map((plan) => {
               const displayPlan = getDisplayPlan(plan);
               const Icon = displayPlan.icon;
@@ -565,12 +536,10 @@ export default function Pricing() {
                             <Loader2 className="h-4 w-4 animate-spin mr-2" />
                             Creating...
                           </div>
-                        ) : plan.id === 'free' ? (
-                          'Get Started Free'
                         ) : user ? (
                           'Start Subscription'
                         ) : (
-                          'Start Free Trial'
+                          'Get Started'
                         )}
                       </Button>
                       
@@ -657,18 +626,13 @@ export default function Pricing() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
               <div>
-                <h3 className="text-lg font-semibold text-white mb-2">How does the free trial work?</h3>
-                <p className="text-slate-300 text-sm">Start with any plan for 14 days completely free. No credit card required. Full access to all features and add-ons.</p>
-              </div>
-              
-              <div>
                 <h3 className="text-lg font-semibold text-white mb-2">Can I add bar operations to existing plans?</h3>
                 <p className="text-slate-300 text-sm">Yes! Add the Bar & Beverage Operations add-on to any plan. Perfect for restaurants with bars or separate bar locations.</p>
               </div>
               
               <div>
                 <h3 className="text-lg font-semibold text-white mb-2">What POS systems do you integrate with?</h3>
-                <p className="text-slate-300 text-sm">We integrate with major POS systems including Toast, Square, Clover, SpotOn, and many others. Bar add-on includes specialized SpotOn integration.</p>
+                <p className="text-slate-300 text-sm">We integrate with Clover, SpotOn, Square, Toast, Lightspeed Restaurant, and Revel POS. All 6 integrations are included in the Core plan at no extra cost.</p>
               </div>
               
               <div>
@@ -684,15 +648,15 @@ export default function Pricing() {
           <div className="max-w-4xl mx-auto">
             <h2 className="text-4xl font-bold text-white mb-6">Ready to Stop Wasting Money?</h2>
             <p className="text-xl text-slate-300 mb-8">Join thousands of restaurants already saving with RestroFlow</p>
-            <Button 
-              size="lg" 
+            <Button
+              size="lg"
               className="bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white px-12 py-4 text-lg font-bold rounded-full shadow-2xl transform hover:scale-105 transition-all duration-300"
               onClick={() => window.location.href = '/login'}
             >
-              Start Your Free Trial Now
+              Get Started Today
             </Button>
             <div className="text-slate-400 text-sm mt-4">
-              14-day free trial • No credit card required • Setup in 15 minutes
+              No setup fees • No long-term contracts • Setup in 15 minutes
             </div>
           </div>
         </section>

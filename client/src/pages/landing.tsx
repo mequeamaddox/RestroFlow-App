@@ -99,15 +99,15 @@ export default function Landing() {
             
             {/* CTA Button */}
             <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
-              <Button 
-                size="lg" 
+              <Button
+                size="lg"
                 className="bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white px-12 py-4 text-lg font-bold rounded-full shadow-2xl transform hover:scale-105 transition-all duration-300"
                 onClick={() => window.location.href = '/pricing'}
               >
-                Get Started - Free Trial
+                See Pricing
               </Button>
               <div className="text-slate-400 text-sm">
-                14-day free trial • No credit card required • Setup in 15 minutes
+                No long-term contracts • Cancel anytime • Setup in 15 minutes
               </div>
             </div>
           </div>
@@ -417,7 +417,7 @@ export default function Landing() {
                     <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mb-3">
                       <span className="text-green-400 text-xl">✓</span>
                     </div>
-                    <span className="text-slate-300 font-medium">Cancel Anytime</span>
+                    <span className="text-slate-300 font-medium">6 POS Integrations</span>
                   </div>
                 </div>
               </div>

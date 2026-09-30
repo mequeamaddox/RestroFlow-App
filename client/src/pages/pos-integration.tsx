@@ -281,7 +281,7 @@ export function PosIntegrationTab() {
   const { currentLocation: selectedLocation } = useLocation();
   const [expandedSales, setExpandedSales] = useState<Set<string>>(new Set());
   const [newIntegration, setNewIntegration] = useState({
-    provider: "spoton" as "spoton" | "clover" | "toast" | "revel",
+    provider: "spoton" as "spoton" | "clover" | "toast" | "revel" | "square" | "lightspeed",
     name: "",
     merchantId: "",
     credentials: {
@@ -595,7 +595,7 @@ export function PosIntegrationTab() {
                   <Label htmlFor="provider">POS Provider</Label>
                   <Select
                     value={newIntegration.provider}
-                    onValueChange={(value: "spoton" | "clover" | "toast" | "revel") =>
+                    onValueChange={(value: "spoton" | "clover" | "toast" | "revel" | "square" | "lightspeed") =>
                       setNewIntegration({ ...newIntegration, provider: value })
                     }
                   >
@@ -603,9 +603,11 @@ export function PosIntegrationTab() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="spoton">SpotOn POS</SelectItem>
                       <SelectItem value="clover">Clover POS</SelectItem>
+                      <SelectItem value="spoton">SpotOn POS</SelectItem>
+                      <SelectItem value="square">Square POS</SelectItem>
                       <SelectItem value="toast">Toast POS</SelectItem>
+                      <SelectItem value="lightspeed">Lightspeed Restaurant</SelectItem>
                       <SelectItem value="revel">Revel POS</SelectItem>
                     </SelectContent>
                   </Select>
@@ -625,14 +627,17 @@ export function PosIntegrationTab() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="merchantId">
-                    {newIntegration.provider === "spoton" ? "Location ID" : "Merchant ID"}
+                    {newIntegration.provider === "spoton" ? "Location ID" :
+                     newIntegration.provider === "square" ? "Location ID" :
+                     newIntegration.provider === "lightspeed" ? "Business ID" : "Merchant ID"}
                   </Label>
                   <Input
                     id="merchantId"
                     placeholder={
-                      newIntegration.provider === "spoton" 
-                        ? "Enter your SpotOn Location ID" 
-                        : "Enter your POS Merchant ID"
+                      newIntegration.provider === "spoton" ? "Enter your SpotOn Location ID" :
+                      newIntegration.provider === "square" ? "Enter your Square Location ID" :
+                      newIntegration.provider === "lightspeed" ? "Enter your Lightspeed Business ID" :
+                      "Enter your POS Merchant ID"
                     }
                     value={newIntegration.merchantId}
                     onChange={(e) =>
@@ -667,8 +672,8 @@ export function PosIntegrationTab() {
                     placeholder="Enter your SpotOn API Key"
                     value={newIntegration.credentials.apiKey}
                     onChange={(e) =>
-                      setNewIntegration({ 
-                        ...newIntegration, 
+                      setNewIntegration({
+                        ...newIntegration,
                         credentials: { ...newIntegration.credentials, apiKey: e.target.value }
                       })
                     }
@@ -676,6 +681,44 @@ export function PosIntegrationTab() {
                   />
                   <p className="text-sm text-muted-foreground">
                     Find your SpotOn API Key in your SpotOn Dashboard under Settings → API
+                  </p>
+                </div>
+              ) : newIntegration.provider === "square" ? (
+                <div className="space-y-2">
+                  <Label htmlFor="accessToken">Access Token</Label>
+                  <Textarea
+                    id="accessToken"
+                    placeholder="Enter your Square Access Token"
+                    value={newIntegration.credentials.accessToken}
+                    onChange={(e) =>
+                      setNewIntegration({
+                        ...newIntegration,
+                        credentials: { ...newIntegration.credentials, accessToken: e.target.value }
+                      })
+                    }
+                    data-testid="input-accesstoken"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Find your Square Access Token in your Square Developer Dashboard under Applications → Credentials
+                  </p>
+                </div>
+              ) : newIntegration.provider === "lightspeed" ? (
+                <div className="space-y-2">
+                  <Label htmlFor="accessToken">API Key</Label>
+                  <Textarea
+                    id="accessToken"
+                    placeholder="Enter your Lightspeed API Key"
+                    value={newIntegration.credentials.accessToken}
+                    onChange={(e) =>
+                      setNewIntegration({
+                        ...newIntegration,
+                        credentials: { ...newIntegration.credentials, accessToken: e.target.value }
+                      })
+                    }
+                    data-testid="input-accesstoken"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Find your Lightspeed API Key in your Lightspeed account under Settings → API Access
                   </p>
                 </div>
               ) : (
@@ -686,8 +729,8 @@ export function PosIntegrationTab() {
                     placeholder="Enter your POS API access token"
                     value={newIntegration.credentials.accessToken}
                     onChange={(e) =>
-                      setNewIntegration({ 
-                        ...newIntegration, 
+                      setNewIntegration({
+                        ...newIntegration,
                         credentials: { ...newIntegration.credentials, accessToken: e.target.value }
                       })
                     }
@@ -700,7 +743,9 @@ export function PosIntegrationTab() {
                 disabled={
                   !newIntegration.name ||
                   !newIntegration.merchantId ||
-                  (newIntegration.provider === "spoton" ? !newIntegration.credentials.apiKey : !newIntegration.credentials.accessToken) ||
+                  (newIntegration.provider === "spoton"
+                    ? !newIntegration.credentials.apiKey
+                    : !newIntegration.credentials.accessToken) ||
                   createIntegrationMutation.isPending
                 }
                 data-testid="button-create-integration"
