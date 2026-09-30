@@ -7,9 +7,13 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
+async function getAuthHeaders(forceRefresh = false): Promise<Record<string, string>> {
   try {
-    const token = await (window as any).Clerk?.session?.getToken();
+    const session = (window as any).Clerk?.session;
+    if (!session) return {};
+    const token = forceRefresh
+      ? await session.getToken({ skipCache: true })
+      : await session.getToken();
     if (token) {
       return { 'Authorization': `Bearer ${token}` };
     }
@@ -25,17 +29,28 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   const authHeaders = await getAuthHeaders();
-  const headers = {
-    ...authHeaders,
-    ...(data ? { "Content-Type": "application/json" } : {}),
-  };
-  
+  const body = data ? JSON.stringify(data) : undefined;
+  const contentHeader = data ? { "Content-Type": "application/json" } : {};
+
   const res = await fetch(url, {
     method,
-    headers,
-    body: data ? JSON.stringify(data) : undefined,
+    headers: { ...authHeaders, ...contentHeader },
+    body,
     credentials: "include",
   });
+
+  // On 401, force-refresh the Clerk token and retry once before propagating
+  if (res.status === 401) {
+    const freshHeaders = await getAuthHeaders(true);
+    const retryRes = await fetch(url, {
+      method,
+      headers: { ...freshHeaders, ...contentHeader },
+      body,
+      credentials: "include",
+    });
+    await throwIfResNotOk(retryRes);
+    return retryRes;
+  }
 
   await throwIfResNotOk(res);
   return res;
@@ -68,14 +83,20 @@ export const getQueryFn: <T>(options: {
     }
 
     const authHeaders = await getAuthHeaders();
-    const res = await fetch(url, {
+    const fetchOpts = {
       headers: authHeaders,
-      credentials: "include",
-      cache: url.includes('/api/auth/me') ? 'no-store' : 'default',
-    });
+      credentials: "include" as const,
+      cache: url.includes('/api/auth/me') ? 'no-store' as const : 'default' as const,
+    };
+    const res = await fetch(url, fetchOpts);
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401) {
+      if (unauthorizedBehavior === "returnNull") return null;
+      // Force-refresh Clerk token and retry once
+      const freshHeaders = await getAuthHeaders(true);
+      const retryRes = await fetch(url, { ...fetchOpts, headers: freshHeaders });
+      await throwIfResNotOk(retryRes);
+      return await retryRes.json();
     }
 
     await throwIfResNotOk(res);
