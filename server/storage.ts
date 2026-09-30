@@ -170,7 +170,7 @@ import {
   platformSettings,
 } from "@shared/schema";
 import { db } from "./db";
-import { encryptOnboardingPII, decryptOnboardingPII } from "./encryption";
+import { encryptOnboardingPII, decryptOnboardingPII, encryptPosCredentials, decryptPosCredentials } from "./encryption";
 import { eq, sql, desc, and, or, gte, lte, lt, ilike, sum, isNull, isNotNull, asc, inArray } from "drizzle-orm";
 
 // Local authentication user interface
@@ -904,44 +904,51 @@ export class DatabaseStorage implements IStorage {
   // Universal POS Integration Methods
   async getPosIntegrations(locationId?: string): Promise<PosIntegration[]> {
     let query = db.select().from(posIntegrations);
-    
+
     if (locationId) {
       query = query.where(eq(posIntegrations.locationId, locationId));
     }
-    
-    return await query.orderBy(posIntegrations.createdAt);
+
+    const rows = await query.orderBy(posIntegrations.createdAt);
+    return rows.map(r => ({ ...r, credentials: decryptPosCredentials(r.credentials as any) }));
   }
 
   async getPosIntegration(id: string): Promise<PosIntegration | undefined> {
     const [integration] = await db.select().from(posIntegrations).where(eq(posIntegrations.id, id));
-    return integration;
+    if (!integration) return undefined;
+    return { ...integration, credentials: decryptPosCredentials(integration.credentials as any) };
   }
 
   async getPosIntegrationByMerchant(merchantId: string, provider: string): Promise<PosIntegration | undefined> {
     const [integration] = await db.select().from(posIntegrations)
       .where(and(
-        eq(posIntegrations.merchantId, merchantId), 
+        eq(posIntegrations.merchantId, merchantId),
         eq(posIntegrations.provider, provider as any),
         eq(posIntegrations.isActive, true)
       ));
-    return integration;
+    if (!integration) return undefined;
+    return { ...integration, credentials: decryptPosCredentials(integration.credentials as any) };
   }
 
   async createPosIntegration(integrationData: InsertPosIntegration): Promise<PosIntegration> {
+    const encrypted = { ...integrationData, credentials: encryptPosCredentials(integrationData.credentials as any) };
     const [integration] = await db
       .insert(posIntegrations)
-      .values(integrationData)
+      .values(encrypted)
       .returning();
-    return integration;
+    return { ...integration, credentials: decryptPosCredentials(integration.credentials as any) };
   }
 
   async updatePosIntegration(id: string, integrationData: Partial<InsertPosIntegration>): Promise<PosIntegration> {
+    const encrypted = integrationData.credentials != null
+      ? { ...integrationData, credentials: encryptPosCredentials(integrationData.credentials as any) }
+      : integrationData;
     const [integration] = await db
       .update(posIntegrations)
-      .set({ ...integrationData, updatedAt: new Date() })
+      .set({ ...encrypted, updatedAt: new Date() })
       .where(eq(posIntegrations.id, id))
       .returning();
-    return integration;
+    return { ...integration, credentials: decryptPosCredentials(integration.credentials as any) };
   }
 
   async deletePosIntegration(id: string): Promise<void> {

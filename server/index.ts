@@ -128,4 +128,17 @@ app.use((req, res, next) => {
       log('Schedulers disabled (set ENABLE_SCHEDULERS=true to enable)');
     }
   });
+
+  // Graceful shutdown — Railway sends SIGTERM before replacing the container
+  process.on('SIGTERM', () => {
+    log('SIGTERM received — draining in-flight requests (10s timeout)');
+    server.close(() => {
+      log('Server closed cleanly');
+      process.exit(0);
+    });
+    setTimeout(() => {
+      log('Graceful shutdown timed out — forcing exit');
+      process.exit(1);
+    }, 10_000);
+  });
 })();

@@ -1,5 +1,7 @@
 import type { Express } from 'express';
 import { createServer, type Server } from 'http';
+import { db } from '../db';
+import { sql } from 'drizzle-orm';
 import { registerAuthRoutes } from './auth';
 import { registerObjectRoutes } from './objects';
 import { registerAnalyticsRoutes } from './analytics';
@@ -14,8 +16,13 @@ import { registerPlatformRoutes } from './platform';
 import { registerBarRoutes } from './bar';
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  app.get('/health', async (_req, res) => {
+    try {
+      await db.execute(sql`SELECT 1`);
+      res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    } catch (err) {
+      res.status(503).json({ status: 'error', error: 'Database unreachable' });
+    }
   });
 
   registerAuthRoutes(app);

@@ -185,17 +185,17 @@ function Router() {
                 <Route path="/hr/positions">{() => <HRGuard component={HRPositions} />}</Route>
                 <Route path="/hr/documents">{() => <HRGuard component={HRDocuments} />}</Route>
                 <Route path="/hr/invitations">{() => <HRGuard component={HRInvitations} />}</Route>
-                {/* Employee Self-Service Portal Routes */}
-                <Route path="/employee/dashboard" component={EmployeeDashboard} />
-                <Route path="/employee/documents" component={EmployeeDocuments} />
-                <Route path="/employee/handbook" component={EmployeeHandbook} />
-                <Route path="/employee/build-sheets" component={EmployeeBuildSheets} />
-                <Route path="/employee/messages" component={EmployeeMessages} />
-                <Route path="/employee/time-clock" component={EmployeeTimeClock} />
-                <Route path="/employee/timeclock" component={EmployeeTimeClock} />
-                <Route path="/employee/schedule" component={EmployeeSchedule} />
-                <Route path="/employee/time-off" component={EmployeeTimeOff} />
-                <Route path="/employee/settings" component={EmployeeSettings} />
+                {/* Employee Self-Service Portal Routes — require HR addon */}
+                <Route path="/employee/dashboard">{() => <HRGuard component={EmployeeDashboard} />}</Route>
+                <Route path="/employee/documents">{() => <HRGuard component={EmployeeDocuments} />}</Route>
+                <Route path="/employee/handbook">{() => <HRGuard component={EmployeeHandbook} />}</Route>
+                <Route path="/employee/build-sheets">{() => <HRGuard component={EmployeeBuildSheets} />}</Route>
+                <Route path="/employee/messages">{() => <HRGuard component={EmployeeMessages} />}</Route>
+                <Route path="/employee/time-clock">{() => <HRGuard component={EmployeeTimeClock} />}</Route>
+                <Route path="/employee/timeclock">{() => <HRGuard component={EmployeeTimeClock} />}</Route>
+                <Route path="/employee/schedule">{() => <HRGuard component={EmployeeSchedule} />}</Route>
+                <Route path="/employee/time-off">{() => <HRGuard component={EmployeeTimeOff} />}</Route>
+                <Route path="/employee/settings">{() => <HRGuard component={EmployeeSettings} />}</Route>
                 {/* Platform Admin Routes */}
                 <Route path="/platform/settings" component={PlatformSettings} />
                 <Route path="/login"><Redirect to="/" /></Route>

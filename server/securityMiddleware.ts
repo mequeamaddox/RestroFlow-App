@@ -127,7 +127,7 @@ export function sanitizeData(data: any): any {
 // Rate limiting configuration
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Limit each IP to 1000 requests per windowMs
+  max: 300,
   message: 'Too many requests, please try again later',
   standardHeaders: true,
   legacyHeaders: false,
@@ -157,7 +157,7 @@ export const securityHeaders = helmet({
       fontSrc: ["'self'", "https://fonts.gstatic.com", "https://*.clerk.com", "https://*.accounts.dev"],
       imgSrc: ["'self'", "data:", "https:", "https://img.clerk.com", "https://*.accounts.dev"],
       // clerk.com = live keys; accounts.dev = test keys; both must be allowed
-      scriptSrc: ["'self'", "'unsafe-eval'", "https://*.clerk.com", "https://*.clerk.services", "https://*.accounts.dev", "https://clerk.restroflowsolutions.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://*.clerk.com", "https://*.clerk.services", "https://*.accounts.dev", "https://clerk.restroflowsolutions.com"],
       connectSrc: ["'self'", "wss:", "https:", "https://*.clerk.com", "https://*.clerk.services", "https://*.accounts.dev", "https://clerk.restroflowsolutions.com"],
       frameSrc: ["'self'", "https://*.clerk.com", "https://*.clerk.services", "https://*.accounts.dev", "https://clerk.restroflowsolutions.com"],
       workerSrc: ["'self'", "blob:"],
