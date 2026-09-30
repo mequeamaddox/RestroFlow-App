@@ -27,18 +27,20 @@ export async function createCheckoutSession(params: {
   successUrl: string;
   cancelUrl: string;
   trialDays?: number;
+  priceIdOverride?: string;
 }): Promise<string> {
   if (!stripe) throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY.');
   const plan = PLANS[params.plan];
-  if (!plan.priceId) {
+  const priceId = params.priceIdOverride || plan.priceId;
+  if (!priceId) {
     throw new Error(
-      `Price ID for ${params.plan} is not configured. Set STRIPE_PRICE_${params.plan.toUpperCase()}.`
+      `Price ID for ${params.plan} is not configured. Set STRIPE_PRICE_${params.plan.toUpperCase()} or update it in Admin → Platform Settings.`
     );
   }
 
   const sessionParams: Stripe.Checkout.SessionCreateParams = {
     mode: 'subscription',
-    line_items: [{ price: plan.priceId, quantity: 1 }],
+    line_items: [{ price: priceId, quantity: 1 }],
     success_url: params.successUrl,
     cancel_url: params.cancelUrl,
     metadata: { userId: params.userId, plan: params.plan },

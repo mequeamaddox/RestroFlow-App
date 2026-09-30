@@ -229,8 +229,11 @@ export function registerBillingRoutes(app: Express): void {
       if (!user) return res.status(404).json({ message: 'User not found' });
       const host = `${req.protocol}://${req.get('host')}`;
 
-      // trial_days: server-only setting — never accept from client
-      const trialDaysSetting = await storage.getPlatformSetting('trial_days');
+      // trial_days and stripe_price_core: server-only settings — never accept from client
+      const [trialDaysSetting, stripePriceCoreDb] = await Promise.all([
+        storage.getPlatformSetting('trial_days'),
+        storage.getPlatformSetting('stripe_price_core'),
+      ]);
       const trialDays = trialDaysSetting !== null ? parseInt(trialDaysSetting) : undefined;
 
       const checkoutUrl = await createCheckoutSession({
@@ -238,6 +241,7 @@ export function registerBillingRoutes(app: Express): void {
         successUrl: `${host}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${host}/subscription`,
         ...(trialDays && trialDays > 0 ? { trialDays } : {}),
+        ...(stripePriceCoreDb ? { priceIdOverride: stripePriceCoreDb } : {}),
       });
       res.json({ checkoutUrl });
     } catch (error: any) {
