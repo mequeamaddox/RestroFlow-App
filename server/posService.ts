@@ -4,6 +4,9 @@ import { safeFetch } from "./lib/safeFetch";
 interface PosCredentials {
   accessToken?: string | null;
   apiKey?: string | null;
+  apiSecret?: string | null;
+  clientId?: string | null;
+  clientSecret?: string | null;
   [key: string]: any;
 }
 
@@ -22,12 +25,43 @@ export class PosService {
         sandbox: "https://ws-api-sandbox.toasttab.com",
         production: "https://ws-api.toasttab.com",
       },
-      revel: {
-        sandbox: "https://sandbox.revelup.com/api/v1",
-        production: "https://api.revelup.com/api/v1",
+      square: {
+        sandbox: "https://connect.squareuphis.com",
+        production: "https://connect.squareup.com",
+      },
+      lightspeed: {
+        sandbox: "https://api.lightspeedapp.com",
+        production: "https://api.lightspeedapp.com",
       },
     };
     return urls[provider]?.[environment] || "";
+  }
+
+  // ── Revel helpers ─────────────────────────────────────────────────────────
+  // Revel base URL is establishment-specific; merchantId holds the subdomain.
+  private revelBaseUrl(merchantId: string): string {
+    return `https://${merchantId}.revelup.com`;
+  }
+
+  private revelAuthHeader(credentials: PosCredentials): string {
+    const token = Buffer.from(`${credentials.apiKey}:${credentials.apiSecret}`).toString("base64");
+    return `Basic ${token}`;
+  }
+
+  // ── Toast helper ──────────────────────────────────────────────────────────
+  private async getToastToken(baseUrl: string, credentials: PosCredentials): Promise<string> {
+    const res = await safeFetch(`${baseUrl}/authentication/v1/authentication/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        clientId: credentials.clientId,
+        clientSecret: credentials.clientSecret,
+        userAuthType: "MACHINE",
+      }),
+    });
+    if (!res.ok) throw new Error(`Toast auth failed: ${res.status}`);
+    const data = await res.json();
+    return data.token?.accessToken ?? data.accessToken;
   }
 
   async testConnection(integrationId: string): Promise<boolean> {
@@ -51,8 +85,19 @@ export class PosService {
         case "clover":
           if (!credentials?.accessToken) return false;
           return await this.testCloverConnection(baseUrl, integration.merchantId, credentials.accessToken);
+        case "square":
+          if (!credentials?.accessToken) return false;
+          return await this.testSquareConnection(baseUrl, credentials);
+        case "toast":
+          if (!credentials?.clientId || !credentials?.clientSecret) return false;
+          return await this.testToastConnection(baseUrl, integration.merchantId, credentials);
+        case "lightspeed":
+          if (!credentials?.accessToken) return false;
+          return await this.testLightspeedConnection(baseUrl, integration.merchantId, credentials);
+        case "revel":
+          if (!credentials?.apiKey || !credentials?.apiSecret) return false;
+          return await this.testRevelConnection(integration.merchantId, credentials);
         default:
-          // For unsupported providers, return true if credentials exist
           return !!(credentials.accessToken || credentials.apiKey);
       }
     } catch (error) {
@@ -97,13 +142,13 @@ export class PosService {
       
       // Provider-specific credential validation
       if (integration.provider === "spoton") {
-        if (!credentials?.apiKey) {
-          throw new Error("API key is required for SpotOn menu sync");
-        }
+        if (!credentials?.apiKey) throw new Error("API key is required for SpotOn menu sync");
+      } else if (integration.provider === "toast") {
+        if (!credentials?.clientId || !credentials?.clientSecret) throw new Error("Client ID and secret required for Toast menu sync");
+      } else if (integration.provider === "revel") {
+        if (!credentials?.apiKey || !credentials?.apiSecret) throw new Error("API key and secret required for Revel menu sync");
       } else {
-        if (!credentials?.accessToken) {
-          throw new Error("Access token is required for menu sync");
-        }
+        if (!credentials?.accessToken) throw new Error("Access token is required for menu sync");
       }
 
       // Provider-specific menu sync
@@ -113,6 +158,18 @@ export class PosService {
           break;
         case "spoton":
           await this.syncSpotOnMenuItems(baseUrl, integration, credentials);
+          break;
+        case "square":
+          await this.syncSquareMenuItems(baseUrl, integration, credentials);
+          break;
+        case "toast":
+          await this.syncToastMenuItems(baseUrl, integration, credentials);
+          break;
+        case "lightspeed":
+          await this.syncLightspeedMenuItems(baseUrl, integration, credentials);
+          break;
+        case "revel":
+          await this.syncRevelMenuItems(integration, credentials);
           break;
         default:
           console.log(`Menu sync not implemented for provider: ${integration.provider}`);
@@ -132,13 +189,29 @@ export class PosService {
       const integration = await storage.getPosIntegration(integrationId);
       if (!integration) throw new Error("Integration not found");
 
-      // For now, only Clover is supported
-      if (integration.provider === "clover") {
-        const { cloverService } = await import("./cloverService");
-        return await cloverService.syncHistoricalOrders(integrationId);
-      }
+      const credentials = integration.credentials as PosCredentials;
+      const baseUrl = this.getBaseUrl(integration.provider, integration.environment ?? "production");
 
-      throw new Error(`Historical sales sync not yet supported for ${integration.provider}`);
+      switch (integration.provider) {
+        case "clover": {
+          const { cloverService } = await import("./cloverService");
+          return await cloverService.syncHistoricalOrders(integrationId);
+        }
+        case "square":
+          if (!credentials?.accessToken) throw new Error("Access token required for Square sync");
+          return await this.syncSquareHistoricalSales(baseUrl, integration, credentials);
+        case "toast":
+          if (!credentials?.clientId || !credentials?.clientSecret) throw new Error("Client ID and secret required for Toast sync");
+          return await this.syncToastHistoricalSales(baseUrl, integration, credentials);
+        case "lightspeed":
+          if (!credentials?.accessToken) throw new Error("Access token required for Lightspeed sync");
+          return await this.syncLightspeedHistoricalSales(baseUrl, integration, credentials);
+        case "revel":
+          if (!credentials?.apiKey || !credentials?.apiSecret) throw new Error("API key and secret required for Revel sync");
+          return await this.syncRevelHistoricalSales(integration, credentials);
+        default:
+          throw new Error(`Historical sales sync not yet supported for ${integration.provider}`);
+      }
     } catch (error) {
       console.error("Historical sales sync failed:", error);
       throw error;
@@ -187,6 +260,351 @@ export class PosService {
       });
     }
   }
+
+  // ── Square ────────────────────────────────────────────────────────────────
+
+  private async testSquareConnection(baseUrl: string, credentials: PosCredentials): Promise<boolean> {
+    const res = await safeFetch(`${baseUrl}/v2/merchants/me`, {
+      headers: { Authorization: `Bearer ${credentials.accessToken}` },
+    });
+    return res.ok;
+  }
+
+  private async syncSquareMenuItems(baseUrl: string, integration: any, credentials: PosCredentials): Promise<void> {
+    let cursor: string | undefined;
+    do {
+      const url = `${baseUrl}/v2/catalog/list?types=ITEM${cursor ? `&cursor=${cursor}` : ""}`;
+      const res = await safeFetch(url, { headers: { Authorization: `Bearer ${credentials.accessToken}` } });
+      const data = await res.json();
+      for (const obj of data.objects ?? []) {
+        if (obj.type !== "ITEM") continue;
+        const item = obj.item_data;
+        const variation = item?.variations?.[0]?.item_variation_data;
+        await storage.upsertPosMenuItem({
+          posItemId: obj.id,
+          posIntegrationId: integration.id,
+          name: item?.name ?? "",
+          price: variation?.price_money?.amount != null
+            ? (variation.price_money.amount / 100).toString() : null,
+          category: item?.category?.name ?? null,
+          sku: variation?.sku ?? null,
+        });
+      }
+      cursor = data.cursor;
+    } while (cursor);
+  }
+
+  private async syncSquareHistoricalSales(baseUrl: string, integration: any, credentials: PosCredentials): Promise<number> {
+    const startAt = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
+    let cursor: string | undefined;
+    let count = 0;
+    do {
+      const body: any = {
+        location_ids: [integration.merchantId],
+        query: {
+          filter: {
+            date_time_filter: { created_at: { start_at: startAt } },
+            state_filter: { states: ["COMPLETED"] },
+          },
+        },
+        limit: 500,
+      };
+      if (cursor) body.cursor = cursor;
+      const res = await safeFetch(`${baseUrl}/v2/orders/search`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${credentials.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      for (const order of data.orders ?? []) {
+        if (await storage.getPosSaleByOrderId(integration.id, order.id)) continue;
+        const total = order.total_money?.amount != null
+          ? (order.total_money.amount / 100).toString() : "0";
+        const posSale = await storage.createPosSale({
+          posOrderId: order.id,
+          posIntegrationId: integration.id,
+          locationId: integration.locationId,
+          total,
+          orderDate: new Date(order.created_at),
+          inventoryProcessed: false,
+        });
+        for (const li of order.line_items ?? []) {
+          await storage.createPosSaleItem({
+            posSaleId: posSale.id,
+            itemName: li.name,
+            quantity: Number(li.quantity ?? 1),
+            unitPrice: li.base_price_money?.amount != null
+              ? (li.base_price_money.amount / 100).toString() : "0",
+            totalPrice: li.total_money?.amount != null
+              ? (li.total_money.amount / 100).toString() : "0",
+          });
+        }
+        await this.processInventoryDeductions(posSale.id);
+        count++;
+      }
+      cursor = data.cursor;
+    } while (cursor);
+    return count;
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────────────────
+
+  private async testToastConnection(baseUrl: string, merchantId: string, credentials: PosCredentials): Promise<boolean> {
+    try {
+      const token = await this.getToastToken(baseUrl, credentials);
+      const res = await safeFetch(`${baseUrl}/restaurants/v1/restaurantInfo`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Toast-Restaurant-External-ID": merchantId,
+        },
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  private async syncToastMenuItems(baseUrl: string, integration: any, credentials: PosCredentials): Promise<void> {
+    const token = await this.getToastToken(baseUrl, credentials);
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Toast-Restaurant-External-ID": integration.merchantId,
+    };
+    const res = await safeFetch(`${baseUrl}/config/v2/menus`, { headers });
+    const menus = await res.json();
+    for (const menu of Array.isArray(menus) ? menus : []) {
+      for (const group of menu.menuGroups ?? []) {
+        for (const item of group.menuItems ?? []) {
+          await storage.upsertPosMenuItem({
+            posItemId: item.guid,
+            posIntegrationId: integration.id,
+            name: item.name ?? "",
+            price: item.price != null ? String(item.price) : null,
+            category: menu.name ?? null,
+            sku: null,
+          });
+          for (const mod of item.modifierGroups ?? []) {
+            for (const option of mod.modifiers ?? []) {
+              await storage.upsertPosMenuItem({
+                posItemId: option.guid,
+                posIntegrationId: integration.id,
+                name: option.name ?? "",
+                price: option.price != null ? String(option.price) : null,
+                category: `${menu.name ?? ""} — Modifier`,
+                sku: null,
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private async syncToastHistoricalSales(baseUrl: string, integration: any, credentials: PosCredentials): Promise<number> {
+    const token = await this.getToastToken(baseUrl, credentials);
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Toast-Restaurant-External-ID": integration.merchantId,
+    };
+    let count = 0;
+    const today = new Date();
+    for (let i = 89; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const businessDate = d.toISOString().slice(0, 10).replace(/-/g, "");
+      try {
+        const res = await safeFetch(`${baseUrl}/orders/v2/ordersBulk?businessDate=${businessDate}`, { headers });
+        if (!res.ok) continue;
+        const orders = await res.json();
+        for (const order of Array.isArray(orders) ? orders : []) {
+          if (await storage.getPosSaleByOrderId(integration.id, order.guid)) continue;
+          const total = String(order.totalAmount ?? 0);
+          const posSale = await storage.createPosSale({
+            posOrderId: order.guid,
+            posIntegrationId: integration.id,
+            locationId: integration.locationId,
+            total,
+            orderDate: new Date(order.openedDate ?? Date.now()),
+            inventoryProcessed: false,
+          });
+          for (const check of order.checks ?? []) {
+            for (const sel of check.selections ?? []) {
+              await storage.createPosSaleItem({
+                posSaleId: posSale.id,
+                itemName: sel.displayName ?? sel.itemGroup?.name ?? "Unknown",
+                quantity: sel.quantity ?? 1,
+                unitPrice: String(sel.price ?? 0),
+                totalPrice: String(sel.preDiscountPrice ?? 0),
+              });
+            }
+          }
+          await this.processInventoryDeductions(posSale.id);
+          count++;
+        }
+      } catch (dayErr) {
+        console.error(`Toast sync error for ${businessDate}:`, dayErr);
+      }
+    }
+    return count;
+  }
+
+  // ── Lightspeed ────────────────────────────────────────────────────────────
+
+  private async testLightspeedConnection(baseUrl: string, accountId: string, credentials: PosCredentials): Promise<boolean> {
+    const res = await safeFetch(`${baseUrl}/API/Account/${accountId}.json`, {
+      headers: { Authorization: `Bearer ${credentials.accessToken}` },
+    });
+    return res.ok;
+  }
+
+  private async syncLightspeedMenuItems(baseUrl: string, integration: any, credentials: PosCredentials): Promise<void> {
+    let offset = 0;
+    const limit = 100;
+    while (true) {
+      const res = await safeFetch(
+        `${baseUrl}/API/Account/${integration.merchantId}/Item.json?offset=${offset}&limit=${limit}`,
+        { headers: { Authorization: `Bearer ${credentials.accessToken}` } }
+      );
+      const data = await res.json();
+      const items = data.Item ?? (Array.isArray(data) ? data : []);
+      for (const item of items) {
+        await storage.upsertPosMenuItem({
+          posItemId: String(item.itemID),
+          posIntegrationId: integration.id,
+          name: item.description ?? item.systemSku ?? "",
+          price: item.Prices?.ItemPrice?.[0]?.amount ?? null,
+          category: item.Category?.name ?? null,
+          sku: item.customSku ?? item.systemSku ?? null,
+        });
+      }
+      if (items.length < limit) break;
+      offset += limit;
+    }
+  }
+
+  private async syncLightspeedHistoricalSales(baseUrl: string, integration: any, credentials: PosCredentials): Promise<number> {
+    const start = new Date(Date.now() - 90 * 24 * 3600 * 1000);
+    const startStr = start.toISOString().replace("T", " ").slice(0, 19);
+    let offset = 0;
+    const limit = 100;
+    let count = 0;
+    while (true) {
+      const res = await safeFetch(
+        `${baseUrl}/API/Account/${integration.merchantId}/Sale.json?timeStamp=%3E%2C${encodeURIComponent(startStr)}&offset=${offset}&limit=${limit}`,
+        { headers: { Authorization: `Bearer ${credentials.accessToken}` } }
+      );
+      const data = await res.json();
+      const sales = data.Sale ?? (Array.isArray(data) ? data : []);
+      for (const sale of sales) {
+        if (await storage.getPosSaleByOrderId(integration.id, String(sale.saleID))) continue;
+        const posSale = await storage.createPosSale({
+          posOrderId: String(sale.saleID),
+          posIntegrationId: integration.id,
+          locationId: integration.locationId,
+          total: String(sale.calcTotal ?? 0),
+          orderDate: new Date(sale.timeStamp ?? Date.now()),
+          inventoryProcessed: false,
+        });
+        for (const line of sale.SaleLines?.SaleLine ?? []) {
+          await storage.createPosSaleItem({
+            posSaleId: posSale.id,
+            itemName: line.Item?.description ?? String(line.itemID ?? "Item"),
+            quantity: Number(line.unitQuantity ?? 1),
+            unitPrice: String(line.unitPrice ?? 0),
+            totalPrice: String(line.calcTotal ?? 0),
+          });
+        }
+        await this.processInventoryDeductions(posSale.id);
+        count++;
+      }
+      if (sales.length < limit) break;
+      offset += limit;
+    }
+    return count;
+  }
+
+  // ── Revel ─────────────────────────────────────────────────────────────────
+
+  private async testRevelConnection(merchantId: string, credentials: PosCredentials): Promise<boolean> {
+    const res = await safeFetch(`${this.revelBaseUrl(merchantId)}/resources/Product/?limit=1&format=json`, {
+      headers: { Authorization: this.revelAuthHeader(credentials) },
+    });
+    return res.ok;
+  }
+
+  private async syncRevelMenuItems(integration: any, credentials: PosCredentials): Promise<void> {
+    const baseUrl = this.revelBaseUrl(integration.merchantId);
+    let offset = 0;
+    const limit = 100;
+    while (true) {
+      const res = await safeFetch(
+        `${baseUrl}/resources/Product/?format=json&limit=${limit}&offset=${offset}&active=true`,
+        { headers: { Authorization: this.revelAuthHeader(credentials) } }
+      );
+      const data = await res.json();
+      const products = data.objects ?? [];
+      for (const p of products) {
+        await storage.upsertPosMenuItem({
+          posItemId: String(p.id),
+          posIntegrationId: integration.id,
+          name: p.name ?? "",
+          price: p.price != null ? String(p.price) : null,
+          category: p.product_category ?? null,
+          sku: p.barcode ?? null,
+        });
+      }
+      if (products.length < limit) break;
+      offset += limit;
+    }
+  }
+
+  private async syncRevelHistoricalSales(integration: any, credentials: PosCredentials): Promise<number> {
+    const baseUrl = this.revelBaseUrl(integration.merchantId);
+    const start = new Date(Date.now() - 90 * 24 * 3600 * 1000);
+    const startStr = start.toISOString().replace("T", " ").slice(0, 19);
+    let offset = 0;
+    const limit = 100;
+    let count = 0;
+    while (true) {
+      const res = await safeFetch(
+        `${baseUrl}/resources/Order/?format=json&limit=${limit}&offset=${offset}&created_date__gte=${encodeURIComponent(startStr)}&status=3`,
+        { headers: { Authorization: this.revelAuthHeader(credentials) } }
+      );
+      const data = await res.json();
+      const orders = data.objects ?? [];
+      for (const order of orders) {
+        const orderId = String(order.id);
+        if (await storage.getPosSaleByOrderId(integration.id, orderId)) continue;
+        const posSale = await storage.createPosSale({
+          posOrderId: orderId,
+          posIntegrationId: integration.id,
+          locationId: integration.locationId,
+          total: String(order.sub_total ?? 0),
+          orderDate: new Date(order.created_date ?? Date.now()),
+          inventoryProcessed: false,
+        });
+        for (const item of order.orderitems ?? []) {
+          await storage.createPosSaleItem({
+            posSaleId: posSale.id,
+            itemName: item.product__name ?? item.name ?? "Item",
+            quantity: Number(item.quantity ?? 1),
+            unitPrice: String(item.price ?? 0),
+            totalPrice: String((Number(item.price) || 0) * (Number(item.quantity) || 1)),
+          });
+        }
+        await this.processInventoryDeductions(posSale.id);
+        count++;
+      }
+      if (orders.length < limit) break;
+      offset += limit;
+    }
+    return count;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   async pollSpotOnOrders(integrationId: string): Promise<{ ordersProcessed: number }> {
     const integration = await storage.getPosIntegration(integrationId);

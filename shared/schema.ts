@@ -956,7 +956,7 @@ export type InsertTeamResource = z.infer<typeof insertTeamResourceSchema>;
 
 
 // Universal POS Integration Tables
-export const posProviderEnum = pgEnum("pos_provider", ["clover", "spoton", "toast", "revel", "square", "lightspeed"]);
+export const posProviderEnum = pgEnum("pos_provider", ["clover", "spoton", "toast", "revel", "square", "lightspeed", "csv"]);
 
 export const posIntegrations = pgTable("pos_integrations", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
