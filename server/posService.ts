@@ -56,7 +56,7 @@ export class PosService {
       body: JSON.stringify({
         clientId: credentials.clientId,
         clientSecret: credentials.clientSecret,
-        userAuthType: "MACHINE",
+        userAccessType: "TOOLS_MACHINE_CLIENT",
       }),
     });
     if (!res.ok) throw new Error(`Toast auth failed: ${res.status}`);
