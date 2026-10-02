@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useLocation } from "wouter";
+import { useSignIn } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +11,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Mail, Lock } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-// Server-side authentication handled by Clerk
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -29,6 +29,7 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
   const [resetEmailSent, setResetEmailSent] = useState(false);
   const [, setLocation] = useLocation();
   const { refreshAuth } = useAuth();
+  const { signIn, isLoaded: isSignInLoaded } = useSignIn();
   
   // Server-side authentication function with session cookies
   const signIn = async (email: string, password: string) => {
@@ -89,8 +90,25 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
   };
 
   const handlePasswordReset = async () => {
-    // Password reset handled by Clerk
-    setError('Password reset is currently unavailable. Please contact your administrator.');
+    if (!isSignInLoaded || !signIn) return;
+    const email = form.getValues('email');
+    if (!email) {
+      setError('Enter your email address first, then click Forgot Password.');
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+      await signIn.create({
+        strategy: 'reset_password_email_code',
+        identifier: email.trim().toLowerCase(),
+      });
+      setResetEmailSent(true);
+    } catch (err: any) {
+      setError(err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || 'Could not send reset email. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

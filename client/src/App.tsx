@@ -65,6 +65,21 @@ function HRGuard({ component: Component }: { component: React.ComponentType }) {
   return <Component />;
 }
 
+function OnboardingGuard({
+  component: Component,
+  isOwner,
+  onboardingProgress,
+}: {
+  component: React.ComponentType;
+  isOwner: boolean;
+  onboardingProgress: { isCompleted: boolean } | undefined;
+}) {
+  if (isOwner && onboardingProgress && !onboardingProgress.isCompleted) {
+    return <Redirect to="/onboarding" />;
+  }
+  return <Component />;
+}
+
 // Paths an unsubscribed owner is still allowed to visit
 const SUBSCRIPTION_FREE_PATHS = ['/subscription', '/pricing', '/onboarding', '/settings', '/platform', '/login'];
 
@@ -144,21 +159,20 @@ function Router() {
                 
                 <Route path="/" component={() => {
                   if (user?.role === 'employee') return <EmployeeDashboard />;
-                  // Redirect owners to onboarding until they complete it
                   if (isOwner && onboardingProgress && !onboardingProgress.isCompleted) {
                     return <Redirect to="/onboarding" />;
                   }
                   return <Dashboard />;
                 }} />
-                <Route path="/inventory" component={Inventory} />
-                <Route path="/recipes" component={Recipes} />
-                <Route path="/beverage-menu" component={BeverageMenu} />
-                <Route path="/vendors" component={Vendors} />
-                <Route path="/purchase-orders" component={PurchaseOrders} />
-                <Route path="/waste-tracking" component={WasteTracking} />
-                <Route path="/analytics" component={Analytics} />
-                <Route path="/invoice-processing" component={InvoiceProcessing} />
-                <Route path="/multi-unit-dashboard" component={MultiUnitDashboard} />
+                <Route path="/inventory">{() => <OnboardingGuard component={Inventory} isOwner={isOwner} onboardingProgress={onboardingProgress} />}</Route>
+                <Route path="/recipes">{() => <OnboardingGuard component={Recipes} isOwner={isOwner} onboardingProgress={onboardingProgress} />}</Route>
+                <Route path="/beverage-menu">{() => <OnboardingGuard component={BeverageMenu} isOwner={isOwner} onboardingProgress={onboardingProgress} />}</Route>
+                <Route path="/vendors">{() => <OnboardingGuard component={Vendors} isOwner={isOwner} onboardingProgress={onboardingProgress} />}</Route>
+                <Route path="/purchase-orders">{() => <OnboardingGuard component={PurchaseOrders} isOwner={isOwner} onboardingProgress={onboardingProgress} />}</Route>
+                <Route path="/waste-tracking">{() => <OnboardingGuard component={WasteTracking} isOwner={isOwner} onboardingProgress={onboardingProgress} />}</Route>
+                <Route path="/analytics">{() => <OnboardingGuard component={Analytics} isOwner={isOwner} onboardingProgress={onboardingProgress} />}</Route>
+                <Route path="/invoice-processing">{() => <OnboardingGuard component={InvoiceProcessing} isOwner={isOwner} onboardingProgress={onboardingProgress} />}</Route>
+                <Route path="/multi-unit-dashboard">{() => <OnboardingGuard component={MultiUnitDashboard} isOwner={isOwner} onboardingProgress={onboardingProgress} />}</Route>
                 <Route path="/subscription" component={Subscription} />
                 <Route path="/pricing" component={Pricing} />
                 {/* Hidden owner-only prototype routes */}
