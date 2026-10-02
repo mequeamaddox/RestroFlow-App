@@ -13,20 +13,23 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "@/contexts/LocationContext";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { 
-  Settings, 
-  Plus, 
-  CheckCircle, 
-  XCircle, 
-  RefreshCw, 
-  Link2, 
+import {
+  Settings,
+  Plus,
+  CheckCircle,
+  XCircle,
+  RefreshCw,
+  Link2,
   DollarSign,
   Activity,
   AlertTriangle,
   CreditCard,
   Trash2,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Upload,
+  Download,
+  FileSpreadsheet
 } from "lucide-react";
 
 interface PosIntegration {
@@ -287,9 +290,17 @@ export function PosIntegrationTab() {
     credentials: {
       accessToken: "",
       apiKey: "",
+      clientId: "",
+      clientSecret: "",
+      apiSecret: "",
     },
     environment: "sandbox" as "sandbox" | "production",
   });
+
+  // CSV import state
+  const [csvImportType, setCsvImportType] = useState<"inventory" | "sales">("inventory");
+  const [csvText, setCsvText] = useState("");
+  const [csvImporting, setCsvImporting] = useState(false);
 
   // Fetch integrations for current location
   const { data: integrations = [], isLoading: integrationsLoading } = useQuery<PosIntegration[]>({
@@ -359,6 +370,9 @@ export function PosIntegrationTab() {
         credentials: {
           accessToken: "",
           apiKey: "",
+          clientId: "",
+          clientSecret: "",
+          apiSecret: "",
         },
         environment: "sandbox",
       });
@@ -570,6 +584,7 @@ export function PosIntegrationTab() {
       <Tabs defaultValue="integrations" className="w-full">
         <TabsList>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="csv">CSV Import/Export</TabsTrigger>
           <TabsTrigger value="mapping">Recipe Mapping</TabsTrigger>
           <TabsTrigger value="employees">Employees</TabsTrigger>
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
@@ -664,7 +679,8 @@ export function PosIntegrationTab() {
                   </Select>
                 </div>
               </div>
-              {newIntegration.provider === "spoton" ? (
+              {/* SpotOn */}
+              {newIntegration.provider === "spoton" && (
                 <div className="space-y-2">
                   <Label htmlFor="apiKey">API Key</Label>
                   <Textarea
@@ -672,70 +688,98 @@ export function PosIntegrationTab() {
                     placeholder="Enter your SpotOn API Key"
                     value={newIntegration.credentials.apiKey}
                     onChange={(e) =>
-                      setNewIntegration({
-                        ...newIntegration,
-                        credentials: { ...newIntegration.credentials, apiKey: e.target.value }
-                      })
+                      setNewIntegration({ ...newIntegration, credentials: { ...newIntegration.credentials, apiKey: e.target.value } })
                     }
                     data-testid="input-apikey"
                   />
-                  <p className="text-sm text-muted-foreground">
-                    Find your SpotOn API Key in your SpotOn Dashboard under Settings → API
-                  </p>
+                  <p className="text-xs text-muted-foreground">SpotOn Dashboard → Settings → API</p>
                 </div>
-              ) : newIntegration.provider === "square" ? (
+              )}
+              {/* Clover / Square / Lightspeed — single access token */}
+              {(newIntegration.provider === "clover" || newIntegration.provider === "square" || newIntegration.provider === "lightspeed") && (
                 <div className="space-y-2">
-                  <Label htmlFor="accessToken">Access Token</Label>
+                  <Label htmlFor="accessToken">
+                    {newIntegration.provider === "square" ? "Access Token" :
+                     newIntegration.provider === "lightspeed" ? "OAuth Access Token" :
+                     "Access Token"}
+                  </Label>
                   <Textarea
                     id="accessToken"
-                    placeholder="Enter your Square Access Token"
+                    placeholder={
+                      newIntegration.provider === "square"
+                        ? "sq0atp-... (from Square Developer Dashboard → Credentials)"
+                        : newIntegration.provider === "lightspeed"
+                        ? "OAuth access token from Lightspeed Developer Center"
+                        : "Clover API access token"
+                    }
                     value={newIntegration.credentials.accessToken}
                     onChange={(e) =>
-                      setNewIntegration({
-                        ...newIntegration,
-                        credentials: { ...newIntegration.credentials, accessToken: e.target.value }
-                      })
+                      setNewIntegration({ ...newIntegration, credentials: { ...newIntegration.credentials, accessToken: e.target.value } })
                     }
                     data-testid="input-accesstoken"
                   />
-                  <p className="text-sm text-muted-foreground">
-                    Find your Square Access Token in your Square Developer Dashboard under Applications → Credentials
-                  </p>
+                  {newIntegration.provider === "square" && (
+                    <p className="text-xs text-muted-foreground">Square Developer Dashboard → Applications → Credentials → Production Access Token. Location ID goes in the field above.</p>
+                  )}
+                  {newIntegration.provider === "lightspeed" && (
+                    <p className="text-xs text-muted-foreground">Lightspeed Developer Center → OAuth → generate a token. Account ID goes in the Business ID field above.</p>
+                  )}
                 </div>
-              ) : newIntegration.provider === "lightspeed" ? (
-                <div className="space-y-2">
-                  <Label htmlFor="accessToken">API Key</Label>
-                  <Textarea
-                    id="accessToken"
-                    placeholder="Enter your Lightspeed API Key"
-                    value={newIntegration.credentials.accessToken}
-                    onChange={(e) =>
-                      setNewIntegration({
-                        ...newIntegration,
-                        credentials: { ...newIntegration.credentials, accessToken: e.target.value }
-                      })
-                    }
-                    data-testid="input-accesstoken"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Find your Lightspeed API Key in your Lightspeed account under Settings → API Access
-                  </p>
+              )}
+              {/* Toast — clientId + clientSecret */}
+              {newIntegration.provider === "toast" && (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="clientId">Client ID</Label>
+                    <Input
+                      id="clientId"
+                      placeholder="Toast API Client ID"
+                      value={newIntegration.credentials.clientId}
+                      onChange={(e) =>
+                        setNewIntegration({ ...newIntegration, credentials: { ...newIntegration.credentials, clientId: e.target.value } })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="clientSecret">Client Secret</Label>
+                    <Textarea
+                      id="clientSecret"
+                      placeholder="Toast API Client Secret"
+                      value={newIntegration.credentials.clientSecret}
+                      onChange={(e) =>
+                        setNewIntegration({ ...newIntegration, credentials: { ...newIntegration.credentials, clientSecret: e.target.value } })
+                      }
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Toast Admin → Integrations → API Access. Restaurant GUID goes in Merchant ID above.</p>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label htmlFor="accessToken">Access Token</Label>
-                  <Textarea
-                    id="accessToken"
-                    placeholder="Enter your POS API access token"
-                    value={newIntegration.credentials.accessToken}
-                    onChange={(e) =>
-                      setNewIntegration({
-                        ...newIntegration,
-                        credentials: { ...newIntegration.credentials, accessToken: e.target.value }
-                      })
-                    }
-                    data-testid="input-accesstoken"
-                  />
+              )}
+              {/* Revel — apiKey + apiSecret */}
+              {newIntegration.provider === "revel" && (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="revelApiKey">API Key</Label>
+                    <Input
+                      id="revelApiKey"
+                      placeholder="Revel API Key"
+                      value={newIntegration.credentials.apiKey}
+                      onChange={(e) =>
+                        setNewIntegration({ ...newIntegration, credentials: { ...newIntegration.credentials, apiKey: e.target.value } })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="revelApiSecret">API Secret</Label>
+                    <Textarea
+                      id="revelApiSecret"
+                      placeholder="Revel API Secret"
+                      value={newIntegration.credentials.apiSecret}
+                      onChange={(e) =>
+                        setNewIntegration({ ...newIntegration, credentials: { ...newIntegration.credentials, apiSecret: e.target.value } })
+                      }
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Revel Dashboard → Settings → API → Generate credentials. Merchant ID = your establishment subdomain (e.g. <em>myrestaurant</em> for myrestaurant.revelup.com).</p>
                 </div>
               )}
               <Button
@@ -743,9 +787,10 @@ export function PosIntegrationTab() {
                 disabled={
                   !newIntegration.name ||
                   !newIntegration.merchantId ||
-                  (newIntegration.provider === "spoton"
-                    ? !newIntegration.credentials.apiKey
-                    : !newIntegration.credentials.accessToken) ||
+                  (newIntegration.provider === "spoton" ? !newIntegration.credentials.apiKey :
+                   newIntegration.provider === "toast" ? (!newIntegration.credentials.clientId || !newIntegration.credentials.clientSecret) :
+                   newIntegration.provider === "revel" ? (!newIntegration.credentials.apiKey || !newIntegration.credentials.apiSecret) :
+                   !newIntegration.credentials.accessToken) ||
                   createIntegrationMutation.isPending
                 }
                 data-testid="button-create-integration"
@@ -887,6 +932,171 @@ export function PosIntegrationTab() {
               ))
             )}
           </div>
+        </TabsContent>
+
+        {/* ── CSV Import / Export ─────────────────────────────────────────── */}
+        <TabsContent value="csv" className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Export */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Download className="h-5 w-5" />
+                  Export Data
+                </CardTitle>
+                <CardDescription>Download your current data as CSV files</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    const url = selectedLocation?.id
+                      ? `/api/csv/export-inventory?locationId=${selectedLocation.id}`
+                      : "/api/csv/export-inventory";
+                    window.location.href = url;
+                  }}
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Export Inventory to CSV
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    const url = selectedLocation?.id
+                      ? `/api/csv/export-sales?locationId=${selectedLocation.id}`
+                      : "/api/csv/export-sales";
+                    window.location.href = url;
+                  }}
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Export Sales to CSV
+                </Button>
+                <div className="border-t pt-3">
+                  <p className="text-sm font-medium mb-2">Download Templates</p>
+                  <div className="space-y-2">
+                    <Button variant="ghost" size="sm" className="w-full justify-start text-xs"
+                      onClick={() => { window.location.href = "/api/csv/template-inventory"; }}>
+                      Inventory Template (.csv)
+                    </Button>
+                    <Button variant="ghost" size="sm" className="w-full justify-start text-xs"
+                      onClick={() => { window.location.href = "/api/csv/template-sales"; }}>
+                      Sales Template (.csv)
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Import */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Upload className="h-5 w-5" />
+                  Import Data
+                </CardTitle>
+                <CardDescription>Paste or upload CSV data to import into RestroFlow</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Import Type</Label>
+                  <Select
+                    value={csvImportType}
+                    onValueChange={(v: "inventory" | "sales") => setCsvImportType(v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="inventory">Inventory Items</SelectItem>
+                      <SelectItem value="sales">Historical Sales</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>CSV Data</Label>
+                  <Textarea
+                    placeholder={
+                      csvImportType === "inventory"
+                        ? "Paste CSV here — columns: name, category, unit, quantity, cost_per_unit, min_quantity, supplier"
+                        : "Paste CSV here — columns: date, order_id, item_name, quantity, unit_price, total"
+                    }
+                    value={csvText}
+                    onChange={(e) => setCsvText(e.target.value)}
+                    rows={8}
+                    className="font-mono text-xs"
+                  />
+                </div>
+                <Button
+                  className="w-full"
+                  disabled={!csvText.trim() || !selectedLocation?.id || csvImporting}
+                  onClick={async () => {
+                    if (!selectedLocation?.id) return;
+                    setCsvImporting(true);
+                    try {
+                      const endpoint = csvImportType === "inventory"
+                        ? "/api/csv/import-inventory"
+                        : "/api/csv/import-sales";
+                      const res = await fetch(endpoint, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ csv: csvText, locationId: selectedLocation.id }),
+                        credentials: "include",
+                      });
+                      const result = await res.json();
+                      if (!res.ok) {
+                        toast({ title: "Import failed", description: result.message, variant: "destructive" });
+                      } else {
+                        const detail = csvImportType === "inventory"
+                          ? `Created: ${result.created}, Updated: ${result.updated}`
+                          : `Orders imported: ${result.ordersCreated}`;
+                        toast({ title: "Import complete", description: detail });
+                        if (result.errors?.length) {
+                          console.warn("CSV import errors:", result.errors);
+                        }
+                        setCsvText("");
+                        queryClient.invalidateQueries({ queryKey: ["/api/inventory"] });
+                        queryClient.invalidateQueries({ queryKey: ["/api/pos/sales"] });
+                      }
+                    } catch (err) {
+                      toast({ title: "Import failed", description: "Network error", variant: "destructive" });
+                    } finally {
+                      setCsvImporting(false);
+                    }
+                  }}
+                >
+                  {csvImporting ? (
+                    <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Importing...</>
+                  ) : (
+                    <><Upload className="h-4 w-4 mr-2" /> Import {csvImportType === "inventory" ? "Inventory" : "Sales"}</>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>CSV Format Guide</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              <div>
+                <p className="font-medium mb-1">Inventory CSV columns:</p>
+                <code className="text-xs bg-muted px-2 py-1 rounded block">
+                  name*, category, unit*, quantity*, cost_per_unit, min_quantity, supplier
+                </code>
+                <p className="text-xs text-muted-foreground mt-1">* required. Existing items are updated by name; new items are created.</p>
+              </div>
+              <div>
+                <p className="font-medium mb-1">Sales CSV columns:</p>
+                <code className="text-xs bg-muted px-2 py-1 rounded block">
+                  date* (YYYY-MM-DD), order_id, item_name*, quantity*, unit_price*, total*
+                </code>
+                <p className="text-xs text-muted-foreground mt-1">* required. Rows with the same order_id are grouped into one sale. Duplicate order_ids are skipped.</p>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="mapping" className="space-y-6">

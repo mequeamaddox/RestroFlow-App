@@ -14,6 +14,7 @@ import { registerBillingRoutes } from './billing';
 import { registerInvoiceRoutes } from './invoices';
 import { registerPlatformRoutes } from './platform';
 import { registerBarRoutes } from './bar';
+import { registerCsvRoutes } from './csv';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/health', async (_req, res) => {
@@ -37,6 +38,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerBillingRoutes(app);
   registerPlatformRoutes(app);
   registerBarRoutes(app);
+  registerCsvRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;
