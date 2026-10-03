@@ -23,25 +23,35 @@ import { colors } from '../lib/colors';
 
 interface PurchaseOrder {
   id: string;
-  orderNumber?: string;
-  vendorName?: string;
-  vendor?: { name: string };
-  status: 'pending' | 'ordered' | 'received' | 'cancelled';
-  total?: string;
-  expectedDate?: string;
+  orderNumber?: string | null;
+  vendor?: { name: string } | null;
+  status: 'draft' | 'sent' | 'confirmed' | 'delivered' | 'cancelled';
+  totalAmount?: string | null;
+  expectedDeliveryDate?: string | null;
   createdAt: string;
-  notes?: string;
+  notes?: string | null;
 }
 
 interface POItem {
   id: string;
   inventoryItemId: string;
-  itemName?: string;
-  inventoryItem?: { name: string; barcode?: string };
+  inventoryItem?: { name: string; unit: string; barcode?: string | null };
   quantity: string;
-  unit: string;
   unitCost?: string;
-  receivedQuantity?: string;
+}
+
+const RECEIVABLE: PurchaseOrder['status'][] = ['draft', 'sent', 'confirmed'];
+
+// The server's PUT nulls notes/expectedDeliveryDate when omitted, so echo them back.
+function markDelivered(order: PurchaseOrder) {
+  return apiFetch(`/api/purchase-orders/${order.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      status: 'delivered',
+      notes: order.notes ?? null,
+      expectedDeliveryDate: order.expectedDeliveryDate ?? '',
+    }),
+  });
 }
 
 type POStackParamList = {
@@ -68,9 +78,10 @@ export function PurchaseOrdersNavigator() {
 
 function statusColor(s: string) {
   switch (s) {
-    case 'received': return colors.success;
-    case 'pending': return colors.warning;
-    case 'ordered': return colors.accent;
+    case 'delivered': return colors.success;
+    case 'draft': return colors.muted;
+    case 'sent': return colors.warning;
+    case 'confirmed': return colors.accent;
     case 'cancelled': return colors.muted;
     default: return colors.muted;
   }
@@ -128,7 +139,7 @@ function POListScreen() {
             </View>
           }
           renderItem={({ item: order }) => {
-            const vendor = order.vendor?.name ?? order.vendorName ?? 'Unknown Vendor';
+            const vendor = order.vendor?.name ?? 'Unknown Vendor';
             const date = new Date(order.createdAt).toLocaleDateString();
             return (
               <TouchableOpacity
@@ -143,9 +154,9 @@ function POListScreen() {
                   </Text>
                 </View>
                 <View style={styles.orderRight}>
-                  {order.total && (
+                  {!!order.totalAmount && (
                     <Text style={styles.orderTotal}>
-                      ${parseFloat(order.total).toFixed(2)}
+                      ${parseFloat(order.totalAmount).toFixed(2)}
                     </Text>
                   )}
                   <View style={[styles.statusBadge, { backgroundColor: statusColor(order.status) + '22' }]}>
@@ -187,13 +198,10 @@ function PODetailScreen() {
   });
 
   const receiveMutation = useMutation({
-    mutationFn: () =>
-      apiFetch(`/api/purchase-orders/${orderId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'received' }),
-      }),
+    mutationFn: () => markDelivered(order!),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['purchase-orders', locationId] });
+      qc.invalidateQueries({ queryKey: ['inventory', locationId] });
       Alert.alert('Done', 'Order marked as received.');
       navigation.goBack();
     },
@@ -208,8 +216,8 @@ function PODetailScreen() {
     );
   }
 
-  const vendor = order.vendor?.name ?? order.vendorName ?? 'Unknown Vendor';
-  const canReceive = order.status === 'pending' || order.status === 'ordered';
+  const vendor = order.vendor?.name ?? 'Unknown Vendor';
+  const canReceive = RECEIVABLE.includes(order.status);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -228,8 +236,8 @@ function PODetailScreen() {
             ['Status', order.status.charAt(0).toUpperCase() + order.status.slice(1)],
             ['Order #', order.orderNumber ?? order.id.slice(0, 8).toUpperCase()],
             ['Date', new Date(order.createdAt).toLocaleDateString()],
-            ...(order.total ? [['Total', `$${parseFloat(order.total).toFixed(2)}`]] : []),
-            ...(order.expectedDate ? [['Expected', new Date(order.expectedDate).toLocaleDateString()]] : []),
+            ...(order.totalAmount ? [['Total', `$${parseFloat(order.totalAmount).toFixed(2)}`]] : []),
+            ...(order.expectedDeliveryDate ? [['Expected', new Date(order.expectedDeliveryDate).toLocaleDateString()]] : []),
           ].map(([label, value]) => (
             <View key={label} style={styles.infoRow}>
               <Text style={styles.infoLabel}>{label}</Text>
@@ -251,7 +259,7 @@ function PODetailScreen() {
             keyExtractor={i => i.id}
             style={{ flex: 1 }}
             renderItem={({ item }) => {
-              const name = item.inventoryItem?.name ?? item.itemName ?? 'Unknown';
+              const name = item.inventoryItem?.name ?? 'Unknown';
               return (
                 <View style={styles.lineItem}>
                   <View style={{ flex: 1 }}>
@@ -261,7 +269,7 @@ function PODetailScreen() {
                     )}
                   </View>
                   <Text style={styles.lineItemQty}>
-                    {parseFloat(item.quantity).toFixed(2)} {item.unit}
+                    {parseFloat(item.quantity).toFixed(2)} {item.inventoryItem?.unit ?? ''}
                   </Text>
                 </View>
               );
@@ -321,15 +329,22 @@ function POScannerScreen() {
     queryFn: () => apiFetch<POItem[]>(`/api/purchase-orders/${orderId}/items`),
     enabled: !!orderId,
   });
+  const { data: orders = [] } = useQuery<PurchaseOrder[]>({
+    queryKey: ['purchase-orders', locationId],
+    queryFn: () => apiFetch<PurchaseOrder[]>(`/api/purchase-orders?locationId=${locationId}`),
+    enabled: !!locationId,
+  });
+  const order = orders.find(o => o.id === orderId);
 
   const receiveMutation = useMutation({
-    mutationFn: () =>
-      apiFetch(`/api/purchase-orders/${orderId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'received' }),
-      }),
+    mutationFn: () => {
+      if (!order) throw new Error('Order details are still loading. Try again in a moment.');
+      return markDelivered(order);
+    },
+    onError: (err: Error) => Alert.alert('Error', err.message),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['purchase-orders', locationId] });
+      qc.invalidateQueries({ queryKey: ['inventory', locationId] });
       Alert.alert('Order Received', 'All items checked off. Order marked as received.', [
         { text: 'Done', onPress: () => navigation.navigate('POList') },
       ]);

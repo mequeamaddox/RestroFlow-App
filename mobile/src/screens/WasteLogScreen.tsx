@@ -25,6 +25,7 @@ interface InventoryItem {
   name: string;
   displayName?: string;
   unit: string;
+  costPerUnit?: string | null;
 }
 
 interface WasteEntry {
@@ -39,7 +40,15 @@ interface WasteEntry {
   notes?: string;
 }
 
-const REASONS = ['Spoilage', 'Spill', 'Prep Waste', 'Expired', 'Overcooking', 'Other'];
+// Values must match the server's waste_reason enum.
+const REASONS = [
+  { label: 'Spoiled', value: 'spoiled' },
+  { label: 'Damaged / Spill', value: 'damaged' },
+  { label: 'Prep Error', value: 'preparation_error' },
+  { label: 'Overproduction', value: 'overproduction' },
+  { label: 'Expired', value: 'expired' },
+  { label: 'Other', value: 'other' },
+] as const;
 
 export function WasteLogScreen() {
   const insets = useSafeAreaInsets();
@@ -53,7 +62,7 @@ export function WasteLogScreen() {
   // Form state
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [quantity, setQuantity] = useState('');
-  const [reason, setReason] = useState(REASONS[0]);
+  const [reason, setReason] = useState<string>(REASONS[0].value);
   const [notes, setNotes] = useState('');
 
   const { data: items = [] } = useQuery<InventoryItem[]>({
@@ -63,8 +72,8 @@ export function WasteLogScreen() {
   });
 
   const { data: entries = [], isLoading, refetch } = useQuery<WasteEntry[]>({
-    queryKey: ['waste-entries', locationId],
-    queryFn: () => apiFetch<WasteEntry[]>(`/api/waste-entries?locationId=${locationId}`),
+    queryKey: ['waste', locationId],
+    queryFn: () => apiFetch<WasteEntry[]>(`/api/waste?locationId=${locationId}`),
     enabled: !!locationId,
   });
 
@@ -76,22 +85,24 @@ export function WasteLogScreen() {
 
   const logMutation = useMutation({
     mutationFn: () =>
-      apiFetch('/api/waste-entries', {
+      apiFetch('/api/waste', {
         method: 'POST',
         body: JSON.stringify({
           inventoryItemId: selectedItem!.id,
-          quantity,
+          quantity: String(parseFloat(quantity)),
           unit: selectedItem!.unit,
-          reason: reason.toLowerCase().replace(' ', '_'),
+          reason,
+          cost: (parseFloat(quantity) * parseFloat(selectedItem!.costPerUnit || '0')).toFixed(2),
           locationId,
           notes: notes.trim() || undefined,
         }),
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['waste-entries', locationId] });
+      qc.invalidateQueries({ queryKey: ['waste', locationId] });
+      qc.invalidateQueries({ queryKey: ['inventory', locationId] });
       setSelectedItem(null);
       setQuantity('');
-      setReason(REASONS[0]);
+      setReason(REASONS[0].value);
       setNotes('');
       Alert.alert('Logged', 'Waste entry recorded.');
       setTab('history');
@@ -185,11 +196,11 @@ export function WasteLogScreen() {
             <View style={styles.reasonGrid}>
               {REASONS.map(r => (
                 <TouchableOpacity
-                  key={r}
-                  style={[styles.reasonChip, reason === r && styles.reasonChipActive]}
-                  onPress={() => setReason(r)}
+                  key={r.value}
+                  style={[styles.reasonChip, reason === r.value && styles.reasonChipActive]}
+                  onPress={() => setReason(r.value)}
                 >
-                  <Text style={[styles.reasonText, reason === r && styles.reasonTextActive]}>{r}</Text>
+                  <Text style={[styles.reasonText, reason === r.value && styles.reasonTextActive]}>{r.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>

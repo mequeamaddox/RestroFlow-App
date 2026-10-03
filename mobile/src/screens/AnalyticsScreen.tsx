@@ -17,18 +17,17 @@ import { StatTile } from '../components/StatTile';
 import { colors } from '../lib/colors';
 
 interface KPIs {
-  totalRevenue: number;
-  totalCost: number;
-  grossProfit: number;
-  foodCostPct: number;
-  laborCostPct: number;
+  grossMargin: number;
+  foodCostPercentage: number;
+  avgOrderValue: number;
+  customerCount: number;
 }
 
 interface DailyPnL {
   date: string;
   revenue: number;
-  cost: number;
-  profit: number;
+  cogs: number;
+  grossProfit: number;
 }
 
 type Range = '7d' | '30d' | '90d';
@@ -83,19 +82,23 @@ export function AnalyticsScreen() {
   }
 
   const isLoading = kpisLoading || pnlLoading;
+  const totals = pnl.reduce(
+    (acc, d) => ({ revenue: acc.revenue + d.revenue, cogs: acc.cogs + d.cogs, profit: acc.profit + d.grossProfit }),
+    { revenue: 0, cogs: 0, profit: 0 },
+  );
 
   const maxRevenue = Math.max(...pnl.map(d => d.revenue ?? 0), 1);
-  const maxCost = Math.max(...pnl.map(d => d.cost ?? 0), 1);
+  const maxCost = Math.max(...pnl.map(d => d.cogs ?? 0), 1);
 
-  const foodCostColor = kpis?.foodCostPct !== undefined
-    ? kpis.foodCostPct > 35 ? colors.danger
-    : kpis.foodCostPct > 28 ? colors.warning
+  const foodCostColor = kpis?.foodCostPercentage !== undefined
+    ? kpis.foodCostPercentage > 35 ? colors.danger
+    : kpis.foodCostPercentage > 28 ? colors.warning
     : colors.success
     : colors.text;
 
   // Last 14 days for chart (or all if fewer)
   const chartData = pnl.slice(-14);
-  const chartMax = Math.max(...chartData.map(d => Math.max(d.revenue ?? 0, d.cost ?? 0)), 1);
+  const chartMax = Math.max(...chartData.map(d => Math.max(d.revenue ?? 0, d.cogs ?? 0)), 1);
   const BAR_W = Math.max(8, Math.floor((BAR_AREA_W - chartData.length * 4) / chartData.length));
 
   return (
@@ -134,21 +137,21 @@ export function AnalyticsScreen() {
             {/* KPI tiles */}
             <Text style={styles.sectionTitle}>Key Metrics</Text>
             <View style={styles.kpiGrid}>
-              <StatTile label="Revenue" value={fmt(kpis?.totalRevenue, true)} color={colors.success} />
-              <StatTile label="Total Cost" value={fmt(kpis?.totalCost, true)} color={colors.danger} />
+              <StatTile label="Revenue" value={fmt(totals.revenue, true)} color={colors.success} />
+              <StatTile label="Cost of Goods" value={fmt(totals.cogs, true)} color={colors.danger} />
             </View>
             <View style={[styles.kpiGrid, { marginTop: 10 }]}>
-              <StatTile label="Gross Profit" value={fmt(kpis?.grossProfit, true)} color={colors.accent} />
-              <StatTile label="Food Cost %" value={fmt(kpis?.foodCostPct)} color={foodCostColor} />
+              <StatTile label="Gross Profit" value={fmt(totals.profit, true)} color={colors.accent} />
+              <StatTile label="Food Cost %" value={fmt(kpis?.foodCostPercentage)} color={foodCostColor} />
             </View>
 
             {/* Food cost gauge */}
-            {kpis?.foodCostPct !== undefined && (
+            {kpis?.foodCostPercentage !== undefined && (
               <View style={styles.gaugeCard}>
                 <View style={styles.gaugeHeader}>
                   <Text style={styles.gaugeLabel}>Food Cost %</Text>
                   <Text style={[styles.gaugeValue, { color: foodCostColor }]}>
-                    {kpis.foodCostPct.toFixed(1)}%
+                    {kpis.foodCostPercentage.toFixed(1)}%
                   </Text>
                 </View>
                 <View style={styles.gaugeTrack}>
@@ -156,7 +159,7 @@ export function AnalyticsScreen() {
                     style={[
                       styles.gaugeFill,
                       {
-                        width: `${Math.min(100, kpis.foodCostPct / 40 * 100)}%`,
+                        width: `${Math.min(100, kpis.foodCostPercentage / 40 * 100)}%`,
                         backgroundColor: foodCostColor,
                       },
                     ]}
@@ -195,7 +198,7 @@ export function AnalyticsScreen() {
                     <View style={styles.chartArea}>
                       {chartData.map((d, i) => {
                         const revH = Math.round(((d.revenue ?? 0) / chartMax) * 80);
-                        const costH = Math.round(((d.cost ?? 0) / chartMax) * 80);
+                        const costH = Math.round(((d.cogs ?? 0) / chartMax) * 80);
                         const label = new Date(d.date).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
                         return (
                           <View key={i} style={[styles.barGroup, { width: BAR_W * 2 + 6 }]}>
@@ -233,10 +236,10 @@ export function AnalyticsScreen() {
                         ${(d.revenue ?? 0).toFixed(0)}
                       </Text>
                       <Text style={[styles.tableCell, { textAlign: 'right', color: colors.danger }]}>
-                        ${(d.cost ?? 0).toFixed(0)}
+                        ${(d.cogs ?? 0).toFixed(0)}
                       </Text>
-                      <Text style={[styles.tableCell, { textAlign: 'right', color: (d.profit ?? 0) >= 0 ? colors.success : colors.danger }]}>
-                        ${(d.profit ?? 0).toFixed(0)}
+                      <Text style={[styles.tableCell, { textAlign: 'right', color: (d.grossProfit ?? 0) >= 0 ? colors.success : colors.danger }]}>
+                        ${(d.grossProfit ?? 0).toFixed(0)}
                       </Text>
                     </View>
                   ))}

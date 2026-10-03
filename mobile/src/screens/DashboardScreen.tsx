@@ -20,11 +20,16 @@ import { colors } from '../lib/colors';
 import type { OwnerTabParamList } from '../navigation/OwnerTabNavigator';
 
 interface KPIs {
-  totalRevenue: number;
-  totalCost: number;
+  grossMargin: number;
+  foodCostPercentage: number;
+  avgOrderValue: number;
+  customerCount: number;
+}
+
+interface DailyPnL {
+  revenue: number;
+  cogs: number;
   grossProfit: number;
-  foodCostPct: number;
-  laborCostPct: number;
 }
 
 function fmt(n: number | undefined, currency = false) {
@@ -41,11 +46,24 @@ export function DashboardScreen() {
   const navigation = useNavigation<BottomTabNavigationProp<OwnerTabParamList>>();
   const [refreshing, setRefreshing] = useState(false);
 
-  const { data: kpis, isLoading, error, refetch } = useQuery<KPIs>({
-    queryKey: ['kpis', locationId],
+  const kpiQuery = useQuery<KPIs>({
+    queryKey: ['kpis', locationId, '30d'],
     queryFn: () => apiFetch<KPIs>(`/api/business-intelligence/kpis?location=${locationId}&range=30d`),
     enabled: !!locationId,
   });
+  const pnlQuery = useQuery<DailyPnL[]>({
+    queryKey: ['daily-pnl', locationId, '30d'],
+    queryFn: () => apiFetch<DailyPnL[]>(`/api/business-intelligence/daily-pnl?location=${locationId}&range=30d`),
+    enabled: !!locationId,
+  });
+  const kpis = kpiQuery.data;
+  const isLoading = kpiQuery.isLoading || pnlQuery.isLoading;
+  const error = kpiQuery.error ?? pnlQuery.error;
+  const refetch = () => Promise.all([kpiQuery.refetch(), pnlQuery.refetch()]);
+  const totals = (pnlQuery.data ?? []).reduce(
+    (acc, d) => ({ revenue: acc.revenue + d.revenue, cogs: acc.cogs + d.cogs, profit: acc.profit + d.grossProfit }),
+    { revenue: 0, cogs: 0, profit: 0 },
+  );
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -57,10 +75,10 @@ export function DashboardScreen() {
   }
 
   const foodCostColor =
-    kpis?.foodCostPct !== undefined
-      ? kpis.foodCostPct > 35
+    kpis?.foodCostPercentage !== undefined
+      ? kpis.foodCostPercentage > 35
         ? colors.danger
-        : kpis.foodCostPct > 28
+        : kpis.foodCostPercentage > 28
         ? colors.warning
         : colors.success
       : colors.text;
@@ -93,7 +111,7 @@ export function DashboardScreen() {
           </View>
         ) : error ? (
           <View style={styles.errorBox}>
-            <Text style={styles.errorText}>Failed to load KPIs</Text>
+            <Text style={styles.errorText}>Failed to load KPIs{error instanceof Error ? `: ${error.message}` : ''}</Text>
             <TouchableOpacity onPress={() => refetch()} style={styles.retryBtn}>
               <Text style={styles.retryText}>Retry</Text>
             </TouchableOpacity>
@@ -103,34 +121,34 @@ export function DashboardScreen() {
             <View style={styles.kpiRow}>
               <StatTile
                 label="Revenue"
-                value={fmt(kpis?.totalRevenue, true)}
+                value={fmt(pnlQuery.data ? totals.revenue : undefined, true)}
                 color={colors.success}
               />
               <View style={{ width: 10 }} />
               <StatTile
-                label="Total Cost"
-                value={fmt(kpis?.totalCost, true)}
+                label="Cost of Goods"
+                value={fmt(pnlQuery.data ? totals.cogs : undefined, true)}
                 color={colors.danger}
               />
             </View>
             <View style={[styles.kpiRow, { marginTop: 10 }]}>
               <StatTile
                 label="Gross Profit"
-                value={fmt(kpis?.grossProfit, true)}
+                value={fmt(pnlQuery.data ? totals.profit : undefined, true)}
                 color={colors.accent}
               />
               <View style={{ width: 10 }} />
               <StatTile
                 label="Food Cost %"
-                value={fmt(kpis?.foodCostPct)}
+                value={fmt(kpis?.foodCostPercentage)}
                 color={foodCostColor}
               />
             </View>
             <View style={[styles.kpiRow, { marginTop: 10 }]}>
               <StatTile
-                label="Labor Cost %"
-                value={fmt(kpis?.laborCostPct)}
-                color={colors.warning}
+                label="Gross Margin"
+                value={fmt(kpis?.grossMargin)}
+                color={colors.success}
               />
               <View style={{ width: 10, flex: 1 }} />
             </View>

@@ -29,13 +29,12 @@ interface InventoryItem {
   id: string;
   name: string;
   displayName?: string;
-  category?: string;
+  category?: { id: string; name: string } | null;
+  vendor?: { id: string; name: string } | null;
   unit: string;
   quantity: string;
   costPerUnit: string;
-  barcode?: string;
-  supplier?: string;
-  minQuantity?: string;
+  barcode?: string | null;
   reorderLevel?: string;
 }
 
@@ -82,7 +81,7 @@ function InventoryListScreen() {
 
   // Group by category
   const grouped = filtered.reduce<Record<string, InventoryItem[]>>((acc, item) => {
-    const cat = item.category ?? 'Uncategorized';
+    const cat = item.category?.name ?? 'Uncategorized';
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(item);
     return acc;
@@ -102,7 +101,7 @@ function InventoryListScreen() {
 
   function qtyColor(item: InventoryItem) {
     const qty = parseFloat(item.quantity);
-    const min = parseFloat(item.minQuantity ?? item.reorderLevel ?? '0');
+    const min = parseFloat(item.reorderLevel ?? '0');
     if (qty <= 0) return colors.danger;
     if (min > 0 && qty <= min) return colors.warning;
     return colors.success;
@@ -169,7 +168,7 @@ function InventoryListScreen() {
               >
                 <View style={styles.itemLeft}>
                   <Text style={styles.itemName}>{item.displayName ?? item.name}</Text>
-                  {item.supplier && <Text style={styles.itemSub}>{item.supplier}</Text>}
+                  {!!item.vendor?.name && <Text style={styles.itemSub}>{item.vendor.name}</Text>}
                 </View>
                 <View style={styles.itemRight}>
                   <Text style={[styles.itemQty, { color: qtyColor(item) }]}>
@@ -209,8 +208,8 @@ function InventoryDetailScreen() {
   const mutation = useMutation({
     mutationFn: (qty: string) =>
       apiFetch(`/api/inventory/${itemId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ quantity: qty }),
+        method: 'PUT',
+        body: JSON.stringify({ quantity: String(parseFloat(qty)) }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['inventory', locationId] });
@@ -229,7 +228,7 @@ function InventoryDetailScreen() {
   }
 
   const qty = parseFloat(editQty ?? item.quantity);
-  const minQty = parseFloat(item.minQuantity ?? item.reorderLevel ?? '0');
+  const minQty = parseFloat(item.reorderLevel ?? '0');
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -287,11 +286,11 @@ function InventoryDetailScreen() {
         <View style={styles.infoCard}>
           {[
             ['Name', item.name],
-            ['Category', item.category ?? '—'],
+            ['Category', item.category?.name ?? '—'],
             ['Unit', item.unit],
             ['Cost / Unit', item.costPerUnit ? `$${parseFloat(item.costPerUnit).toFixed(2)}` : '—'],
-            ['Min Qty', minQty > 0 ? `${minQty} ${item.unit}` : '—'],
-            ['Supplier', item.supplier ?? '—'],
+            ['Reorder At', minQty > 0 ? `${minQty} ${item.unit}` : '—'],
+            ['Vendor', item.vendor?.name ?? '—'],
             ['Barcode', item.barcode ?? 'None'],
           ].map(([label, value]) => (
             <View key={label} style={styles.infoRow}>

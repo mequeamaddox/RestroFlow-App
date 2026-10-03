@@ -18,7 +18,7 @@ import { colors } from '../lib/colors';
 interface Location {
   id: string;
   name: string;
-  address: string;
+  address: string | null;
 }
 
 export function LocationPickerScreen() {
@@ -62,7 +62,7 @@ export function LocationPickerScreen() {
         </View>
       ) : error ? (
         <View style={styles.centered}>
-          <Text style={styles.errorText}>Failed to load locations</Text>
+          <Text style={styles.errorText}>Failed to load locations{error instanceof Error ? `: ${error.message}` : ''}</Text>
           <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()}>
             <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
@@ -88,7 +88,7 @@ export function LocationPickerScreen() {
               </View>
               <View style={styles.cardContent}>
                 <Text style={styles.locationName}>{item.name}</Text>
-                <Text style={styles.locationAddress}>{item.address}</Text>
+                {!!item.address && <Text style={styles.locationAddress}>{item.address}</Text>}
               </View>
               <Text style={styles.chevron}>›</Text>
             </TouchableOpacity>
