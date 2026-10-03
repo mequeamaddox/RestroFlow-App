@@ -31,11 +31,31 @@ const tokenCache = {
 
 const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
 
-if (!CLERK_PUBLISHABLE_KEY) {
-  console.error(
-    'Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY. ' +
-    'Add it to EAS secrets or eas.json env section and rebuild.'
-  );
+interface ErrorBoundaryState {
+  error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  ErrorBoundaryState
+> {
+  state: ErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <View style={styles.error}>
+          <Text style={styles.errorTitle}>Something went wrong</Text>
+          <Text style={styles.errorBody}>{this.state.error.message}</Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function MissingKeyScreen() {
@@ -56,19 +76,21 @@ export default function App() {
   }
 
   return (
-    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
-      <QueryClientProvider client={queryClient}>
-        <SafeAreaProvider>
-          <LocationProvider>
-            <TokenBridge />
-            <NavigationContainer>
-              <StatusBar style="light" />
-              <RootNavigator />
-            </NavigationContainer>
-          </LocationProvider>
-        </SafeAreaProvider>
-      </QueryClientProvider>
-    </ClerkProvider>
+    <ErrorBoundary>
+      <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
+        <QueryClientProvider client={queryClient}>
+          <SafeAreaProvider>
+            <LocationProvider>
+              <TokenBridge />
+              <NavigationContainer>
+                <StatusBar style="light" />
+                <RootNavigator />
+              </NavigationContainer>
+            </LocationProvider>
+          </SafeAreaProvider>
+        </QueryClientProvider>
+      </ClerkProvider>
+    </ErrorBoundary>
   );
 }
 
