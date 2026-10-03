@@ -1,6 +1,7 @@
 import { getAuthToken } from './tokenStore';
 
-export const API_BASE = 'https://www.restroflowsolutions.com';
+// Must match the custom domain attached to the Railway service (apex, no www).
+export const API_BASE = 'https://restroflowsolutions.com';
 
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const token = await getAuthToken();
