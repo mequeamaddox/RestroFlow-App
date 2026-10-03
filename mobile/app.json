@@ -19,7 +19,8 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0f172a"
+        "backgroundImage": "./assets/adaptive-icon-background.png",
+        "backgroundColor": "#f97316"
       },
       "package": "com.restroflow.app",
       "permissions": [
