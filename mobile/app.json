@@ -20,7 +20,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundImage": "./assets/adaptive-icon-background.png",
-        "backgroundColor": "#f97316"
+        "backgroundColor": "#0f172a"
       },
       "package": "com.restroflow.app",
       "permissions": [
