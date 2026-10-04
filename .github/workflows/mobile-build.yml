@@ -1,0 +1,85 @@
+# Builds the RestroFlow owner/manager mobile app on Expo's servers (EAS Build).
+# Trigger from GitHub: Actions → "Build mobile app" → Run workflow.
+#
+# One-time setup: add a repository secret named EXPO_TOKEN
+#   expo.dev → Account settings → Access tokens → Create token
+#   GitHub repo → Settings → Secrets and variables → Actions → New repository secret
+#
+# When the build finishes, open the run summary for the APK download/install link.
+name: Build mobile app
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Target platform
+        type: choice
+        options: [android, ios, all]
+        default: android
+      profile:
+        description: "preview = sideloadable APK; production = Play Store / App Store"
+        type: choice
+        options: [preview, production]
+        default: preview
+
+concurrency: mobile-build
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check EXPO_TOKEN is set
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::Add a repository secret named EXPO_TOKEN. Go to expo.dev → Account settings → Access tokens, create one, then add it at GitHub repo Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Link Expo project
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          ID=$(node -p "require('./app.json').expo.extra?.eas?.projectId || ''")
+          if [ -n "$ID" ]; then
+            npx --yes eas-cli@latest init --id "$ID" --non-interactive --force
+          else
+            npx --yes eas-cli@latest init --non-interactive --force
+          fi
+
+      - name: Build
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_NO_VCS: '1'
+        run: |
+          npx --yes eas-cli@latest build \
+            --platform "${{ inputs.platform }}" \
+            --profile "${{ inputs.profile }}" \
+            --non-interactive --json > build.json
+          node -e '
+            const builds = require("./build.json");
+            const lines = ["## RestroFlow mobile build", ""];
+            for (const b of builds) {
+              const file = b.artifacts?.applicationArchiveUrl || b.artifacts?.buildUrl;
+              lines.push(`- **${b.platform}** (${b.status}): [Install / download](${file}) · [Build page](https://expo.dev/accounts/${b.project?.ownerAccount?.name}/projects/${b.project?.slug}/builds/${b.id})`);
+            }
+            lines.push("", "Android: open the Install link on the phone and allow installing from unknown sources.");
+            require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+            console.log(lines.join("\n"));
+          '

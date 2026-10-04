@@ -106,7 +106,7 @@ export function registerAuthRoutes(app: Express): void {
 
   app.post('/api/auth/logout', async (req, res) => {
     try {
-      const sessionId = req.auth?.sessionId;
+      const sessionId = getAuth(req).sessionId;
       if (sessionId) await clerkClient.sessions.revokeSession(sessionId);
     } catch (e) {
       // best-effort revocation
@@ -135,7 +135,7 @@ export function registerAuthRoutes(app: Express): void {
         status: user.subscriptionStatus || 'inactive',
         ocrCreditsUsed: user.ocrCreditsUsed || 0,
         ocrCreditsLimit: user.ocrCreditsLimit || 5,
-        hrAddonEnabled: user.hrAddonEnabled || false,
+        hrAddonEnabled: hrAddonLocations > 0,
         hrAddonLocations,
         totalAmount: calculateSubscriptionTotal(user.subscriptionPlan, hrAddonLocations),
         nextBillingDate: user.subscriptionEndDate?.toISOString(),

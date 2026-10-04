@@ -68,6 +68,12 @@ interface EmployeeProfile {
     firstName: string;
     lastName: string;
     email: string;
+    phone?: string | null;
+    dateOfBirth?: string | null;
+    hourlyRate?: string | null;
+    salary?: string | null;
+    payFrequency?: string | null;
+    notes?: string | null;
     position: { 
       id: string;
       title: string;
@@ -145,12 +151,6 @@ export default function EmployeePage() {
     },
   });
 
-  // Debug logging
-  console.log("Employee ID:", employeeId);
-  console.log("Profile Data:", profileData);
-  console.log("Error:", error);
-  console.log("Query URL:", `/api/employees/${employeeId}/profile`);
-
   if (isLoading) {
     return (
       <div className="p-6">
@@ -223,7 +223,7 @@ export default function EmployeePage() {
                 {employee.employeeNumber}
               </Badge>
             </div>
-            <p className="text-muted-foreground">{employee.position?.title || employee.position} • {employee.department?.name || employee.department}</p>
+            <p className="text-muted-foreground">{(typeof employee.position === "string" ? employee.position : employee.position?.title)} • {(typeof employee.department === "string" ? employee.department : employee.department?.name)}</p>
           </div>
         </div>
         <Badge className={getStatusColor(employee.status)}>
@@ -290,11 +290,11 @@ export default function EmployeePage() {
           <CardContent className="space-y-4">
             <div>
               <span className="text-sm text-muted-foreground">Position:</span>
-              <p className="text-sm font-medium">{employee.position?.title || employee.position}</p>
+              <p className="text-sm font-medium">{(typeof employee.position === "string" ? employee.position : employee.position?.title)}</p>
             </div>
             <div>
               <span className="text-sm text-muted-foreground">Department:</span>
-              <p className="text-sm font-medium">{employee.department?.name || employee.department}</p>
+              <p className="text-sm font-medium">{(typeof employee.department === "string" ? employee.department : employee.department?.name)}</p>
             </div>
             {employee.hourlyRate && (
               <div>
@@ -503,7 +503,7 @@ export default function EmployeePage() {
                   <div className="flex items-center justify-between p-3 bg-green-900/20 rounded-lg">
                     <div>
                       <p className="text-sm font-medium text-green-300">Current Position</p>
-                      <p className="text-xs text-green-400">{employee.position?.title || employee.position}</p>
+                      <p className="text-xs text-green-400">{(typeof employee.position === "string" ? employee.position : employee.position?.title)}</p>
                     </div>
                     <Badge className="bg-green-900/30 text-green-400 border border-green-800">Active</Badge>
                   </div>

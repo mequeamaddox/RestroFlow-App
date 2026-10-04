@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "RestroFlow",
+    "slug": "restroflow",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.restroflow.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundImage": "./assets/adaptive-icon-background.png",
+        "backgroundColor": "#0f172a"
+      },
+      "package": "com.restroflow.app",
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "scheme": "restroflow",
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Scan barcodes and product labels"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "38311cdf-d31e-44e4-8a2d-05c12c32b255"
+      }
+    }
+  }
+}

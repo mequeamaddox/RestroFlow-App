@@ -69,7 +69,7 @@ export function registerInvoiceRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/invoices/upload', isAuthenticated, requireLocationAccess(), upload.single('invoice'), async (req, res) => {
+  app.post('/api/invoices/upload', isAuthenticated, upload.single('invoice'), requireLocationAccess(), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
 
@@ -132,7 +132,8 @@ export function registerInvoiceRoutes(app: Express): void {
         fs.writeFileSync(filePath, req.file.buffer);
       }
 
-      const locationId = req.body.locationId;
+      // Persist to the location that passed authorization, never an unchecked body value.
+      const locationId = (req as any).authorizedLocationId;
       if (!locationId) throw new Error('Location ID is required to save invoice');
 
       const parsedData = OCRService.parseInvoiceFromText(ocrResult.text);

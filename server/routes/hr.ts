@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import { storage } from '../storage';
+import { ObjectStorageService } from '../objectStorage';
 import { isAuthenticated, clerkClient, mapPositionToRole, requireHRAccess } from './helpers';
 import { requireLocationAccess, assertLocationAccess, strictLimiter } from '../securityMiddleware';
 import { requirePermission, requireAnyPermission, Permission } from '../permissions';
@@ -279,8 +280,10 @@ export function registerHRRoutes(app: Express): void {
     try {
       const [existing] = await db.select().from(timeOffRequests).where(eq(timeOffRequests.id, req.params.id)).limit(1);
       if (!existing) return res.status(404).json({ message: 'Time-off request not found' });
+      if (!existing.employeeId) return res.status(404).json({ message: 'Employee not found' });
       const employee = await storage.getEmployee(existing.employeeId);
-      if (employee && !await assertLocationAccess(req, res, employee.locationId)) return;
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       const { status, notes } = req.body;
       const request = await storage.updateTimeOffRequestStatus(req.params.id, status, notes, req.user!.id);
       res.json(request);
@@ -441,8 +444,10 @@ export function registerHRRoutes(app: Express): void {
     try {
       const [entry] = await db.select().from(timeEntries).where(eq(timeEntries.id, req.params.entryId)).limit(1);
       if (!entry) return res.status(404).json({ message: 'Time entry not found' });
+      if (!entry.employeeId) return res.status(404).json({ message: 'Employee not found' });
       const employee = await storage.getEmployee(entry.employeeId);
-      if (employee && !await assertLocationAccess(req, res, employee.locationId)) return;
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       const updated = await storage.clockOut(req.params.entryId);
       res.json(updated);
     } catch (error) {
@@ -560,8 +565,10 @@ export function registerHRRoutes(app: Express): void {
     try {
       const [existing] = await db.select().from(timeEntries).where(eq(timeEntries.id, req.params.id)).limit(1);
       if (!existing) return res.status(404).json({ message: 'Time entry not found' });
+      if (!existing.employeeId) return res.status(404).json({ message: 'Employee not found' });
       const employee = await storage.getEmployee(existing.employeeId);
-      if (employee && !await assertLocationAccess(req, res, employee.locationId)) return;
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       const { clockInTime, clockOutTime, breakStartTime, breakEndTime, notes } = req.body;
       const updateData: any = {};
       if (clockInTime) updateData.clockInTime = new Date(clockInTime);
@@ -581,8 +588,10 @@ export function registerHRRoutes(app: Express): void {
     try {
       const [existing] = await db.select().from(timeEntries).where(eq(timeEntries.id, req.params.id)).limit(1);
       if (!existing) return res.status(404).json({ message: 'Time entry not found' });
+      if (!existing.employeeId) return res.status(404).json({ message: 'Employee not found' });
       const employee = await storage.getEmployee(existing.employeeId);
-      if (employee && !await assertLocationAccess(req, res, employee.locationId)) return;
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertLocationAccess(req, res, employee.locationId)) return;
       await storage.deleteTimeEntry(req.params.id);
       res.json({ message: 'Time entry deleted successfully' });
     } catch (error) {
@@ -656,7 +665,12 @@ export function registerHRRoutes(app: Express): void {
   app.post('/api/hr/team-resources', isAuthenticated, requireHRAccess, async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
-      const resourceData = insertTeamResourceSchema.parse({ ...req.body, locationId, uploadedBy: req.user!.id });
+      if (typeof req.body.fileUrl !== 'string') return res.status(400).json({ message: 'Uploaded resource path required' });
+      const fileUrl = new ObjectStorageService().normalizeObjectEntityPath(req.body.fileUrl);
+      if (!/^\/objects\/uploads\/[a-zA-Z0-9-]+$/.test(fileUrl)) {
+        return res.status(400).json({ message: 'Invalid uploaded resource path' });
+      }
+      const resourceData = insertTeamResourceSchema.parse({ ...req.body, fileUrl, locationId, uploadedBy: req.user!.id });
       const [resource] = await db.insert(teamResources).values(resourceData).returning();
       res.status(201).json(resource);
     } catch (error) {
@@ -989,7 +1003,7 @@ export function registerHRRoutes(app: Express): void {
       const active = onboardingRecords.find((o: any) => o.status === 'in-progress') || onboardingRecords[0];
       if (!active) return res.json(null);
       const steps = await storage.getEmployeeOnboardingSteps(active.id);
-      const documents = await storage.getEmployeeDocuments(employee.id);
+      const documents = await storage.getEmployeeDocumentAssignments(employee.id);
       res.json({ ...active, steps, documents });
     } catch (error) {
       console.error('Error fetching employee onboarding:', error);

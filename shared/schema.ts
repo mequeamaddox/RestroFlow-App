@@ -831,6 +831,7 @@ export const messages = pgTable("messages", {
   priority: varchar("priority").default("normal"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  readBy: jsonb("read_by").$type<Array<{ userId: string; readAt: string }>>().default([]),
 });
 
 // Message threads and conversations
@@ -907,7 +908,7 @@ export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: tru
 export const insertInvitationTokenSchema = createInsertSchema(invitationTokens)
   .omit({ id: true, token: true, status: true, acceptedAt: true, employeeId: true, createdAt: true, updatedAt: true })
   .extend({
-    invitedBy: z.string().optional(),
+    invitedBy: z.string().min(1),
     expiresAt: z.date().optional(),
     hourlyRate: z.union([z.string(), z.number()]).optional().transform(val => val ? String(val) : undefined),
     salary: z.union([z.string(), z.number()]).optional().transform(val => val ? String(val) : undefined),
@@ -1941,4 +1942,3 @@ export const barWasteLog = pgTable("bar_waste_log", {
 export type BarInventoryCount = typeof barInventoryCounts.$inferSelect;
 export type BarInventoryCountItem = typeof barInventoryCountItems.$inferSelect;
 export type BarWasteEntry = typeof barWasteLog.$inferSelect;
-

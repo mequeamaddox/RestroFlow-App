@@ -29,8 +29,8 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   const authHeaders = await getAuthHeaders();
-  const body = data ? JSON.stringify(data) : undefined;
-  const contentHeader = data ? { "Content-Type": "application/json" } : {};
+  const body = data !== undefined ? JSON.stringify(data) : undefined;
+  const contentHeader: Record<string, string> = data !== undefined ? { "Content-Type": "application/json" } : {};
 
   const res = await fetch(url, {
     method,

@@ -340,7 +340,7 @@ export default function Pricing() {
             <h2 className="text-3xl font-bold text-white mb-6">Premium Add-Ons</h2>
             <p className="text-slate-300 mb-8">Specialized features for bars, breweries, and complex operations</p>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 max-w-xl mx-auto gap-6">
               {/* Bar Operations Add-On */}
               <Card className="bg-slate-800/80 backdrop-blur-sm border-amber-500/50 hover:border-amber-400/70 transition-all duration-300">
                 <CardHeader className="text-center pb-4">
@@ -386,56 +386,6 @@ export default function Pricing() {
                     <li className="flex items-start">
                       <Check className="h-4 w-4 text-amber-400 mr-2 mt-0.5 flex-shrink-0" />
                       <span className="text-slate-300">SpotOn POS integration</span>
-                    </li>
-                  </ul>
-                </CardContent>
-              </Card>
-
-              {/* Multi-Location Management Add-On */}
-              <Card className="bg-slate-800/80 backdrop-blur-sm border-blue-500/50 hover:border-blue-400/70 transition-all duration-300">
-                <CardHeader className="text-center pb-4">
-                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg">
-                    <svg className="h-7 w-7 text-white" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                    </svg>
-                  </div>
-                  <CardTitle className="text-xl font-bold text-white mb-2">Advanced Analytics</CardTitle>
-                  <CardDescription className="text-slate-300">Enterprise-grade reporting & business intelligence</CardDescription>
-                </CardHeader>
-                <CardContent className="text-center">
-                  <div className="mb-4">
-                    <div className="text-3xl font-black text-blue-400">+$49</div>
-                    <div className="text-sm text-slate-400">per location/month</div>
-                    {billingCycle === 'annual' && (
-                      <div className="text-xs text-green-400 mt-1 font-semibold">
-                        Annual: +$39/mo (20% off)
-                      </div>
-                    )}
-                  </div>
-                  <ul className="text-left space-y-2 text-sm">
-                    <li className="flex items-start">
-                      <Check className="h-4 w-4 text-blue-400 mr-2 mt-0.5 flex-shrink-0" />
-                      <span className="text-slate-300">Real-time P&L dashboards</span>
-                    </li>
-                    <li className="flex items-start">
-                      <Check className="h-4 w-4 text-blue-400 mr-2 mt-0.5 flex-shrink-0" />
-                      <span className="text-slate-300">Cross-location comparisons</span>
-                    </li>
-                    <li className="flex items-start">
-                      <Check className="h-4 w-4 text-blue-400 mr-2 mt-0.5 flex-shrink-0" />
-                      <span className="text-slate-300">Predictive cost forecasting</span>
-                    </li>
-                    <li className="flex items-start">
-                      <Check className="h-4 w-4 text-blue-400 mr-2 mt-0.5 flex-shrink-0" />
-                      <span className="text-slate-300">Custom KPI tracking</span>
-                    </li>
-                    <li className="flex items-start">
-                      <Check className="h-4 w-4 text-blue-400 mr-2 mt-0.5 flex-shrink-0" />
-                      <span className="text-slate-300">Automated alerts</span>
-                    </li>
-                    <li className="flex items-start">
-                      <Check className="h-4 w-4 text-blue-400 mr-2 mt-0.5 flex-shrink-0" />
-                      <span className="text-slate-300">Executive reporting</span>
                     </li>
                   </ul>
                 </CardContent>
@@ -637,7 +587,7 @@ export default function Pricing() {
               
               <div>
                 <h3 className="text-lg font-semibold text-white mb-2">Can I use different plans for different locations?</h3>
-                <p className="text-slate-300 text-sm">Absolutely! Mix and match plans per location. Your restaurant might use RestroFlow Core while your bar uses Core + HR Add-on.</p>
+                <p className="text-slate-300 text-sm">Absolutely! Mix and match plans per location. Your restaurant might use RestroFlow Core while your bar uses Core + Bar & Beverage Operations.</p>
               </div>
             </div>
           </div>

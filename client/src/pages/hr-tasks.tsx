@@ -1,3 +1,4 @@
+import type { Employee } from "@shared/schema";
 import { HRUpgradePrompt } from "@/components/hr/hr-upgrade-prompt";
 import { useLocation } from "@/contexts/LocationContext";
 import { useState } from "react";
@@ -40,19 +41,19 @@ export default function HRTasks() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: tasks = [], isLoading } = useQuery({
+  const { data: tasks = [], isLoading } = useQuery<Task[]>({
     queryKey: ['/api/hr/tasks', currentLocation?.id],
     enabled: !!currentLocation,
   });
 
-  const { data: employees = [] } = useQuery({
+  const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ['/api/hr/employees', currentLocation?.id],
     enabled: !!currentLocation,
   });
 
   const createTaskMutation = useMutation({
     mutationFn: async (taskData: any) => {
-      return await apiRequest('POST', '/api/hr/tasks', { ...taskData, locationId: currentLocation?.id });
+      return await apiRequest('POST', `/api/hr/tasks?locationId=${currentLocation?.id}`, { ...taskData, locationId: currentLocation?.id });
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Task created successfully" });
@@ -66,7 +67,7 @@ export default function HRTasks() {
 
   const updateTaskMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      return await apiRequest('PUT', `/api/hr/tasks/${id}`, data);
+      return await apiRequest('PUT', `/api/hr/tasks/${id}?locationId=${currentLocation?.id}`, data);
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Task updated successfully" });

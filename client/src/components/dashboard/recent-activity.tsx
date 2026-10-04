@@ -20,7 +20,7 @@ export default function RecentActivity() {
   const { user } = useAuth();
   const { currentLocation } = useLocation();
 
-  const { data: activities = [], isLoading } = useQuery({
+  const { data: activities = [], isLoading } = useQuery<ActivityItem[]>({
     queryKey: ['/api/activities', currentLocation?.id],
     enabled: !!currentLocation,
   });

@@ -52,8 +52,8 @@ export function registerCsvRoutes(app: Express): void {
       const items = await storage.getInventoryItems(locationId);
       const header = ["name", "category", "unit", "quantity", "cost_per_unit", "min_quantity", "supplier"];
       const rows = items.map(i => toCSVRow([
-        i.name, i.category ?? "", i.unit, i.quantity, i.costPerUnit ?? "",
-        i.minQuantity ?? "", i.supplier ?? "",
+        i.name, i.category?.name ?? "", i.unit, i.quantity, i.costPerUnit ?? "",
+        i.reorderLevel ?? "", i.vendor?.name ?? "",
       ]));
       const csv = [header.join(","), ...rows].join("\n");
       res.setHeader("Content-Type", "text/csv");
@@ -102,9 +102,12 @@ export function registerCsvRoutes(app: Express): void {
       if (!await assertLocationAccess(req, res, locationId)) return;
 
       const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ message: "Authentication required" });
       const rows = parseCSV(rawCsv);
       if (rows.length === 0) return res.status(400).json({ message: "No data rows found in CSV" });
 
+      const categories = await storage.getCategories(locationId);
+      const vendors = await storage.getVendors(locationId);
       let created = 0;
       let updated = 0;
       const errors: string[] = [];
@@ -118,12 +121,23 @@ export function registerCsvRoutes(app: Express): void {
         const quantity = parseFloat(row.quantity || row.qty || "0");
         const costPerUnit = parseFloat(row.cost_per_unit || row.cost || row.price || "0");
         const category = row.category || null;
-        const minQuantity = parseFloat(row.min_quantity || row.minimum || "0") || null;
+        const minQuantity = row.min_quantity || row.minimum ? Number(row.min_quantity || row.minimum) : undefined;
         const supplier = row.supplier || null;
 
+        if (minQuantity !== undefined && !Number.isFinite(minQuantity)) { errors.push(`Row ${i + 2}: invalid minimum quantity`); continue; }
         if (isNaN(quantity)) { errors.push(`Row ${i + 2}: invalid quantity "${row.quantity}"`); continue; }
 
         try {
+          let categoryRecord = category ? categories.find(c => c.name.toLowerCase() === category.toLowerCase()) : undefined;
+          if (category && !categoryRecord) {
+            categoryRecord = await storage.createCategory({ name: category, locationId });
+            categories.push(categoryRecord);
+          }
+          let vendorRecord = supplier ? vendors.find(v => v.name.toLowerCase() === supplier.toLowerCase()) : undefined;
+          if (supplier && !vendorRecord) {
+            vendorRecord = await storage.createVendor({ name: supplier, locationId });
+            vendors.push(vendorRecord);
+          }
           // Fetch all items each time so additions in the same import are found
           const allItems = await storage.getInventoryItems(locationId);
           const existing = allItems.find(i => i.name.toLowerCase() === name.toLowerCase());
@@ -132,9 +146,9 @@ export function registerCsvRoutes(app: Express): void {
               unit,
               quantity: String(quantity),
               ...(isNaN(costPerUnit) ? {} : { costPerUnit: String(costPerUnit) }),
-              ...(category ? { category } : {}),
-              ...(minQuantity != null ? { minQuantity: String(minQuantity) } : {}),
-              ...(supplier ? { supplier } : {}),
+              ...(categoryRecord ? { categoryId: categoryRecord.id } : {}),
+              ...(minQuantity !== undefined ? { reorderLevel: String(minQuantity) } : {}),
+              ...(vendorRecord ? { vendorId: vendorRecord.id } : {}),
             });
             updated++;
           } else {
@@ -143,11 +157,10 @@ export function registerCsvRoutes(app: Express): void {
               locationId,
               unit,
               quantity: String(quantity),
-              costPerUnit: isNaN(costPerUnit) ? null : String(costPerUnit),
-              category,
-              minQuantity: minQuantity != null ? String(minQuantity) : null,
-              supplier: supplier ?? null,
-              createdBy: userId ?? "csv-import",
+              costPerUnit: isNaN(costPerUnit) ? "0" : String(costPerUnit),
+              categoryId: categoryRecord?.id,
+              reorderLevel: String(minQuantity ?? 0),
+              vendorId: vendorRecord?.id,
             });
             created++;
           }

@@ -1,3 +1,4 @@
+import type { WasteEntry, InventoryItem } from "@shared/schema";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,7 @@ export default function WasteTracking() {
   const queryClient = useQueryClient();
   const { currentLocation } = useLocation();
 
-  const { data: wasteEntries, isLoading } = useQuery({
+  const { data: wasteEntries, isLoading } = useQuery<(WasteEntry & { inventoryItem: InventoryItem })[]>({
     queryKey: ['/api/waste', currentLocation?.id],
     queryFn: () => {
       const params = currentLocation?.id ? `?locationId=${currentLocation.id}` : '';
@@ -37,7 +38,7 @@ export default function WasteTracking() {
     enabled: !!currentLocation,
   });
 
-  const { data: inventoryItems } = useQuery({
+  const { data: inventoryItems } = useQuery<InventoryItem[]>({
     queryKey: ['/api/inventory', currentLocation?.id],
     queryFn: () => {
       const params = currentLocation?.id ? `?locationId=${currentLocation.id}` : '';
@@ -172,7 +173,7 @@ export default function WasteTracking() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Inventory Item *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value ?? ""}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select item" />
@@ -202,7 +203,7 @@ export default function WasteTracking() {
                             type="number" 
                             step="0.01" 
                             placeholder="0.00"
-                            {...field} 
+                            {...field} value={field.value ?? ""}
                           />
                         </FormControl>
                         <FormMessage />
@@ -215,7 +216,7 @@ export default function WasteTracking() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Reason *</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value ?? ""}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select reason" />
@@ -247,7 +248,7 @@ export default function WasteTracking() {
                       <FormControl>
                         <Textarea 
                           placeholder="Additional details..."
-                          {...field} 
+                          {...field} value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />

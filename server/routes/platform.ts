@@ -156,7 +156,7 @@ export function registerPlatformRoutes(app: Express): void {
           paymentMethod: 'ach',
           paymentDate: daysAgo(14),
           uploadMethod: 'upload',
-          ocrConfidence: 97,
+          ocrConfidence: "97",
           lineItems: [
             { description: 'Chicken Breast 40lb case x8', amount: 716.00 },
             { description: 'Ground Beef 80/20 40lb case x6', amount: 624.00 },
@@ -178,7 +178,7 @@ export function registerPlatformRoutes(app: Express): void {
           paymentMethod: 'check',
           paymentDate: daysAgo(7),
           uploadMethod: 'photo',
-          ocrConfidence: 91,
+          ocrConfidence: "91",
           lineItems: [
             { description: 'Romaine Lettuce 24ct case x5', amount: 110.00 },
             { description: 'Cherry Tomatoes 10lb case x6', amount: 111.00 },
@@ -196,7 +196,7 @@ export function registerPlatformRoutes(app: Express): void {
           total: '620.00',
           status: 'approved',
           uploadMethod: 'upload',
-          ocrConfidence: 99,
+          ocrConfidence: "99",
           lineItems: [
             { description: 'Jack Daniel\'s 1.75L x12', amount: 336.00 },
             { description: 'Draft Beer 1/2 Keg x1', amount: 145.00 },
@@ -214,7 +214,7 @@ export function registerPlatformRoutes(app: Express): void {
           total: '2100.00',
           status: 'pending',
           uploadMethod: 'email',
-          ocrConfidence: 88,
+          ocrConfidence: "88",
           lineItems: [
             { description: 'Chicken Breast 40lb case x10', amount: 895.00 },
             { description: 'Atlantic Salmon 12lb case x5', amount: 570.00 },

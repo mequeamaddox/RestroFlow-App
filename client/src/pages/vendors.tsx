@@ -1,3 +1,4 @@
+import type { Vendor } from "@shared/schema";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,7 @@ export default function Vendors() {
   const queryClient = useQueryClient();
   const { currentLocation } = useLocation();
 
-  const { data: vendors, isLoading } = useQuery({
+  const { data: vendors, isLoading } = useQuery<Vendor[]>({
     queryKey: ['/api/vendors', currentLocation?.id],
     queryFn: async () => {
       const res = await apiRequest('GET', `/api/vendors?locationId=${currentLocation?.id}`);
@@ -115,7 +116,7 @@ export default function Vendors() {
                     <FormItem>
                       <FormLabel>Vendor Name *</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., Fresh Foods Co." {...field} />
+                        <Input placeholder="e.g., Fresh Foods Co." {...field} value={field.value ?? ""} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -128,7 +129,7 @@ export default function Vendors() {
                     <FormItem>
                       <FormLabel>Contact Person</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., John Smith" {...field} />
+                        <Input placeholder="e.g., John Smith" {...field} value={field.value ?? ""} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -142,7 +143,7 @@ export default function Vendors() {
                       <FormItem>
                         <FormLabel>Email</FormLabel>
                         <FormControl>
-                          <Input type="email" placeholder="contact@vendor.com" {...field} />
+                          <Input type="email" placeholder="contact@vendor.com" {...field} value={field.value ?? ""} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -155,7 +156,7 @@ export default function Vendors() {
                       <FormItem>
                         <FormLabel>Phone</FormLabel>
                         <FormControl>
-                          <Input placeholder="(555) 123-4567" {...field} />
+                          <Input placeholder="(555) 123-4567" {...field} value={field.value ?? ""} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -169,7 +170,7 @@ export default function Vendors() {
                     <FormItem>
                       <FormLabel>Address</FormLabel>
                       <FormControl>
-                        <Textarea placeholder="Enter vendor address..." {...field} />
+                        <Textarea placeholder="Enter vendor address..." {...field} value={field.value ?? ""} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

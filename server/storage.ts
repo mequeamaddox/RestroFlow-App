@@ -1,3 +1,4 @@
+import { calculateWorkedLabor } from "./laborAnalytics";
 import crypto from 'crypto';
 import {
   users,
@@ -169,9 +170,13 @@ import {
   type InsertOwnerOnboardingStep,
   platformSettings,
 } from "@shared/schema";
+import { alias } from "drizzle-orm/pg-core";
+import { z } from "zod";
 import { db } from "./db";
 import { encryptOnboardingPII, decryptOnboardingPII, encryptPosCredentials, decryptPosCredentials } from "./encryption";
 import { eq, sql, desc, and, or, gte, lte, lt, ilike, sum, isNull, isNotNull, asc, inArray } from "drizzle-orm";
+
+const invoiceStatusSchema = z.enum(["pending_review", "pending", "approved", "paid", "disputed", "cancelled"]);
 
 // Local authentication user interface
 export interface LocalAuthUser {
@@ -214,6 +219,7 @@ export interface IStorage {
   createLocation(location: InsertLocation): Promise<Location>;
 
   // Category operations
+  getCategory(id: string): Promise<Category | undefined>;
   getCategories(locationId?: string): Promise<Category[]>;
   createCategory(category: InsertCategory): Promise<Category>;
   updateCategory(id: string, category: Partial<InsertCategory>): Promise<Category>;
@@ -404,11 +410,11 @@ export interface IStorage {
   getHRAnalytics(locationId?: string): Promise<any>;
 
   // Employee document and onboarding operations
-  generateOnboardingToken(employeeId: string): Promise<OnboardingToken>;
-  validateOnboardingToken(token: string): Promise<OnboardingToken | undefined>;
+  createOnboardingToken(employeeId: string, expirationHours?: number): Promise<OnboardingToken>;
+  validateOnboardingToken(token: string): Promise<{ isValid: boolean; employee?: Employee }>;
   getEmployeeProfile(employeeId: string): Promise<{ employee: Employee; onboardingData?: any; documents?: any[] } | undefined>;
-  createOnboardingData(data: any): Promise<any>;
-  updateOnboardingData(employeeId: string, data: any): Promise<any>;
+  saveEmployeeOnboardingData(data: InsertEmployeeOnboardingData): Promise<EmployeeOnboardingData>;
+  updateEmployeeOnboardingData(employeeId: string, data: Partial<InsertEmployeeOnboardingData>): Promise<EmployeeOnboardingData>;
   deleteEmployeeOnboardingData(employeeId: string): Promise<void>;
 
   // Document template operations
@@ -419,7 +425,8 @@ export interface IStorage {
   deleteDocumentTemplate(id: string): Promise<void>;
 
   // Employee document assignment operations
-  getEmployeeDocuments(employeeId: string): Promise<any[]>;
+  getEmployeeDocuments(employeeId?: string): Promise<EmployeeDocument[]>;
+  getEmployeeDocumentAssignments(employeeId: string): Promise<any[]>;
   getAllEmployeeDocuments(): Promise<any[]>;
   getDocumentAssignment(id: string): Promise<any | undefined>;
   createDocumentAssignment(assignment: any): Promise<any>;
@@ -491,8 +498,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getLocationById(id: string): Promise<Location | null> {
-    const result = await db.execute(sql`SELECT * FROM locations WHERE id = ${id} LIMIT 1`);
-    return (result.rows[0] as Location) || null;
+    const [location] = await db.select().from(locations).where(eq(locations.id, id)).limit(1);
+    return location || null;
   }
 
   async createLocation(locationData: InsertLocation): Promise<Location> {
@@ -506,7 +513,7 @@ export class DatabaseStorage implements IStorage {
   async updateLocation(id: string, locationData: Partial<InsertLocation>): Promise<Location> {
     const [location] = await db
       .update(locations)
-      .set({ ...locationData, updatedAt: new Date() })
+      .set(locationData)
       .where(eq(locations.id, id))
       .returning();
     return location;
@@ -655,6 +662,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Category operations
+  async getCategory(id: string): Promise<Category | undefined> {
+    const [category] = await db.select().from(categories).where(eq(categories.id, id));
+    return category;
+  }
+
   async getCategories(locationId?: string): Promise<Category[]> {
     if (locationId) {
       return await db.select().from(categories)
@@ -746,6 +758,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPriceComparison(locationId?: string): Promise<any[]> {
+    const catalogVendors = alias(vendors, "catalogVendors");
     const query = db
       .select({
         itemId: inventoryItems.id,
@@ -754,10 +767,10 @@ export class DatabaseStorage implements IStorage {
         currentCost: inventoryItems.costPerUnit,
         currentVendor: vendors.name,
         categoryName: categories.name,
-        vendorPrices: sql`json_agg(
+        vendorPrices: sql<Array<{ costPerUnit: string }>>`json_agg(
           json_build_object(
             'vendorId', ${vendorPriceCatalog.vendorId},
-            'vendorName', ${vendors.name},
+            'vendorName', ${catalogVendors.name},
             'costPerUnit', ${vendorPriceCatalog.costPerUnit},
             'unit', ${vendorPriceCatalog.unit},
             'minimumOrderQuantity', ${vendorPriceCatalog.minimumOrderQuantity},
@@ -771,7 +784,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(vendors, eq(inventoryItems.vendorId, vendors.id))
       .leftJoin(categories, eq(inventoryItems.categoryId, categories.id))
       .leftJoin(vendorPriceCatalog, eq(inventoryItems.id, vendorPriceCatalog.inventoryItemId))
-      .leftJoin(vendors.as('catalogVendors'), eq(vendorPriceCatalog.vendorId, vendors.id))
+      .leftJoin(catalogVendors, eq(vendorPriceCatalog.vendorId, catalogVendors.id))
       .groupBy(
         inventoryItems.id,
         inventoryItems.name,
@@ -903,7 +916,7 @@ export class DatabaseStorage implements IStorage {
 
   // Universal POS Integration Methods
   async getPosIntegrations(locationId?: string): Promise<PosIntegration[]> {
-    let query = db.select().from(posIntegrations);
+    let query = db.select().from(posIntegrations).$dynamic();
 
     if (locationId) {
       query = query.where(eq(posIntegrations.locationId, locationId));
@@ -994,7 +1007,16 @@ export class DatabaseStorage implements IStorage {
       )
       RETURNING *
     `);
-    return (rows.rows ?? rows as any[]) as PosEventQueue[];
+    return rows.rows.map(row => ({
+      id: String(row.id), integrationId: String(row.integration_id), provider: String(row.provider),
+      eventType: String(row.event_type), source: String(row.source),
+      idempotencyKey: row.idempotency_key == null ? null : String(row.idempotency_key),
+      payload: row.payload, status: String(row.status), attempts: Number(row.attempts),
+      lastError: row.last_error == null ? null : String(row.last_error),
+      processAfter: row.process_after == null ? null : new Date(String(row.process_after)),
+      processedAt: row.processed_at == null ? null : new Date(String(row.processed_at)),
+      createdAt: row.created_at == null ? null : new Date(String(row.created_at)),
+    }));
   }
 
   async markQueueEventDone(id: string): Promise<void> {
@@ -1101,7 +1123,7 @@ export class DatabaseStorage implements IStorage {
   async getPosItemMappings(integrationId?: string): Promise<(PosItemMapping & { posMenuItem?: PosMenuItem; inventoryItem?: InventoryItem })[]> {
     let query = db.select().from(posItemMappings)
       .leftJoin(posMenuItems, eq(posItemMappings.posMenuItemId, posMenuItems.id))
-      .leftJoin(inventoryItems, eq(posItemMappings.inventoryItemId, inventoryItems.id));
+      .leftJoin(inventoryItems, eq(posItemMappings.inventoryItemId, inventoryItems.id)).$dynamic();
 
     if (integrationId) {
       query = query.where(eq(posMenuItems.posIntegrationId, integrationId));
@@ -1153,7 +1175,7 @@ export class DatabaseStorage implements IStorage {
 
   // POS Sales
   async getPosSales(locationId?: string): Promise<(PosSale & { items?: PosSaleItem[] })[]> {
-    let query = db.select().from(posSales);
+    let query = db.select().from(posSales).$dynamic();
     
     if (locationId) {
       query = query.where(eq(posSales.locationId, locationId));
@@ -1338,7 +1360,7 @@ export class DatabaseStorage implements IStorage {
       .from(inventoryItems)
       .leftJoin(categories, eq(inventoryItems.categoryId, categories.id))
       .leftJoin(vendors, eq(inventoryItems.vendorId, vendors.id))
-      .orderBy(inventoryItems.name);
+      .orderBy(inventoryItems.name).$dynamic();
 
     if (locationId) {
       query = query.where(eq(inventoryItems.locationId, locationId));
@@ -1400,7 +1422,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(categories, eq(inventoryItems.categoryId, categories.id))
       .leftJoin(vendors, eq(inventoryItems.vendorId, vendors.id))
       .where(sql`${inventoryItems.quantity} <= ${inventoryItems.reorderLevel}`)
-      .orderBy(inventoryItems.name);
+      .orderBy(inventoryItems.name).$dynamic();
 
     if (locationId) {
       query = query.where(and(
@@ -1423,7 +1445,7 @@ export class DatabaseStorage implements IStorage {
       .select({
         total: sql<string>`COALESCE(SUM(${inventoryItems.quantity} * ${inventoryItems.costPerUnit}), 0)`,
       })
-      .from(inventoryItems);
+      .from(inventoryItems).$dynamic();
     
     if (locationId) {
       query = query.where(eq(inventoryItems.locationId, locationId));
@@ -1435,7 +1457,7 @@ export class DatabaseStorage implements IStorage {
 
   // Recipe operations
   async getRecipes(locationId?: string): Promise<(Recipe & { ingredientCount: number; estimatedCost: number })[]> {
-    let query = db.select().from(recipes).orderBy(recipes.name);
+    let query = db.select().from(recipes).orderBy(recipes.name).$dynamic();
     
     if (locationId) {
       query = query.where(eq(recipes.locationId, locationId));
@@ -1668,7 +1690,7 @@ export class DatabaseStorage implements IStorage {
       .from(wasteEntries)
       .innerJoin(inventoryItems, eq(wasteEntries.inventoryItemId, inventoryItems.id))
       .leftJoin(users, eq(wasteEntries.reportedBy, users.id))
-      .orderBy(desc(wasteEntries.createdAt));
+      .orderBy(desc(wasteEntries.createdAt)).$dynamic();
 
     if (locationId) {
       query = query.where(eq(inventoryItems.locationId, locationId));
@@ -1719,7 +1741,7 @@ export class DatabaseStorage implements IStorage {
       .from(inventoryTransactions)
       .leftJoin(inventoryItems, eq(inventoryTransactions.inventoryItemId, inventoryItems.id))
       .leftJoin(users, eq(inventoryTransactions.createdBy, users.id))
-      .orderBy(desc(inventoryTransactions.createdAt));
+      .orderBy(desc(inventoryTransactions.createdAt)).$dynamic();
 
     if (itemId) {
       query = query.where(eq(inventoryTransactions.inventoryItemId, itemId));
@@ -1978,7 +2000,7 @@ export class DatabaseStorage implements IStorage {
     ];
     
     if (type) {
-      conditions.push(eq(inventoryTransactions.type, type));
+      conditions.push(eq(inventoryTransactions.type, z.enum(["in", "out", "adjustment", "production_usage", "recipe_consumption"]).parse(type)));
     }
 
     return await db.select().from(inventoryTransactions)
@@ -2011,11 +2033,14 @@ export class DatabaseStorage implements IStorage {
         .select()
         .from(invoiceProcessing)
         .leftJoin(vendors, eq(invoiceProcessing.vendorId, vendors.id))
-        .orderBy(desc(invoiceProcessing.createdAt));
+        .orderBy(desc(invoiceProcessing.createdAt)).$dynamic();
 
       const conditions = [];
-      if (status && status !== 'all') {
-        conditions.push(eq(invoiceProcessing.status, status));
+      if (status === 'overdue') {
+        conditions.push(lt(invoiceProcessing.dueDate, new Date()));
+        conditions.push(inArray(invoiceProcessing.status, ['pending_review', 'pending', 'approved', 'disputed']));
+      } else if (status && status !== 'all') {
+        conditions.push(eq(invoiceProcessing.status, invoiceStatusSchema.parse(status)));
       }
       if (locationId) {
         conditions.push(eq(invoiceProcessing.locationId, locationId));
@@ -2086,7 +2111,7 @@ export class DatabaseStorage implements IStorage {
         subtotal: subtotal.toString(),
         tax: tax.toString(),
         total: total.toString(),
-        status: invoice.status || 'pending',
+        status: invoiceStatusSchema.parse(invoice.status || 'pending'),
         uploadMethod: invoice.uploadMethod || 'upload',
         ocrConfidence: invoice.ocrConfidence ? parseFloat(invoice.ocrConfidence).toString() : null,
         lineItems: invoice.lineItems ? JSON.stringify(invoice.lineItems) : null,
@@ -2119,7 +2144,7 @@ export class DatabaseStorage implements IStorage {
     try {
       const [result] = await db
         .update(invoiceProcessing)
-        .set({ status })
+        .set({ status: invoiceStatusSchema.parse(status) })
         .where(eq(invoiceProcessing.id, id))
         .returning();
       
@@ -2144,7 +2169,7 @@ export class DatabaseStorage implements IStorage {
         subtotal: data.subtotal ? data.subtotal.toString() : null,
         lineItems: data.lineItems ? JSON.stringify(data.lineItems) : null,
         fees: data.fees ? JSON.stringify(data.fees) : null,
-        status: (data.status as any) || 'pending'
+        status: invoiceStatusSchema.parse(data.status || 'pending')
       };
       
       const [result] = await db
@@ -2183,9 +2208,11 @@ export class DatabaseStorage implements IStorage {
       const pendingConditions = locationId ? 
         [eq(invoiceProcessing.status, 'pending'), eq(invoiceProcessing.locationId, locationId)] : 
         [eq(invoiceProcessing.status, 'pending')];
-      const overdueConditions = locationId ? 
-        [eq(invoiceProcessing.status, 'overdue'), eq(invoiceProcessing.locationId, locationId)] : 
-        [eq(invoiceProcessing.status, 'overdue')];
+      const overdueConditions = [
+        lt(invoiceProcessing.dueDate, new Date()),
+        inArray(invoiceProcessing.status, ['pending_review', 'pending', 'approved', 'disputed']),
+        ...(locationId ? [eq(invoiceProcessing.locationId, locationId)] : []),
+      ];
 
       const [totalResult] = await db
         .select({
@@ -2335,20 +2362,30 @@ export class DatabaseStorage implements IStorage {
       const monthlySpend = monthlyOrders.reduce((sum, order) => sum + parseFloat(order.totalAmount ?? '0'), 0);
 
       // Get budget from budgets table if exists
-      const budgetData = await db.select().from(budgets);
+      const budgetData = await db.select().from(budgets).where(and(
+        locationId && locationId !== "all" ? eq(budgets.locationId, locationId) : undefined,
+        eq(budgets.isActive, true), lte(budgets.startDate, now), gte(budgets.endDate, startOfMonth)
+      ));
       const totalBudget = budgetData.reduce((sum, budget) => sum + parseFloat(budget.budgetAmount), 0);
       const spendVariance = totalBudget > 0 ? ((monthlySpend - totalBudget) / totalBudget * 100) : 0;
 
       const categoryBreakdown: any = {};
       
+      const orderItems = monthlyOrders.length ? await db.select({
+        purchaseOrderId: purchaseOrderItems.purchaseOrderId, total: purchaseOrderItems.totalCost,
+        category: categories.name,
+      }).from(purchaseOrderItems)
+        .leftJoin(inventoryItems, eq(purchaseOrderItems.inventoryItemId, inventoryItems.id))
+        .leftJoin(categories, eq(inventoryItems.categoryId, categories.id))
+        .where(inArray(purchaseOrderItems.purchaseOrderId, monthlyOrders.map(order => order.id))) : [];
       monthlyOrders.forEach(order => {
-        const items = order.items as any[];
-        items?.forEach((item: any) => {
+        const items = orderItems.filter(item => item.purchaseOrderId === order.id);
+        items.forEach(item => {
           const category = item.category || 'Other';
           if (!categoryBreakdown[category]) {
             categoryBreakdown[category] = { name: category, actual: 0, budget: 0, variance: 0 };
           }
-          categoryBreakdown[category].actual += parseFloat(item.total || 0);
+          categoryBreakdown[category].actual += parseFloat(item.total || '0');
         });
       });
 
@@ -2502,10 +2539,15 @@ export class DatabaseStorage implements IStorage {
 
       const itemPerformance: any = {};
       
+      const saleItems = sales.length ? await db.select({
+        posSaleId: posSaleItems.posSaleId, itemName: posSaleItems.itemName,
+        quantity: posSaleItems.quantity, totalPrice: posSaleItems.totalPrice, category: posMenuItems.category,
+      }).from(posSaleItems).leftJoin(posMenuItems, eq(posSaleItems.posMenuItemId, posMenuItems.id))
+        .where(inArray(posSaleItems.posSaleId, sales.map(sale => sale.id))) : [];
       sales.forEach(sale => {
-        const items = sale.items as any[];
-        items?.forEach((item: any) => {
-          const itemName = item.name || 'Unknown Item';
+        const items = saleItems.filter(item => item.posSaleId === sale.id);
+        items.forEach(item => {
+          const itemName = item.itemName || 'Unknown Item';
           if (!itemPerformance[itemName]) {
             itemPerformance[itemName] = {
               name: itemName,
@@ -2514,8 +2556,8 @@ export class DatabaseStorage implements IStorage {
               category: item.category || 'Other'
             };
           }
-          itemPerformance[itemName].unitsSold += item.quantity || 1;
-          itemPerformance[itemName].revenue += parseFloat(item.price || 0) * (item.quantity || 1);
+          itemPerformance[itemName].unitsSold += item.quantity;
+          itemPerformance[itemName].revenue += parseFloat(item.totalPrice || "0");
         });
       });
 
@@ -2554,14 +2596,21 @@ export class DatabaseStorage implements IStorage {
 
       const categoryBreakdown: any = {};
       
+      const orderItems = orders.length ? await db.select({
+        purchaseOrderId: purchaseOrderItems.purchaseOrderId, total: purchaseOrderItems.totalCost,
+        category: categories.name,
+      }).from(purchaseOrderItems)
+        .leftJoin(inventoryItems, eq(purchaseOrderItems.inventoryItemId, inventoryItems.id))
+        .leftJoin(categories, eq(inventoryItems.categoryId, categories.id))
+        .where(inArray(purchaseOrderItems.purchaseOrderId, orders.map(order => order.id))) : [];
       orders.forEach(order => {
-        const items = order.items as any[];
-        items?.forEach((item: any) => {
+        const items = orderItems.filter(item => item.purchaseOrderId === order.id);
+        items.forEach(item => {
           const category = item.category || 'Other';
           if (!categoryBreakdown[category]) {
             categoryBreakdown[category] = { name: category, value: 0 };
           }
-          categoryBreakdown[category].value += parseFloat(item.total || 0);
+          categoryBreakdown[category].value += parseFloat(item.total || '0');
         });
       });
 
@@ -2655,7 +2704,7 @@ export class DatabaseStorage implements IStorage {
     })
     .from(employees)
     .leftJoin(departments, eq(employees.departmentId, departments.id))
-    .leftJoin(positions, eq(employees.positionId, positions.id));
+    .leftJoin(positions, eq(employees.positionId, positions.id)).$dynamic();
 
     // Filter by location if provided using direct employee location assignment
     if (locationId) {
@@ -2966,15 +3015,7 @@ export class DatabaseStorage implements IStorage {
       status: 'clocked-in',
       createdAt: new Date(),
     }).returning();
-    return {
-      ...entry,
-      clockInTime: clockInTime.toISOString(),
-      clockOutTime: null,
-      breakStartTime: null,
-      breakEndTime: null,
-      totalHours: 0,
-      createdAt: clockInTime.toISOString()
-    } as TimeEntry;
+    return entry;
   }
 
   async clockOut(entryId: string): Promise<TimeEntry> {
@@ -3236,7 +3277,7 @@ export class DatabaseStorage implements IStorage {
     const alreadyRead = readBy.some((r: any) => r.userId === userId);
     
     if (!alreadyRead) {
-      readBy.push({ userId, readAt: new Date() });
+      readBy.push({ userId, readAt: new Date().toISOString() });
       await db.update(messages)
         .set({ readBy, updatedAt: new Date() })
         .where(eq(messages.id, messageId));
@@ -3295,26 +3336,16 @@ export class DatabaseStorage implements IStorage {
       const employeeIds = employees.map(emp => emp.id);
       
       // Get related data filtered by employee location
-      let shiftsQuery = db.select().from(shifts);
-      let tasksQuery = db.select().from(tasks);  
-      let messagesQuery = db.select().from(messages);
+      let shiftsQuery = db.select().from(shifts).$dynamic();
+      let tasksQuery = db.select().from(tasks).$dynamic();
+      let messagesQuery = db.select().from(messages).$dynamic();
       
-      // Filter by employees from the selected location
-      if (locationId && employeeIds.length > 0) {
-        shiftsQuery = shiftsQuery.where(inArray(shifts.employeeId, employeeIds));
-        tasksQuery = tasksQuery.where(inArray(tasks.assignedTo, employeeIds));
-        // Messages can be location-specific or employee-specific
-        messagesQuery = messagesQuery.where(
-          or(
-            inArray(messages.recipientId, employeeIds),
-            and(
-              eq(messages.recipientType, 'location'),
-              eq(messages.recipientId, locationId)
-            )
-          )
-        );
+      if (locationId) {
+        shiftsQuery = shiftsQuery.where(eq(shifts.locationId, locationId));
+        tasksQuery = tasksQuery.where(eq(tasks.locationId, locationId));
+        messagesQuery = messagesQuery.where(eq(messages.locationId, locationId));
       }
-      
+
       const allShifts = await shiftsQuery;
       const allTasks = await tasksQuery;
       const allMessages = await messagesQuery;
@@ -3330,7 +3361,8 @@ export class DatabaseStorage implements IStorage {
           .from(timeEntries)
           .where(
             and(
-              sql`clock_out_time IS NULL`,
+              isNull(timeEntries.clockOutTime),
+              sql`NOT EXISTS (SELECT 1 FROM ${posTimeclocks} WHERE ${posTimeclocks.hrTimeEntryId} = ${timeEntries.id} AND ${posTimeclocks.status} = 'open')`,
               inArray(timeEntries.employeeId, employeeIds)
             )
           );
@@ -3358,7 +3390,7 @@ export class DatabaseStorage implements IStorage {
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       
       // Get all time entries (both regular and POS) from the past week
-      const weeklyTimeEntries = locationId && employeeIds.length > 0
+      const weeklyTimeEntries = locationId
         ? await db.select().from(timeEntries)
             .where(
               and(
@@ -3387,55 +3419,16 @@ export class DatabaseStorage implements IStorage {
               )
             );
       
-      // Calculate total hours from regular time entries (only completed entries)
-      const regularHours = weeklyTimeEntries.reduce((total, entry: any) => {
-        if (entry.clockOutTime) {
-          const hours = (new Date(entry.clockOutTime).getTime() - new Date(entry.clockInTime).getTime()) / (1000 * 60 * 60);
-          return total + hours;
-        }
-        return total;
-      }, 0);
-      
-      // Calculate total hours from POS time entries (only completed entries)
-      const posHours = weeklyPosTimeEntries.reduce((total, entry: any) => {
-        if (entry.clockOutAt) {
-          const hours = (new Date(entry.clockOutAt).getTime() - new Date(entry.clockInAt).getTime()) / (1000 * 60 * 60);
-          return total + hours;
-        }
-        return total;
-      }, 0);
-      
-      const totalWeeklyHours = regularHours + posHours;
-      
-      // Calculate actual labor cost based on individual employee hours and rates (not averages)
-      let estimatedWeeklyLabor = 0;
-      
-      // Calculate cost from manual time entries
-      for (const entry of weeklyTimeEntries) {
-        if (entry.clockOutTime) {
-          const employee = employees.find((emp: any) => emp.id === entry.employeeId);
-          if (employee && employee.hourlyRate) {
-            const hours = (new Date(entry.clockOutTime).getTime() - new Date(entry.clockInTime).getTime()) / (1000 * 60 * 60);
-            estimatedWeeklyLabor += hours * employee.hourlyRate;
-          }
-        }
-      }
-      
-      // Calculate cost from POS time entries
-      for (const entry of weeklyPosTimeEntries) {
-        if (entry.clockOutAt && entry.employeeId) {
-          const employee = employees.find((emp: any) => emp.id === entry.employeeId);
-          if (employee && employee.hourlyRate) {
-            const hours = (new Date(entry.clockOutAt).getTime() - new Date(entry.clockInAt).getTime()) / (1000 * 60 * 60);
-            estimatedWeeklyLabor += hours * employee.hourlyRate;
-          }
-        }
-      }
-      
+      const mappings = weeklyPosTimeEntries.length ? await db.select().from(posEmployeeMappings)
+        .where(inArray(posEmployeeMappings.posEmployeeId, weeklyPosTimeEntries.map(entry => entry.posEmployeeId))) : [];
+      const workedLabor = calculateWorkedLabor(employees, weeklyTimeEntries, weeklyPosTimeEntries, mappings);
+      const totalWeeklyHours = workedLabor.hours;
+      const estimatedWeeklyLabor = workedLabor.labor;
+
       // Calculate average rate for display purposes only
       const employeesWithWage = employees.filter((emp: any) => emp.hourlyRate && emp.hourlyRate > 0);
       const avgHourlyRate = employeesWithWage.length > 0
-        ? employeesWithWage.reduce((sum: number, emp: any) => sum + (emp.hourlyRate || 0), 0) / employeesWithWage.length
+        ? employeesWithWage.reduce((sum: number, emp: any) => sum + parseFloat(emp.hourlyRate || '0'), 0) / employeesWithWage.length
         : 0;
       
       // Calculate scheduled shift hours for the current week
@@ -3491,7 +3484,7 @@ export class DatabaseStorage implements IStorage {
           const totalMinutes = endMinutes - startMinutes - (shift.breakDuration || 0);
           const hours = totalMinutes / 60;
           
-          scheduledWeeklyLabor += hours * employee.hourlyRate;
+          scheduledWeeklyLabor += hours * parseFloat(employee.hourlyRate);
         }
       }
       
@@ -3512,7 +3505,7 @@ export class DatabaseStorage implements IStorage {
           shift.date && shift.date.toString().startsWith(today)
         ).length,
         pendingTasks: allTasks.filter((task: any) => task.status !== 'completed').length,
-        unreadMessages: allMessages.filter((msg: any) => !msg.isRead).length,
+        unreadMessages: allMessages.filter((msg: any) => !(msg.readBy?.length)).length,
         
         // Time off (simplified)
         pendingTimeOff: 0,
@@ -3576,7 +3569,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getDocumentRequirements(locationId?: string, positionId?: string): Promise<DocumentRequirement[]> {
-    let query = db.select().from(documentRequirements);
+    let query = db.select().from(documentRequirements).$dynamic();
     
     if (locationId && positionId) {
       query = query.where(
@@ -3617,7 +3610,7 @@ export class DatabaseStorage implements IStorage {
 
   // Onboarding Templates Management
   async getOnboardingTemplates(locationId?: string, positionId?: string): Promise<OnboardingTemplate[]> {
-    let query = db.select().from(onboardingTemplates);
+    let query = db.select().from(onboardingTemplates).$dynamic();
     
     if (locationId && positionId) {
       // Return templates that match location OR are general (location_id IS NULL)
@@ -3943,7 +3936,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Employee document assignment operations
-  async getEmployeeDocuments(employeeId: string): Promise<any[]> {
+  async getEmployeeDocumentAssignments(employeeId: string): Promise<any[]> {
     const documents = await db.select({
       id: employeeDocumentAssignments.id,
       templateId: employeeDocumentAssignments.templateId,
@@ -4057,8 +4050,10 @@ export class DatabaseStorage implements IStorage {
   async saveDocumentFormResponse(response: InsertEmployeeDocumentResponse): Promise<EmployeeDocumentResponse> {
     const [existing] = await db.select()
       .from(employeeDocumentResponses)
-      .where(eq(employeeDocumentResponses.assignmentId, response.assignmentId))
-      .where(eq(employeeDocumentResponses.fieldId, response.fieldId));
+      .where(and(
+        eq(employeeDocumentResponses.assignmentId, response.assignmentId),
+        eq(employeeDocumentResponses.fieldId, response.fieldId)
+      ));
     
     if (existing) {
       const [updated] = await db.update(employeeDocumentResponses)
@@ -4100,7 +4095,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Get document assignments
-    const documents = await this.getEmployeeDocuments(employeeId);
+    const documents = await this.getEmployeeDocumentAssignments(employeeId);
 
     return { 
       employee, 
@@ -4170,7 +4165,7 @@ export class DatabaseStorage implements IStorage {
     .leftJoin(departments, eq(invitationTokens.departmentId, departments.id))
     .leftJoin(positions, eq(invitationTokens.positionId, positions.id))
     .leftJoin(users, eq(invitationTokens.invitedBy, users.id))
-    .orderBy(desc(invitationTokens.createdAt));
+    .orderBy(desc(invitationTokens.createdAt)).$dynamic();
 
     if (invitedBy) {
       query = query.where(eq(invitationTokens.invitedBy, invitedBy)) as any;
@@ -4594,7 +4589,7 @@ export class DatabaseStorage implements IStorage {
     };
 
     const currentStepNumber = stepMap[stepName as keyof typeof stepMap] || 1;
-    const completedSteps = status === 'completed' ? Math.max(existing.completedSteps, currentStepNumber) : existing.completedSteps;
+    const completedSteps = status === 'completed' ? Math.max(existing.completedSteps ?? 0, currentStepNumber) : existing.completedSteps;
 
     // Determine next step
     let nextStep = stepName;

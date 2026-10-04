@@ -111,6 +111,10 @@ const migrations = [
     name: "pos_provider enum: add csv",
     sql: `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'csv' AND enumtypid = 'pos_provider'::regtype) THEN ALTER TYPE pos_provider ADD VALUE 'csv'; END IF; END $$`,
   },
+  {
+    name: "messages.read_by",
+    sql: `ALTER TABLE messages ADD COLUMN IF NOT EXISTS read_by jsonb DEFAULT '[]'::jsonb`,
+  },
 ];
 
 async function run() {

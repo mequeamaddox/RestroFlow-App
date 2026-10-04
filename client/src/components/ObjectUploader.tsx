@@ -18,6 +18,7 @@ interface ObjectUploaderProps {
     result: UploadResult<Record<string, unknown>, Record<string, unknown>>
   ) => void;
   buttonClassName?: string;
+  allowedFileTypes?: string[];
   children: ReactNode;
 }
 
@@ -27,6 +28,7 @@ export function ObjectUploader({
   onGetUploadParameters,
   onComplete,
   buttonClassName,
+  allowedFileTypes = ["image/*"],
   children,
 }: ObjectUploaderProps) {
   const [showModal, setShowModal] = useState(false);
@@ -37,11 +39,11 @@ export function ObjectUploader({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [uppy] = useState(() =>
-    new Uppy({
+    new Uppy<Record<string, unknown>, Record<string, unknown>>({
       restrictions: {
         maxNumberOfFiles,
         maxFileSize,
-        allowedFileTypes: ["image/*"],
+        allowedFileTypes,
       },
       autoProceed: false,
     }).use(AwsS3, {
@@ -71,7 +73,8 @@ export function ObjectUploader({
     setError(null);
     try {
       const result = await uppy.upload();
-      if (result.failed.length > 0) {
+      if (!result) return;
+      if (result.failed?.length) {
         setError(`Upload failed: ${result.failed[0].error}`);
       } else {
         setUploadDone(true);
@@ -129,7 +132,7 @@ export function ObjectUploader({
                 ref={inputRef}
                 type="file"
                 className="hidden"
-                accept="image/*"
+                accept={allowedFileTypes.join(',')}
                 multiple={maxNumberOfFiles > 1}
                 onChange={handleFileChange}
               />

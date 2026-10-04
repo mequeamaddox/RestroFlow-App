@@ -1,3 +1,5 @@
+import type { Employee } from "@shared/schema";
+import type { UploadResult } from '@uppy/core';
 import { HRUpgradePrompt } from "@/components/hr/hr-upgrade-prompt";
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,17 +51,16 @@ export default function HRMessaging() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [messageTypeFilter, setMessageTypeFilter] = useState<string>("all");
   const [resourceCategoryFilter, setResourceCategoryFilter] = useState<string>("all");
-  const [isResourceDialogOpen, setIsResourceDialogOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { currentLocation, hasHRAccess } = useLocation();
 
-  const { data: messages = [], isLoading } = useQuery({
+  const { data: messages = [], isLoading } = useQuery<Message[]>({
     queryKey: ['/api/hr/messages', currentLocation?.id],
     enabled: !!currentLocation,
   });
 
-  const { data: employees = [] } = useQuery({
+  const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ['/api/hr/employees', currentLocation?.id],
     enabled: !!currentLocation,
   });
@@ -76,14 +77,14 @@ export default function HRMessaging() {
     enabled: !!currentLocation,
   });
 
-  const { data: teamResources = [] } = useQuery({
+  const { data: teamResources = [] } = useQuery<TeamResource[]>({
     queryKey: ['/api/hr/team-resources', currentLocation?.id],
     enabled: !!currentLocation,
   });
 
   const createMessageMutation = useMutation({
     mutationFn: async (messageData: any) => {
-      return await apiRequest('POST', '/api/hr/messages', messageData);
+      return await apiRequest('POST', `/api/hr/messages?locationId=${currentLocation?.id}`, messageData);
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Message sent successfully" });
@@ -97,12 +98,11 @@ export default function HRMessaging() {
 
   const createResourceMutation = useMutation({
     mutationFn: async (resourceData: any) => {
-      return await apiRequest('POST', '/api/hr/team-resources', resourceData);
+      return await apiRequest('POST', `/api/hr/team-resources?locationId=${currentLocation?.id}`, resourceData);
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Resource uploaded successfully" });
       queryClient.invalidateQueries({ queryKey: ['/api/hr/team-resources'] });
-      setIsResourceDialogOpen(false);
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to upload resource", variant: "destructive" });
@@ -111,7 +111,7 @@ export default function HRMessaging() {
 
   const deleteResourceMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiRequest('DELETE', `/api/hr/team-resources/${id}`);
+      return await apiRequest('DELETE', `/api/hr/team-resources/${id}?locationId=${currentLocation?.id}`);
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Resource deleted successfully" });
@@ -148,15 +148,20 @@ export default function HRMessaging() {
   };
 
   const handleResourceUpload = async () => {
-    return await apiRequest('POST', '/api/objects/upload');
+    const response = await apiRequest('POST', '/api/objects/upload');
+    const { uploadURL } = await response.json();
+    if (typeof uploadURL !== 'string') throw new Error('Upload URL missing');
+    return { method: 'PUT' as const, url: uploadURL };
   };
 
-  const handleResourceComplete = (result: any) => {
-    if (result.successful?.[0]?.uploadURL) {
-      // This would normally open a dialog to collect metadata
-      toast({ title: "Upload Complete", description: "Please add resource details" });
-      setIsResourceDialogOpen(true);
-    }
+  const handleResourceComplete = (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
+    const file = result.successful?.[0];
+    if (!file?.uploadURL) return;
+    createResourceMutation.mutate({
+      name: file.name || 'Team resource', fileUrl: file.uploadURL,
+      fileType: file.type || 'application/octet-stream', fileSize: file.size || 0,
+      category: 'other',
+    });
   };
 
   const formatFileSize = (bytes: number) => {
@@ -544,7 +549,7 @@ export default function HRMessaging() {
                             {employee && (
                               <>
                                 <Avatar className="h-4 w-4">
-                                  <AvatarImage src={employee.profilePhoto} />
+                                  <AvatarImage src={employee.profilePhoto ?? undefined} />
                                   <AvatarFallback className="text-xs">
                                     {employee.firstName.charAt(0)}{employee.lastName.charAt(0)}
                                   </AvatarFallback>
@@ -603,6 +608,7 @@ export default function HRMessaging() {
               <ObjectUploader
                 maxNumberOfFiles={1}
                 maxFileSize={52428800}
+                allowedFileTypes={["image/*", ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt"]}
                 onGetUploadParameters={handleResourceUpload}
                 onComplete={handleResourceComplete}
                 buttonClassName=""
@@ -687,7 +693,7 @@ export default function HRMessaging() {
                       
                       <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t">
                         <Avatar className="h-5 w-5">
-                          <AvatarImage src={employee?.profilePhoto} />
+                          <AvatarImage src={employee?.profilePhoto ?? undefined} />
                           <AvatarFallback className="text-xs">
                             {employee?.firstName?.charAt(0)}{employee?.lastName?.charAt(0)}
                           </AvatarFallback>
