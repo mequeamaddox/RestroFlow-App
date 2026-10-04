@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -18,6 +20,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiFetch } from '../lib/api';
 import { useSelectedLocation } from '../contexts/LocationContext';
 import { colors } from '../lib/colors';
+import { QueryNotice } from '../components/QueryNotice';
+import { quantityMatchesOrder } from '../lib/receiving';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,13 +47,14 @@ interface POItem {
 const RECEIVABLE: PurchaseOrder['status'][] = ['draft', 'sent', 'confirmed'];
 
 // The server's PUT nulls notes/expectedDeliveryDate when omitted, so echo them back.
-function markDelivered(order: PurchaseOrder) {
+function markDelivered(order: PurchaseOrder, items: POItem[]) {
   return apiFetch(`/api/purchase-orders/${order.id}`, {
     method: 'PUT',
     body: JSON.stringify({
       status: 'delivered',
       notes: order.notes ?? null,
       expectedDeliveryDate: order.expectedDeliveryDate ?? '',
+      receivedItems: items.map(item => ({ id: item.id, quantity: item.quantity })),
     }),
   });
 }
@@ -184,21 +189,21 @@ function PODetailScreen() {
   const qc = useQueryClient();
   const { orderId } = route.params as { orderId: string };
 
-  const { data: orders = [] } = useQuery<PurchaseOrder[]>({
+  const { data: orders = [], isLoading: orderLoading, error: orderError, refetch: refetchOrder } = useQuery<PurchaseOrder[]>({
     queryKey: ['purchase-orders', locationId],
     queryFn: () => apiFetch<PurchaseOrder[]>(`/api/purchase-orders?locationId=${locationId}`),
     enabled: !!locationId,
   });
   const order = orders.find(o => o.id === orderId);
 
-  const { data: items = [], isLoading: itemsLoading } = useQuery<POItem[]>({
+  const { data: items = [], isLoading: itemsLoading, error: itemsError, refetch: refetchItems } = useQuery<POItem[]>({
     queryKey: ['po-items', orderId],
     queryFn: () => apiFetch<POItem[]>(`/api/purchase-orders/${orderId}/items`),
     enabled: !!orderId,
   });
 
   const receiveMutation = useMutation({
-    mutationFn: () => markDelivered(order!),
+    mutationFn: () => markDelivered(order!, items),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['purchase-orders', locationId] });
       qc.invalidateQueries({ queryKey: ['inventory', locationId] });
@@ -211,7 +216,8 @@ function PODetailScreen() {
   if (!order) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }, styles.center]}>
-        <ActivityIndicator color={colors.accent} />
+        {orderLoading ? <ActivityIndicator color={colors.accent} /> : <QueryNotice message={orderError ? `Could not load order: ${orderError.message}` : 'This order is no longer available.'} onRetry={() => { void refetchOrder(); }} />}
+        <TouchableOpacity onPress={() => navigation.goBack()}><Text style={styles.backBtnText}>← Back</Text></TouchableOpacity>
       </View>
     );
   }
@@ -248,10 +254,12 @@ function PODetailScreen() {
 
         {/* Line items */}
         <Text style={styles.sectionTitle}>Line Items ({items.length})</Text>
+        {orderError && <QueryNotice message={`Could not refresh order: ${orderError.message}`} onRetry={() => { void refetchOrder(); }} />}
+        {itemsError && <QueryNotice message={`Could not load line items: ${itemsError.message}`} onRetry={() => { void refetchItems(); }} />}
 
         {itemsLoading ? (
           <ActivityIndicator color={colors.accent} style={{ marginTop: 20 }} />
-        ) : items.length === 0 ? (
+        ) : itemsError ? null : items.length === 0 ? (
           <Text style={[styles.muted, { marginTop: 12 }]}>No line items</Text>
         ) : (
           <FlatList
@@ -278,7 +286,7 @@ function PODetailScreen() {
         )}
 
         {/* Actions */}
-        {canReceive && (
+        {canReceive && !itemsLoading && !itemsError && !orderError && items.length > 0 && (
           <View style={{ gap: 10, marginTop: 12 }}>
             <TouchableOpacity
               style={styles.scanReceiveBtn}
@@ -322,14 +330,16 @@ function POScannerScreen() {
   const { orderId } = route.params as { orderId: string };
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
-  const [received, setReceived] = useState<string[]>([]);
+  const [received, setReceived] = useState<Record<string, string>>({});
+  const [activeItem, setActiveItem] = useState<POItem | null>(null);
+  const [receivedQuantity, setReceivedQuantity] = useState('');
 
-  const { data: items = [] } = useQuery<POItem[]>({
+  const { data: items = [], isLoading: itemsLoading, error: itemsError, refetch: refetchItems } = useQuery<POItem[]>({
     queryKey: ['po-items', orderId],
     queryFn: () => apiFetch<POItem[]>(`/api/purchase-orders/${orderId}/items`),
     enabled: !!orderId,
   });
-  const { data: orders = [] } = useQuery<PurchaseOrder[]>({
+  const { data: orders = [], isLoading: orderLoading, error: orderError, refetch: refetchOrder } = useQuery<PurchaseOrder[]>({
     queryKey: ['purchase-orders', locationId],
     queryFn: () => apiFetch<PurchaseOrder[]>(`/api/purchase-orders?locationId=${locationId}`),
     enabled: !!locationId,
@@ -338,8 +348,8 @@ function POScannerScreen() {
 
   const receiveMutation = useMutation({
     mutationFn: () => {
-      if (!order) throw new Error('Order details are still loading. Try again in a moment.');
-      return markDelivered(order);
+      if (!order || !RECEIVABLE.includes(order.status) || itemsError || orderError || !items.length || !items.every(item => quantityMatchesOrder(received[item.id] ?? '', item.quantity))) throw new Error('Load the order and confirm every received quantity before completing it.');
+      return markDelivered(order, items);
     },
     onError: (err: Error) => Alert.alert('Error', err.message),
     onSuccess: () => {
@@ -351,7 +361,18 @@ function POScannerScreen() {
     },
   });
 
-  const allReceived = items.length > 0 && received.length >= items.length;
+  const receivedCount = items.filter(item => quantityMatchesOrder(received[item.id] ?? '', item.quantity)).length;
+  const allReceived = items.length > 0 && receivedCount === items.length;
+
+  if (itemsError || orderError || itemsLoading || orderLoading || !order || !items.length || !RECEIVABLE.includes(order.status)) {
+    const message = itemsError?.message ?? orderError?.message ?? (!order ? 'This order is no longer available.' : !items.length ? 'This order has no items to receive.' : 'This order cannot be received.');
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }, styles.center]}>
+        {itemsLoading || orderLoading ? <ActivityIndicator color={colors.accent} /> : <QueryNotice message={message} onRetry={() => { void refetchItems(); void refetchOrder(); }} />}
+        <TouchableOpacity onPress={() => navigation.goBack()}><Text style={styles.backBtnText}>← Back</Text></TouchableOpacity>
+      </View>
+    );
+  }
 
   if (!permission?.granted) {
     return (
@@ -374,32 +395,27 @@ function POScannerScreen() {
     if (scanned) return;
     setScanned(true);
 
-    const match = items.find(i => i.inventoryItem?.barcode === data);
+    const match = items.find(i => i.inventoryItem?.barcode === data && !quantityMatchesOrder(received[i.id] ?? '', i.quantity));
     if (match) {
-      if (received.includes(match.id)) {
-        Alert.alert('Already Scanned', `${match.inventoryItem?.name ?? 'Item'} was already checked off.`, [
-          { text: 'OK', onPress: () => setScanned(false) },
-        ]);
-        return;
-      }
-      const newReceived = [...received, match.id];
-      setReceived(newReceived);
-      const remaining = items.length - newReceived.length;
-      if (remaining === 0) {
-        Alert.alert('All Items Received!', 'All line items scanned. Mark order complete?', [
-          { text: 'Not Yet', onPress: () => setScanned(false) },
-          { text: 'Mark Complete', onPress: () => receiveMutation.mutate() },
-        ]);
-      } else {
-        Alert.alert('✓ Scanned', `${match.inventoryItem?.name ?? 'Item'} received.\n${remaining} item(s) remaining.`, [
-          { text: 'Continue', onPress: () => setScanned(false) },
-        ]);
-      }
+      setActiveItem(match);
+      setReceivedQuantity('');
     } else {
-      Alert.alert('Not on this Order', `Barcode ${data} is not in this purchase order.`, [
+      const alreadyReceived = items.some(i => i.inventoryItem?.barcode === data);
+      Alert.alert(alreadyReceived ? 'Already received' : 'Not on this order', alreadyReceived ? 'All order lines for this barcode have been confirmed.' : `Barcode ${data} is not in this purchase order.`, [
         { text: 'OK', onPress: () => setScanned(false) },
       ]);
     }
+  }
+
+  function confirmQuantity() {
+    if (!activeItem) return;
+    if (!quantityMatchesOrder(receivedQuantity, activeItem.quantity)) {
+      Alert.alert('Check quantity', `This app receives complete orders. Confirm ${activeItem.quantity} ${activeItem.inventoryItem?.unit ?? 'units'} received before checking off this line. Leave the order open if the shipment is short.`);
+      return;
+    }
+    setReceived(previous => ({ ...previous, [activeItem.id]: receivedQuantity.trim() }));
+    setActiveItem(null);
+    setScanned(false);
   }
 
   return (
@@ -416,12 +432,36 @@ function POScannerScreen() {
             <Text style={styles.scanCloseText}>✕ Cancel</Text>
           </TouchableOpacity>
           <View style={styles.progressPill}>
-            <Text style={styles.progressText}>{received.length}/{items.length} received</Text>
+            <Text style={styles.progressText}>{receivedCount}/{items.length} received</Text>
           </View>
         </View>
         <View style={styles.scanFrame} />
-        <Text style={styles.scanHint}>Scan each item's barcode to receive it</Text>
+        <Text style={styles.scanHint}>Scan each item and confirm the received quantity</Text>
+        {allReceived && (
+          <TouchableOpacity style={styles.receiveBtn} disabled={receiveMutation.isPending} onPress={() => receiveMutation.mutate()}>
+            {receiveMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.receiveBtnText}>Complete Receiving</Text>}
+          </TouchableOpacity>
+        )}
       </View>
+      <Modal visible={!!activeItem} transparent animationType="fade" onRequestClose={() => { setActiveItem(null); setScanned(false); }}>
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.7)' }}>
+          <View style={{ backgroundColor: colors.surface, padding: 20, borderRadius: 14, gap: 16 }}>
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>{activeItem?.inventoryItem?.name ?? 'Item'}</Text>
+            <Text style={{ color: colors.text }}>Ordered: {activeItem?.quantity} {activeItem?.inventoryItem?.unit}</Text>
+            <TextInput
+              accessibilityLabel="Received quantity"
+              placeholder="Received quantity"
+              placeholderTextColor={colors.muted}
+              value={receivedQuantity}
+              onChangeText={setReceivedQuantity}
+              keyboardType="decimal-pad"
+              style={{ color: colors.text, padding: 12, borderColor: colors.border, borderWidth: 1, borderRadius: 8 }}
+            />
+            <TouchableOpacity style={styles.receiveBtn} onPress={confirmQuantity}><Text style={styles.receiveBtnText}>Confirm Quantity</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => { setActiveItem(null); setScanned(false); }}><Text style={styles.backBtnText}>Cancel</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

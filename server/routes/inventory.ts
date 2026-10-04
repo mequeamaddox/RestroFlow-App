@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import { storage } from '../storage';
+import { ReceivingError } from '../purchaseOrderReceiving';
 import { isAuthenticated, csvUpload, PLAN_LOCATION_LIMITS } from './helpers';
 import { requireLocationAccess, assertLocationAccess } from '../securityMiddleware';
 import {
@@ -553,34 +554,18 @@ print(json.dumps(rows))
         totalAmount: req.body.totalAmount,
         notes: req.body.notes || null,
       };
-      const order = await storage.updatePurchaseOrder(req.params.id, orderData);
-      if (req.body.status === 'delivered' && currentOrder.status !== 'delivered') {
-        console.log(`PO ${req.params.id} marked as delivered — processing inventory receiving...`);
-        try {
-          const orderItems = currentOrder.items || [];
-          for (const item of orderItems) {
-            if (!item.inventoryItemId) continue;
-            const inventoryItem = await storage.getInventoryItem(item.inventoryItemId);
-            if (inventoryItem) {
-              const currentQty = parseFloat(inventoryItem.quantity?.toString() || '0');
-              const receivedQty = parseFloat(item.quantity?.toString() || '0');
-              await storage.updateInventoryItem(inventoryItem.id, { quantity: (currentQty + receivedQty).toString() });
-              await storage.createInventoryTransaction({
-                inventoryItemId: inventoryItem.id, locationId: currentOrder.locationId,
-                type: 'in', quantity: receivedQty.toString(), reference: `PO-${order.orderNumber || req.params.id}`,
-                notes: 'Received from purchase order', createdBy: req.user!.id,
-              });
-            }
-          }
-          console.log(`✅ Inventory updated for delivered PO ${req.params.id}`);
-        } catch (invError) {
-          console.error('Error updating inventory for delivered PO:', invError);
+      let confirmedItems;
+      if (req.body.receivedItems !== undefined) {
+        if (!Array.isArray(req.body.receivedItems) || req.body.receivedItems.some((item: unknown) => !item || typeof item !== 'object' || typeof (item as { id?: unknown }).id !== 'string' || typeof (item as { quantity?: unknown }).quantity !== 'string')) {
+          return res.status(400).json({ message: 'Invalid received item quantities.' });
         }
+        confirmedItems = req.body.receivedItems as Array<{ id: string; quantity: string }>;
       }
+      const order = await storage.updatePurchaseOrder(req.params.id, orderData, req.user!.id, confirmedItems);
       res.json(order);
     } catch (error) {
       console.error('Error updating purchase order:', error);
-      res.status(400).json({ message: 'Failed to update purchase order' });
+      res.status(error instanceof ReceivingError ? 400 : 500).json({ message: error instanceof ReceivingError ? error.message : 'Failed to update purchase order. No inventory was received.' });
     }
   });
 

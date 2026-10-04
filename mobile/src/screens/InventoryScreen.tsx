@@ -330,11 +330,20 @@ function BarcodeScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
 
-  const { data: items = [] } = useQuery<InventoryItem[]>({
+  const { data: items = [], isLoading, error, refetch } = useQuery<InventoryItem[]>({
     queryKey: ['inventory', locationId],
     queryFn: () => apiFetch<InventoryItem[]>(`/api/inventory?locationId=${locationId}`),
     enabled: !!locationId,
   });
+
+  if (error || isLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }, styles.center]}>
+        {error ? <QueryNotice message={`Could not load inventory: ${error.message}`} onRetry={() => { void refetch(); }} /> : <ActivityIndicator color={colors.accent} />}
+        <TouchableOpacity onPress={() => navigation.goBack()} accessibilityRole="button"><Text style={styles.backBtnText}>← Back</Text></TouchableOpacity>
+      </View>
+    );
+  }
 
   if (!permission) {
     return (

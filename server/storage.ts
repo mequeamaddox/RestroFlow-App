@@ -1,4 +1,5 @@
 import { calculateWorkedLabor } from "./laborAnalytics";
+import { updateOrderAndReceive, type ReceiptConfirmation } from './purchaseOrderReceiving';
 import crypto from 'crypto';
 import {
   users,
@@ -266,7 +267,7 @@ export interface IStorage {
   getPurchaseOrders(locationId?: string): Promise<(PurchaseOrder & { vendor?: Vendor; items?: PurchaseOrderItem[] })[]>;
   getPurchaseOrder(id: string): Promise<(PurchaseOrder & { vendor?: Vendor; items: (PurchaseOrderItem & { inventoryItem: InventoryItem })[] }) | undefined>;
   createPurchaseOrder(order: InsertPurchaseOrder): Promise<PurchaseOrder>;
-  updatePurchaseOrder(id: string, order: Partial<InsertPurchaseOrder>): Promise<PurchaseOrder>;
+  updatePurchaseOrder(id: string, order: Partial<InsertPurchaseOrder>, receivedBy?: string, confirmedItems?: ReceiptConfirmation): Promise<PurchaseOrder>;
   deletePurchaseOrder(id: string): Promise<void>;
   addPurchaseOrderItem(item: InsertPurchaseOrderItem): Promise<PurchaseOrderItem>;
   removePurchaseOrderItem(id: string): Promise<void>;
@@ -1661,13 +1662,8 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updatePurchaseOrder(id: string, order: Partial<InsertPurchaseOrder>): Promise<PurchaseOrder> {
-    const [result] = await db
-      .update(purchaseOrders)
-      .set({ ...order, updatedAt: new Date() })
-      .where(eq(purchaseOrders.id, id))
-      .returning();
-    return result;
+  async updatePurchaseOrder(id: string, order: Partial<InsertPurchaseOrder>, receivedBy?: string, confirmedItems?: ReceiptConfirmation): Promise<PurchaseOrder> {
+    return updateOrderAndReceive(db, id, order, receivedBy, confirmedItems);
   }
 
   async deletePurchaseOrder(id: string): Promise<void> {
