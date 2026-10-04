@@ -1,3 +1,4 @@
+import type { PurchaseOrder, Vendor, InventoryItem } from "@shared/schema";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -78,28 +79,34 @@ export default function PurchaseOrders() {
   };
 
   const getSelectedItemInfo = () => {
-    return inventoryItems.find((item: any) => item.id === selectedInventoryItem);
+    return inventoryItems.find(item => item.id === selectedInventoryItem);
+  };
+  const getSelectedItemCost = () => {
+    return Number(getSelectedItemInfo()?.costPerUnit ?? 0);
+  };
+  const getSuggestedQuantity = () => {
+    return Number(getSelectedItemInfo()?.reorderLevel ?? 0) * 2;
   };
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { currentLocation } = useLocation();
 
-  const { data: purchaseOrders = [], isLoading } = useQuery({
+  const { data: purchaseOrders = [], isLoading } = useQuery<PurchaseOrder[]>({
     queryKey: ['/api/purchase-orders', currentLocation?.id],
     enabled: !!currentLocation,
   });
 
-  const { data: vendors = [] } = useQuery({
+  const { data: vendors = [] } = useQuery<Vendor[]>({
     queryKey: ['/api/vendors', currentLocation?.id],
     enabled: !!currentLocation,
   });
 
-  const { data: inventoryItems = [] } = useQuery({
+  const { data: inventoryItems = [] } = useQuery<InventoryItem[]>({
     queryKey: ['/api/inventory', currentLocation?.id],
     enabled: !!currentLocation,
   });
 
-  const { data: lowStockItems = [] } = useQuery({
+  const { data: lowStockItems = [] } = useQuery<InventoryItem[]>({
     queryKey: ['/api/inventory/low-stock', currentLocation?.id],
     enabled: !!currentLocation,
   });
@@ -494,7 +501,7 @@ export default function PurchaseOrders() {
                                 <div className="flex flex-col">
                                   <span className="font-medium">{item.name}</span>
                                   <span className="text-xs text-muted-foreground">
-                                    Current: {item.currentStock} {item.unit}
+                                    Current: {item.quantity} {item.unit}
                                   </span>
                                 </div>
                               </SelectItem>
@@ -503,19 +510,19 @@ export default function PurchaseOrders() {
                         </Select>
                         {getSelectedItemInfo() && (
                           <div className="text-xs text-muted-foreground mt-1 space-y-1">
-                            <p>Last cost: ${getSelectedItemInfo()?.unitCost?.toFixed(2) || '0.00'}</p>
-                            {parseFloat(itemUnitCost) > 0 && getSelectedItemInfo()?.unitCost && (
+                            <p>Last cost: ${getSelectedItemCost()?.toFixed(2) || '0.00'}</p>
+                            {parseFloat(itemUnitCost) > 0 && getSelectedItemCost() > 0 && (
                               <div className="flex items-center space-x-2">
                                 <span>Price change:</span>
-                                {parseFloat(itemUnitCost) > getSelectedItemInfo()?.unitCost ? (
+                                {parseFloat(itemUnitCost) > getSelectedItemCost() ? (
                                   <span className="text-red-600 font-medium">
-                                    +${(parseFloat(itemUnitCost) - getSelectedItemInfo()?.unitCost).toFixed(2)} 
-                                    (+{(((parseFloat(itemUnitCost) - getSelectedItemInfo()?.unitCost) / getSelectedItemInfo()?.unitCost) * 100).toFixed(1)}%)
+                                    +${(parseFloat(itemUnitCost) - getSelectedItemCost()).toFixed(2)}
+                                    (+{(((parseFloat(itemUnitCost) - getSelectedItemCost()) / getSelectedItemCost()) * 100).toFixed(1)}%)
                                   </span>
-                                ) : parseFloat(itemUnitCost) < getSelectedItemInfo()?.unitCost ? (
+                                ) : parseFloat(itemUnitCost) < getSelectedItemCost() ? (
                                   <span className="text-green-600 font-medium">
-                                    -${(getSelectedItemInfo()?.unitCost - parseFloat(itemUnitCost)).toFixed(2)} 
-                                    (-{(((getSelectedItemInfo()?.unitCost - parseFloat(itemUnitCost)) / getSelectedItemInfo()?.unitCost) * 100).toFixed(1)}%)
+                                    -${(getSelectedItemCost() - parseFloat(itemUnitCost)).toFixed(2)}
+                                    (-{(((getSelectedItemCost() - parseFloat(itemUnitCost)) / getSelectedItemCost()) * 100).toFixed(1)}%)
                                   </span>
                                 ) : (
                                   <span className="text-muted-foreground">No change</span>
@@ -602,20 +609,20 @@ export default function PurchaseOrders() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => setItemUnitCost(getSelectedItemInfo()?.unitCost?.toString() || "")}
+                          onClick={() => setItemUnitCost(getSelectedItemCost()?.toString() || "")}
                           className="h-6 px-2 text-xs"
                         >
-                          Last Cost (${getSelectedItemInfo()?.unitCost?.toFixed(2)})
+                          Last Cost (${getSelectedItemCost()?.toFixed(2)})
                         </Button>
-                        {getSelectedItemInfo()?.reorderLevel && (
+                        {getSuggestedQuantity() > 0 && (
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => setItemQuantity((getSelectedItemInfo()?.reorderLevel * 2).toString())}
+                            onClick={() => setItemQuantity((getSuggestedQuantity()).toString())}
                             className="h-6 px-2 text-xs"
                           >
-                            Suggested Qty ({getSelectedItemInfo()?.reorderLevel * 2})
+                            Suggested Qty ({getSuggestedQuantity()})
                           </Button>
                         )}
                       </div>
@@ -751,7 +758,7 @@ export default function PurchaseOrders() {
                                   const cheapest = lineItems.reduce((min, item) => item.totalCost < min.totalCost ? item : min, lineItems[0]);
                                   const priceChanges = lineItems.filter(item => {
                                     const inventoryItem = inventoryItems.find((inv: any) => inv.id === item.inventoryItemId);
-                                    return inventoryItem?.unitCost && Math.abs(inventoryItem.unitCost - item.unitCost) > 0.01;
+                                    return inventoryItem && Math.abs(Number(inventoryItem.costPerUnit) - item.unitCost) > 0.01;
                                   });
                                   
                                   return (
@@ -1015,7 +1022,7 @@ export default function PurchaseOrders() {
                   <div>
                     <p className="font-medium text-sm">{item.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      Current: {item.currentStock} | Reorder at: {item.reorderLevel}
+                      Current: {item.quantity} | Reorder at: {item.reorderLevel}
                     </p>
                   </div>
                   <div className="flex items-center space-x-1">

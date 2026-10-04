@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,17 +16,17 @@ import QuickAddDashboard from "@/components/dashboard/quick-add-dashboard";
 export default function Dashboard() {
   const { currentLocation } = useLocation();
 
-  const { data: metrics, isLoading: metricsLoading } = useQuery({
+  const { data: metrics, isLoading: metricsLoading } = useQuery<NonNullable<ComponentProps<typeof MetricsCards>["metrics"]>>({
     queryKey: ['/api/dashboard/metrics', currentLocation?.id],
     enabled: !!currentLocation,
   });
 
-  const { data: lowStockItems = [], isLoading: lowStockLoading } = useQuery({
+  const { data: lowStockItems = [], isLoading: lowStockLoading } = useQuery<NonNullable<ComponentProps<typeof LowStockAlerts>["items"]>>({
     queryKey: ['/api/inventory/low-stock', currentLocation?.id],
     enabled: !!currentLocation,
   });
 
-  const { data: inventoryItems = [], isLoading: inventoryLoading } = useQuery({
+  const { data: inventoryItems = [], isLoading: inventoryLoading } = useQuery<NonNullable<ComponentProps<typeof InventoryTable>["items"]>>({
     queryKey: ['/api/inventory', currentLocation?.id],
     enabled: !!currentLocation,
   });

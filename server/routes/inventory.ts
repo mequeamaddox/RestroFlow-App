@@ -111,7 +111,13 @@ export function registerInventoryRoutes(app: Express): void {
       const categoryData = insertCategorySchema.partial().parse(req.body);
       const existing = await storage.getCategory(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Category not found' });
-      if (!await assertLocationAccess(req, res, categoryData.locationId || existing.locationId)) return;
+      if (!existing.locationId) {
+        if (req.user!.role !== 'platform_admin') return res.status(403).json({ message: 'Shared categories require platform administrator access' });
+      } else if (!await assertLocationAccess(req, res, existing.locationId)) return;
+      if (categoryData.locationId && !await assertLocationAccess(req, res, categoryData.locationId)) return;
+      if (categoryData.locationId === null && req.user!.role !== 'platform_admin') {
+        return res.status(403).json({ message: 'Shared categories require platform administrator access' });
+      }
       const category = await storage.updateCategory(req.params.id, categoryData);
       res.json(category);
     } catch (error) {
@@ -124,7 +130,9 @@ export function registerInventoryRoutes(app: Express): void {
     try {
       const category = await storage.getCategory(req.params.id);
       if (!category) return res.status(404).json({ message: 'Category not found' });
-      if (!await assertLocationAccess(req, res, category.locationId)) return;
+      if (!category.locationId) {
+        if (req.user!.role !== 'platform_admin') return res.status(403).json({ message: 'Shared categories require platform administrator access' });
+      } else if (!await assertLocationAccess(req, res, category.locationId)) return;
       await storage.deleteCategory(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -551,6 +559,7 @@ print(json.dumps(rows))
         try {
           const orderItems = currentOrder.items || [];
           for (const item of orderItems) {
+            if (!item.inventoryItemId) continue;
             const inventoryItem = await storage.getInventoryItem(item.inventoryItemId);
             if (inventoryItem) {
               const currentQty = parseFloat(inventoryItem.quantity?.toString() || '0');
@@ -603,6 +612,7 @@ print(json.dumps(rows))
   app.post('/api/purchase-order-items', isAuthenticated, async (req, res) => {
     try {
       const itemData = insertPurchaseOrderItemSchema.parse(req.body);
+      if (!itemData.purchaseOrderId) return res.status(400).json({ message: "Purchase order ID required" });
       const order = await storage.getPurchaseOrder(itemData.purchaseOrderId);
       if (!order) return res.status(404).json({ message: 'Purchase order not found' });
       if (order.locationId && !await assertLocationAccess(req, res, order.locationId)) return;

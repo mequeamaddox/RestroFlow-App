@@ -29,45 +29,8 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
   const [resetEmailSent, setResetEmailSent] = useState(false);
   const [, setLocation] = useLocation();
   const { refreshAuth } = useAuth();
-  const { signIn, isLoaded: isSignInLoaded } = useSignIn();
+  const { signIn, setActive, isLoaded: isSignInLoaded } = useSignIn();
   
-  // Server-side authentication function with session cookies
-  const signIn = async (email: string, password: string) => {
-    try {
-      console.log('🔐 Attempting server-side authentication for:', email);
-      
-      // Call the server-side authentication endpoint
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        credentials: 'include', // Include cookies for session management
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('❌ Server authentication failed:', errorData);
-        return { user: null, error: errorData.message || 'Authentication failed' };
-      }
-      
-      const data = await response.json();
-      console.log('✅ Server authentication successful for:', data.user.email);
-      
-      // Refresh authentication state to load user data from session cookie
-      await refreshAuth();
-      
-      // Redirect to dashboard after successful login
-      console.log('✅ Login successful, redirecting to dashboard...');
-      setLocation('/');
-      return { user: data.user, error: null };
-    } catch (error: any) {
-      console.error('🚨 Server authentication error:', error);
-      return { user: null, error: 'Network error. Please check your connection and try again.' };
-    }
-  };
-
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -80,13 +43,25 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
     setIsLoading(true);
     setError(null);
 
-    const { error: signInError } = await signIn(data.email.trim().toLowerCase(), data.password.trim());
-    
-    if (signInError) {
-      setError(signInError);
+    try {
+      if (!isSignInLoaded || !signIn) throw new Error('Sign in is still loading. Please try again.');
+      const result = await signIn.create({
+        strategy: 'password',
+        identifier: data.email.trim().toLowerCase(),
+        password: data.password,
+      });
+      if (result.status !== 'complete' || !result.createdSessionId) {
+        setLocation('/login');
+        return;
+      }
+      await setActive({ session: result.createdSessionId });
+      await refreshAuth();
+      setLocation('/');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign in failed. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
   const handlePasswordReset = async () => {

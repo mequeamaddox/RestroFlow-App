@@ -38,7 +38,7 @@ export async function logAuditEvent(
 
     await storage.createAuditLog({
       userId,
-      locationId,
+      locationId: locationId ?? undefined,
       tableName,
       recordId,
       action,

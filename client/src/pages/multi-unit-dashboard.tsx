@@ -67,7 +67,7 @@ export default function MultiUnitDashboard() {
   const [isRecordingSale, setIsRecordingSale] = useState(false);
   const [expandedTransactions, setExpandedTransactions] = useState<Set<string>>(new Set());
 
-  const { data: stockLevels, isLoading: loadingStock } = useQuery({
+  const { data: stockLevels, isLoading: loadingStock } = useQuery<StockLevel[]>({
     queryKey: ['/api/inventory/stock-levels', currentLocation?.id],
     enabled: !!currentLocation?.id,
   });
