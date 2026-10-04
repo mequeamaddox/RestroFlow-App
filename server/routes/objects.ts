@@ -1,6 +1,9 @@
 import type { Express } from 'express';
 import { isAuthenticated } from './helpers';
 import { ObjectStorageService, ObjectNotFoundError } from '../objectStorage';
+import { assertLocationAccess } from '../securityMiddleware';
+import { getObjectLocationIds } from '../objectAccess';
+import { requireObjectAccess } from '../objectAccessMiddleware';
 
 export function registerObjectRoutes(app: Express): void {
   app.post('/api/objects/upload', isAuthenticated, async (_req, res) => {
@@ -14,11 +17,14 @@ export function registerObjectRoutes(app: Express): void {
     }
   });
 
-  app.get('/objects/:objectPath(*)', isAuthenticated, async (req, res) => {
+  app.get('/objects/:objectPath(*)', isAuthenticated, requireObjectAccess({
+    getLocationIds: getObjectLocationIds,
+    assertAccess: assertLocationAccess,
+  }), async (req, res) => {
     try {
       const objectStorageService = new ObjectStorageService();
       const objectFile = await objectStorageService.getObjectEntityFile(req.path);
-      objectStorageService.downloadObject(objectFile, res);
+      await objectStorageService.downloadObject(objectFile, res);
     } catch (error) {
       console.error('Error serving object:', error);
       if (error instanceof ObjectNotFoundError) return res.sendStatus(404);
