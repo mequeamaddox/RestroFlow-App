@@ -42,7 +42,7 @@ function fmt(n: number | undefined, currency = false) {
 
 export function DashboardScreen() {
   const insets = useSafeAreaInsets();
-  const { locationId, locationName } = useSelectedLocation();
+  const { locationId, locationName, clearLocation } = useSelectedLocation();
   const navigation = useNavigation<BottomTabNavigationProp<OwnerTabParamList>>();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -87,10 +87,16 @@ export function DashboardScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
+        <TouchableOpacity
+          onPress={clearLocation}
+          style={styles.locationSwitcher}
+          accessibilityRole="button"
+          accessibilityLabel={`Switch restaurant. Current restaurant: ${locationName ?? 'None'}`}
+          accessibilityHint="Opens the restaurant selection screen"
+        >
           <Text style={styles.greeting}>RestroFlow</Text>
-          <Text style={styles.locationName}>{locationName ?? 'All Locations'}</Text>
-        </View>
+          <Text style={styles.locationName}>{locationName ?? 'Select restaurant'} ▾</Text>
+        </TouchableOpacity>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>Last 30d</Text>
         </View>
@@ -217,6 +223,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+  locationSwitcher: {
+    flex: 1,
+    minHeight: 44,
+    justifyContent: 'center',
+    marginRight: 12,
   },
   locationName: {
     fontSize: 20,
