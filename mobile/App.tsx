@@ -1,13 +1,13 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { AppState, View, Text, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { ClerkProvider } from '@clerk/clerk-expo';
+import { focusManager, QueryClientProvider } from '@tanstack/react-query';
+import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import * as SecureStore from 'expo-secure-store';
 
-import { queryClient } from './src/lib/queryClient';
+import { createQueryClient } from './src/lib/queryClient';
 import { TokenBridge } from './src/components/TokenBridge';
 import { LocationProvider } from './src/contexts/LocationContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
@@ -70,6 +70,41 @@ function MissingKeyScreen() {
   );
 }
 
+function SessionContent() {
+  const [queryClient] = useState(createQueryClient);
+
+  useEffect(() => {
+    focusManager.setFocused(AppState.currentState === 'active');
+    const subscription = AppState.addEventListener('change', state => {
+      focusManager.setFocused(state === 'active');
+    });
+    return () => {
+      subscription.remove();
+      // Clearing cancels pending queries and removes the previous session's data.
+      queryClient.clear();
+    };
+  }, [queryClient]);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <LocationProvider>
+        <TokenBridge>
+          <NavigationContainer>
+            <StatusBar style="light" />
+            <RootNavigator />
+          </NavigationContainer>
+        </TokenBridge>
+      </LocationProvider>
+    </QueryClientProvider>
+  );
+}
+
+function SessionBoundary() {
+  const { userId, sessionId } = useAuth();
+  // Remount the cache, navigation, and location together on every account/session change.
+  return <SessionContent key={`${userId ?? 'signed-out'}:${sessionId ?? 'none'}`} />;
+}
+
 export default function App() {
   if (!CLERK_PUBLISHABLE_KEY) {
     return <MissingKeyScreen />;
@@ -78,17 +113,9 @@ export default function App() {
   return (
     <ErrorBoundary>
       <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
-        <QueryClientProvider client={queryClient}>
-          <SafeAreaProvider>
-            <LocationProvider>
-              <TokenBridge />
-              <NavigationContainer>
-                <StatusBar style="light" />
-                <RootNavigator />
-              </NavigationContainer>
-            </LocationProvider>
-          </SafeAreaProvider>
-        </QueryClientProvider>
+        <SafeAreaProvider>
+          <SessionBoundary />
+        </SafeAreaProvider>
       </ClerkProvider>
     </ErrorBoundary>
   );

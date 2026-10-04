@@ -1,7 +1,7 @@
 type GetTokenFn = () => Promise<string | null>;
 let _getToken: GetTokenFn | null = null;
 
-export function setTokenProvider(fn: GetTokenFn) {
+export function setTokenProvider(fn: GetTokenFn | null) {
   _getToken = fn;
 }
 

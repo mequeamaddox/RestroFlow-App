@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiFetch } from '../lib/api';
 import { useSelectedLocation } from '../contexts/LocationContext';
 import { colors } from '../lib/colors';
+import { QueryNotice } from '../components/QueryNotice';
 
 interface InventoryItem {
   id: string;
@@ -65,13 +66,13 @@ export function WasteLogScreen() {
   const [reason, setReason] = useState<string>(REASONS[0].value);
   const [notes, setNotes] = useState('');
 
-  const { data: items = [] } = useQuery<InventoryItem[]>({
+  const { data: items = [], isLoading: itemsLoading, error: itemsError, refetch: refetchItems } = useQuery<InventoryItem[]>({
     queryKey: ['inventory', locationId],
     queryFn: () => apiFetch<InventoryItem[]>(`/api/inventory?locationId=${locationId}`),
     enabled: !!locationId,
   });
 
-  const { data: entries = [], isLoading, refetch } = useQuery<WasteEntry[]>({
+  const { data: entries = [], isLoading, error: entriesError, refetch } = useQuery<WasteEntry[]>({
     queryKey: ['waste', locationId],
     queryFn: () => apiFetch<WasteEntry[]>(`/api/waste?locationId=${locationId}`),
     enabled: !!locationId,
@@ -162,6 +163,12 @@ export function WasteLogScreen() {
             keyboardShouldPersistTaps="handled"
           >
             {/* Item picker */}
+            {itemsError && (
+              <QueryNotice
+                message={`Could not load inventory: ${itemsError.message}`}
+                onRetry={() => { void refetchItems(); }}
+              />
+            )}
             <Text style={styles.fieldLabel}>Inventory Item</Text>
             <TouchableOpacity
               style={styles.picker}
@@ -235,11 +242,17 @@ export function WasteLogScreen() {
           data={entries.slice().reverse()}
           keyExtractor={e => e.id}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} />}
+          ListHeaderComponent={entriesError ? (
+            <QueryNotice
+              message={`Could not load waste history: ${entriesError.message}`}
+              onRetry={() => { void refetch(); }}
+            />
+          ) : null}
           ListEmptyComponent={
             <View style={styles.center}>
               {isLoading ? (
                 <ActivityIndicator color={colors.accent} />
-              ) : (
+              ) : entriesError ? null : (
                 <Text style={styles.emptyText}>No waste entries yet</Text>
               )}
             </View>
@@ -287,6 +300,19 @@ export function WasteLogScreen() {
           <FlatList
             data={filteredItems}
             keyExtractor={i => i.id}
+            ListHeaderComponent={itemsError ? (
+              <QueryNotice
+                message={`Could not load inventory: ${itemsError.message}`}
+                onRetry={() => { void refetchItems(); }}
+              />
+            ) : null}
+            ListEmptyComponent={
+              <View style={styles.center}>
+                {itemsLoading ? <ActivityIndicator color={colors.accent} /> : itemsError ? null : (
+                  <Text style={styles.emptyText}>{itemSearch ? 'No matching items' : 'No inventory items yet'}</Text>
+                )}
+              </View>
+            }
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.modalItem}

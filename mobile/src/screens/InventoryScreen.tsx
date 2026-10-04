@@ -20,6 +20,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiFetch } from '../lib/api';
+import { QueryNotice } from '../components/QueryNotice';
 import { useSelectedLocation } from '../contexts/LocationContext';
 import { colors } from '../lib/colors';
 
@@ -195,7 +196,7 @@ function InventoryDetailScreen() {
   const qc = useQueryClient();
   const { itemId } = route.params as { itemId: string };
 
-  const { data: items = [] } = useQuery<InventoryItem[]>({
+  const { data: items = [], isLoading, error, refetch } = useQuery<InventoryItem[]>({
     queryKey: ['inventory', locationId],
     queryFn: () => apiFetch<InventoryItem[]>(`/api/inventory?locationId=${locationId}`),
     enabled: !!locationId,
@@ -222,7 +223,17 @@ function InventoryDetailScreen() {
   if (!item) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }, styles.center]}>
-        <ActivityIndicator color={colors.accent} />
+        {isLoading ? <ActivityIndicator color={colors.accent} /> : (
+          <>
+            <QueryNotice
+              message={error ? `Could not load this item: ${error.message}` : 'This item is no longer available in this restaurant.'}
+              onRetry={() => { void refetch(); }}
+            />
+            <TouchableOpacity onPress={() => navigation.goBack()} accessibilityRole="button">
+              <Text style={styles.backBtnText}>← Back to inventory</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     );
   }
@@ -241,6 +252,12 @@ function InventoryDetailScreen() {
       </View>
 
       <View style={styles.detailScroll}>
+        {error && (
+          <QueryNotice
+            message={`Could not refresh this item. Showing saved data: ${error.message}`}
+            onRetry={() => { void refetch(); }}
+          />
+        )}
         {/* Quantity control */}
         <View style={styles.qtyCard}>
           <Text style={styles.qtyLabel}>Current Quantity</Text>
