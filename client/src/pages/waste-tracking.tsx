@@ -102,7 +102,7 @@ export default function WasteTracking() {
       }
       toast({
         title: "Error",
-        description: "Failed to log waste entry",
+        description: error instanceof Error ? error.message : "Failed to log waste entry",
         variant: "destructive",
       });
     },

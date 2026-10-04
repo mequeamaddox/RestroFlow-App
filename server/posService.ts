@@ -172,7 +172,7 @@ export class PosService {
           await this.syncRevelMenuItems(integration, credentials);
           break;
         default:
-          console.log(`Menu sync not implemented for provider: ${integration.provider}`);
+          throw new Error(`Menu sync is not supported for provider: ${integration.provider}`);
       }
 
       await storage.updatePosIntegration(integrationId, {

@@ -1,7 +1,8 @@
+import { assertPermission, Permission } from '../permissions';
 import type { Express } from 'express';
 import { storage } from '../storage';
 import { isAuthenticated } from './helpers';
-import { requireLocationAccess, assertLocationAccess } from '../securityMiddleware';
+import { requireLocationAccess, assertLocationAccess, assertSameLocation } from '../securityMiddleware';
 import { insertRecipeSchema, insertMenuItemSchema, insertMenuItemIngredientSchema, menuItemIngredients, menuItems } from '@shared/schema';
 import { db } from '../db';
 import { eq } from 'drizzle-orm';
@@ -37,6 +38,8 @@ export function registerRecipeRoutes(app: Express): void {
       const { ingredients, ...recipeData } = req.body;
       const parsedRecipeData = insertRecipeSchema.parse(recipeData);
       if (parsedRecipeData.locationId && !await assertLocationAccess(req, res, parsedRecipeData.locationId)) return;
+      if (!assertPermission(req, res, Permission.MANAGE_RECIPES)) return;
+      if (ingredients !== undefined && !await validateIngredients(res, parsedRecipeData.locationId, ingredients)) return;
       if (ingredients && ingredients.length > 0) {
         const recipe = await storage.createRecipeWithIngredients({
           ...parsedRecipeData,
@@ -60,6 +63,9 @@ export function registerRecipeRoutes(app: Express): void {
       const existing = await storage.getRecipe(id);
       if (!existing) return res.status(404).json({ message: 'Recipe not found' });
       if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
+      if (!assertSameLocation(res, existing.locationId, req.body.locationId)) return;
+      if (!assertPermission(req, res, Permission.MANAGE_RECIPES)) return;
+      if (ingredients !== undefined && !await validateIngredients(res, existing.locationId, ingredients)) return;
       const recipe = await storage.updateRecipe(id, insertRecipeSchema.partial().parse(recipeData));
       if (ingredients !== undefined) {
         await storage.deleteRecipeIngredients(id);
@@ -79,6 +85,7 @@ export function registerRecipeRoutes(app: Express): void {
       const existing = await storage.getRecipe(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Recipe not found' });
       if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
+      if (!assertPermission(req, res, Permission.MANAGE_RECIPES)) return;
       await storage.deleteRecipe(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -120,6 +127,7 @@ export function registerRecipeRoutes(app: Express): void {
     try {
       const menuItemData = insertMenuItemSchema.parse(req.body);
       if (menuItemData.locationId && !await assertLocationAccess(req, res, menuItemData.locationId)) return;
+      if (!assertPermission(req, res, Permission.MANAGE_RECIPES)) return;
       const menuItem = await storage.createMenuItem(menuItemData);
       res.status(201).json(menuItem);
     } catch (error) {
@@ -134,6 +142,8 @@ export function registerRecipeRoutes(app: Express): void {
       if (!menuItem) return res.status(404).json({ message: 'Recipe/menu item not found' });
       if (menuItem.locationId && !await assertLocationAccess(req, res, menuItem.locationId)) return;
       const ingredientData = insertMenuItemIngredientSchema.parse({ ...req.body, menuItemId: req.params.id });
+      if (!await validateIngredients(res, menuItem.locationId, [ingredientData])) return;
+      if (!assertPermission(req, res, Permission.MANAGE_RECIPES)) return;
       const ingredient = await storage.addMenuItemIngredient(ingredientData);
       res.status(201).json(ingredient);
     } catch (error) {
@@ -239,4 +249,13 @@ export function registerRecipeRoutes(app: Express): void {
     }
   });
 
+}
+
+async function validateIngredients(res: any, locationId: string | null, ingredients: any): Promise<boolean> {
+  if (!Array.isArray(ingredients)) { res.status(400).json({ message: 'Ingredients must be a list' }); return false; }
+  for (const ingredient of ingredients) {
+    const item = ingredient.inventoryItemId ? await storage.getInventoryItem(ingredient.inventoryItemId) : undefined;
+    if (!item || item.locationId !== locationId) { res.status(400).json({ message: 'Recipe ingredients must belong to this restaurant' }); return false; }
+  }
+  return true;
 }

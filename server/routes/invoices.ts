@@ -1,3 +1,4 @@
+import { assertPermission, Permission } from '../permissions';
 import type { Express } from 'express';
 import { storage } from '../storage';
 import { isAuthenticated, upload } from './helpers';
@@ -5,6 +6,7 @@ import { requireLocationAccess, assertLocationAccess } from '../securityMiddlewa
 import { OCRService } from '../ocrService';
 import { ObjectStorageService } from '../objectStorage';
 import fs from 'fs';
+import { StockError } from '../stockOperations';
 import path from 'path';
 
 export function registerInvoiceRoutes(app: Express): void {
@@ -21,7 +23,12 @@ export function registerInvoiceRoutes(app: Express): void {
 
   app.post('/api/invoices', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
-      const invoice = await storage.createInvoice(req.body);
+      const locationId = (req as any).authorizedLocationId;
+      if (req.body.vendorId) {
+        const vendor = await storage.getVendor(req.body.vendorId);
+        if (!vendor || vendor.locationId !== locationId) return res.status(400).json({ message: 'Vendor belongs to another restaurant' });
+      }
+      const invoice = await storage.createInvoice({ ...req.body, locationId, status: 'pending' });
       res.status(201).json(invoice);
     } catch (error) {
       console.error('Error creating invoice:', error);
@@ -36,11 +43,14 @@ export function registerInvoiceRoutes(app: Express): void {
       const inv = await storage.getInvoiceById(id);
       if (!inv) return res.status(404).json({ message: 'Invoice not found' });
       if (!await assertLocationAccess(req, res, inv.location_id)) return;
-      const invoice = await storage.updateInvoiceStatus(id, status);
+      if (!assertPermission(req, res, Permission.MANAGE_INVENTORY)) return;
+      if (inv.inventoryReceivedAt && !['approved', 'paid'].includes(status)) return res.status(400).json({ message: 'A received invoice cannot be reopened. Use an inventory adjustment.' });
+      if (status === 'paid' && !inv.inventoryReceivedAt) return res.status(400).json({ message: 'Review and receive inventory before marking this invoice paid.' });
+      const invoice = status === 'approved' ? await storage.receiveInvoice(id, {}, req.user!.id) : await storage.updateInvoiceStatus(id, status);
       res.json(invoice);
     } catch (error) {
       console.error('Error updating invoice status:', error);
-      res.status(400).json({ message: 'Failed to update invoice status' });
+      res.status(400).json({ message: error instanceof StockError ? error.message : 'Failed to update invoice status' });
     }
   });
 
@@ -50,6 +60,7 @@ export function registerInvoiceRoutes(app: Express): void {
       const inv = await storage.getInvoiceById(id);
       if (!inv) return res.status(404).json({ message: 'Invoice not found' });
       if (!await assertLocationAccess(req, res, inv.location_id)) return;
+      if (inv.inventoryReceivedAt) return res.status(400).json({ message: 'Received invoices cannot be deleted. Use a stock adjustment to correct inventory.' });
       await storage.deleteInvoice(id);
       res.json({ message: 'Invoice deleted successfully' });
     } catch (error) {
@@ -74,7 +85,8 @@ export function registerInvoiceRoutes(app: Express): void {
       if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
 
       // C5: Atomically claim one OCR credit before running OCR (eliminates race condition)
-      const userId = (req as any).user!.id;
+      const restaurant = await storage.getLocationById((req as any).authorizedLocationId);
+      const userId = restaurant?.ownerId || req.user!.id;
       const user = await storage.getUser(userId);
       if (!user) return res.status(401).json({ message: 'User not found' });
       if ((user.subscriptionPlan || 'free') !== 'core') {
@@ -246,20 +258,12 @@ export function registerInvoiceRoutes(app: Express): void {
       const inv = await storage.getInvoiceById(invoiceId);
       if (!inv) return res.status(404).json({ message: 'Invoice not found' });
       if (!await assertLocationAccess(req, res, inv.location_id)) return;
-      const { invoiceNumber, invoiceDate, total, subtotal, lineItems, fees } = req.body;
-      const result = await storage.updateInvoice(invoiceId, {
-        invoiceNumber,
-        invoiceDate,
-        total: parseFloat(total || '0'),
-        subtotal: parseFloat(subtotal || '0'),
-        lineItems: lineItems || [],
-        fees: fees || [],
-        status: 'approved',
-      });
+      if (!assertPermission(req, res, Permission.MANAGE_INVENTORY)) return;
+      const result = await storage.receiveInvoice(invoiceId, req.body, req.user!.id);
       res.json({ message: 'Invoice approved successfully', invoice: result });
     } catch (error) {
       console.error('Error approving invoice:', error);
-      res.status(500).json({ message: 'Failed to approve invoice' });
+      res.status(error instanceof StockError ? 400 : 500).json({ message: error instanceof StockError ? error.message : 'Failed to receive invoice. No stock was changed.' });
     }
   });
 }

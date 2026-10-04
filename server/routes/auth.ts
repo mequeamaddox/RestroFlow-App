@@ -2,13 +2,14 @@ import type { Express } from 'express';
 import { getAuth } from '@clerk/express';
 import { storage } from '../storage';
 import { isAuthenticated, clerkClient, calculateSubscriptionTotal, requirePlatformAdmin } from './helpers';
-import { requirePermission, Permission } from '../permissions';
+import { canManageUser, requirePermission, Permission } from '../permissions';
 import { assertLocationAccess, strictLimiter } from '../securityMiddleware';
 import { isOwnerLevel } from '@shared/roles';
 import { insertInvitationTokenSchema, invitationTokens, locations, departments, positions, employees } from '@shared/schema';
 import { InvitationEmailService } from '../invitationEmailService';
 import { db } from '../db';
-import { eq, desc } from 'drizzle-orm';
+import { and, eq, gt, desc } from 'drizzle-orm';
+import { acceptStaffInvitation, StaffAccessError } from '../staffAccess';
 
 export function registerAuthRoutes(app: Express): void {
   app.get('/api/auth/me', async (req, res) => {
@@ -63,7 +64,7 @@ export function registerAuthRoutes(app: Express): void {
             const [pendingInvite] = await db
               .select()
               .from(invitationTokens)
-              .where(eq(invitationTokens.email, email))
+              .where(and(eq(invitationTokens.email, email), eq(invitationTokens.status, 'pending'), gt(invitationTokens.expiresAt, new Date())))
               .limit(1);
             const role = (pendingInvite?.role as any) || 'owner';
             user = await storage.upsertUser({ id: userId, email, firstName, lastName, role });
@@ -86,6 +87,12 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(401).json({ ok: false, message: 'User not found' });
       }
 
+      const owned = user.role === 'platform_admin' ? [] : await storage.getLocations(user.id);
+      const memberships = user.role === 'platform_admin' ? [] : await storage.getUserPermissions(user.id);
+      const assigned = await Promise.all(memberships.filter(p => p.isActive).map(p => storage.getLocationById(p.locationId)));
+      const assignedOwners = await Promise.all(assigned.filter(Boolean).map(location => location!.ownerId ? storage.getUser(location!.ownerId) : undefined));
+      const inherited = assignedOwners.find(owner => owner?.subscriptionPlan === 'core' && ['active', 'past_due'].includes(owner.subscriptionStatus || ''));
+      const billing = user.subscriptionPlan === 'core' && ['active', 'past_due'].includes(user.subscriptionStatus || '') ? user : inherited || user;
       res.json({
         ok: true,
         user: {
@@ -93,9 +100,9 @@ export function registerAuthRoutes(app: Express): void {
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
-          role: user.role,
-          subscriptionPlan: user.subscriptionPlan,
-          subscriptionStatus: user.subscriptionStatus,
+          role: !owned.length && memberships.length && user.role !== 'platform_admin' ? memberships[0].role : user.role,
+          subscriptionPlan: billing.subscriptionPlan,
+          subscriptionStatus: billing.subscriptionStatus,
         },
       });
     } catch (error) {
@@ -208,6 +215,8 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(400).json({ message: `Invalid role. Must be one of: ${ALLOWED_ROLES.join(', ')}` });
       }
 
+      if (req.user!.role !== 'platform_admin' && !canManageUser(req.user!.role, role)) return res.status(403).json({ message: 'You cannot invite a role at or above your own authority.' });
+
       // Resolve locationId — fall back to the user's first owned location
       let locationId = bodyLocationId;
       if (bodyLocationId && !await assertLocationAccess(req, res, bodyLocationId)) return;
@@ -218,6 +227,7 @@ export function registerAuthRoutes(app: Express): void {
         locationId = owned.id;
       }
 
+      if (req.user!.role !== 'platform_admin' && !canManageUser(req.user!.role, role)) return res.status(403).json({ message: 'You cannot grant this role in this restaurant.' });
       // Build the token record
       const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000);
       const invitation = await storage.createInvitationToken({
@@ -244,7 +254,7 @@ export function registerAuthRoutes(app: Express): void {
       const companyName = location?.name || 'RestroFlow';
       const inviterName = inviter ? `${inviter.firstName || ''} ${inviter.lastName || ''}`.trim() || inviter.email || 'Your manager' : 'Your manager';
 
-      const appUrl = process.env.APP_URL || 'https://www.restroflowsolutions.com';
+      const appUrl = process.env.APP_URL || 'https://restroflowsolutions.com';
       const invitationUrl = `${appUrl}/invitation/accept/${invitation.token}`;
 
       let emailSent = false;
@@ -284,9 +294,13 @@ export function registerAuthRoutes(app: Express): void {
       const parsed = insertInvitationTokenSchema.partial().safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: 'Invalid data', errors: parsed.error.errors });
 
+      if (existing.acceptedAt) return res.status(400).json({ message: 'Accepted invitations cannot be changed.' });
+      if (parsed.data.locationId !== undefined && parsed.data.locationId !== existing.locationId) return res.status(400).json({ message: 'Invitation cannot be moved to another restaurant.' });
+      const nextRole = parsed.data.role || existing.role;
+      if (!['employee', 'team_lead', 'foh_manager', 'boh_manager', 'gm', 'owner'].includes(nextRole) || (req.user!.role !== 'platform_admin' && !canManageUser(req.user!.role, nextRole))) return res.status(403).json({ message: 'You cannot grant this role.' });
       const [updated] = await db
         .update(invitationTokens)
-        .set(parsed.data)
+        .set({ ...parsed.data, token: existing.token, invitedBy: existing.invitedBy, status: existing.status, acceptedAt: existing.acceptedAt, employeeId: existing.employeeId })
         .where(eq(invitationTokens.id, req.params.id))
         .returning();
       res.json(updated);
@@ -360,77 +374,32 @@ export function registerAuthRoutes(app: Express): void {
   // Public invitation acceptance — creates the Clerk account + employee record
   app.post('/api/invite/:token/accept', async (req, res) => {
     try {
-      const { password } = req.body;
-      if (!password) return res.status(400).json({ message: 'Password is required' });
-
-      const [invitation] = await db
-        .select()
-        .from(invitationTokens)
-        .where(eq(invitationTokens.token, req.params.token))
-        .limit(1);
-
-      if (!invitation) return res.status(404).json({ message: 'Invitation not found' });
-      if (invitation.acceptedAt) return res.status(410).json({ message: 'Invitation has already been used' });
-      if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
-        return res.status(410).json({ message: 'Invitation has expired. Contact your manager for a new invitation.' });
+      const [invitation] = await db.select().from(invitationTokens).where(eq(invitationTokens.token, req.params.token)).limit(1);
+      if (!invitation || invitation.acceptedAt || invitation.status !== 'pending' || (invitation.expiresAt && invitation.expiresAt < new Date())) {
+        return res.status(410).json({ message: 'Invitation is expired or already used.' });
       }
-
-      // Create the Clerk user with the provided password
-      let clerkUserId: string;
-      try {
-        const clerkUser = await clerkClient.users.createUser({
-          emailAddress: [invitation.email],
-          password,
-          firstName: invitation.firstName || undefined,
-          lastName: invitation.lastName || undefined,
-        });
-        clerkUserId = clerkUser.id;
-      } catch (clerkErr: any) {
-        const msg = clerkErr?.errors?.[0]?.message || clerkErr?.message || 'Failed to create account';
-        return res.status(400).json({ message: msg });
+      let clerkUserId = getAuth(req).userId;
+      if (clerkUserId) {
+        const clerkUser = await clerkClient.users.getUser(clerkUserId);
+        if (!clerkUser.emailAddresses.some(address => address.emailAddress.toLowerCase() === invitation.email.toLowerCase())) {
+          return res.status(403).json({ message: 'Sign in with the email address on this invitation.' });
+        }
+      } else {
+        if (!req.body.password) return res.status(400).json({ message: 'Password is required for a new account.' });
+        try {
+          const clerkUser = await clerkClient.users.createUser({ emailAddress: [invitation.email], password: req.body.password, firstName: invitation.firstName || undefined, lastName: invitation.lastName || undefined });
+          clerkUserId = clerkUser.id;
+        } catch (clerkErr: any) {
+          return res.status(400).json({ message: (clerkErr?.errors?.[0]?.longMessage || clerkErr?.errors?.[0]?.message || 'Account creation failed.') + ' If you already have an account, sign in and reopen this invitation.' });
+        }
       }
-
-      // Upsert the user record in our DB
-      await storage.upsertUser({
-        id: clerkUserId,
-        email: invitation.email,
-        firstName: invitation.firstName || undefined,
-        lastName: invitation.lastName || undefined,
-        role: invitation.role as any,
-      });
-
-      // Create the employee record
-      let newEmployee;
-      try {
-        newEmployee = await storage.createEmployee({
-          firstName: invitation.firstName || 'New',
-          lastName: invitation.lastName || 'Employee',
-          email: invitation.email,
-          locationId: invitation.locationId,
-          departmentId: invitation.departmentId || undefined,
-          positionId: invitation.positionId || undefined,
-          hourlyRate: invitation.hourlyRate || undefined,
-          salary: invitation.salary || undefined,
-          startDate: invitation.startDate || undefined,
-          hireDate: invitation.startDate || new Date().toISOString().split('T')[0],
-          status: 'active',
-          notes: `Clerk ID: ${clerkUserId}`,
-        } as any);
-      } catch (empErr: any) {
-        console.error('Failed to create employee record for invitation:', empErr);
-        // Still mark accepted even if employee record fails
-      }
-
-      // Mark invitation as accepted
-      await db
-        .update(invitationTokens)
-        .set({ status: 'accepted', acceptedAt: new Date(), employeeId: newEmployee?.id || undefined })
-        .where(eq(invitationTokens.token, req.params.token));
-
+      // All local records and acceptance commit together. If this fails, the
+      // Clerk account can sign in and retry this still-pending invitation.
+      await acceptStaffInvitation(db, req.params.token, { id: clerkUserId, email: invitation.email });
       res.json({ success: true, message: 'Account created successfully. You can now log in.' });
     } catch (error) {
       console.error('Error accepting invitation:', error);
-      res.status(500).json({ message: 'Failed to create account' });
+      res.status(error instanceof StaffAccessError ? 400 : 500).json({ message: error instanceof StaffAccessError ? error.message : 'Could not complete invitation. Sign in and reopen this invitation to retry.' });
     }
   });
 }

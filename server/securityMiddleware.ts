@@ -203,36 +203,23 @@ export async function assertLocationAccess(req: any, res: Response, locationId: 
 
   if (userRole === 'platform_admin') return true;
 
-  // Every user (including owners) must own or have explicit permission for the location.
-  if (userRole === 'owner') {
-    const location = await storage.getLocationById(locationId);
-    if (!location) {
-      res.status(404).json({ message: 'Location not found' });
-      return false;
-    }
-    if (!location.ownerId || location.ownerId !== userId) {
-      await logSecurityEvent(req, 'location_access_denied', 'critical', {
-        user_id: userId,
-        attempted_location: locationId,
-        location_owner: location.ownerId,
-      });
-      res.status(403).json({ message: 'Access denied to this location' });
-      return false;
-    }
+  const location = await storage.getLocationById(locationId);
+  if (!location) { res.status(404).json({ message: 'Location not found' }); return false; }
+  if (location.ownerId === userId) {
+    req.authorizedLocationId = locationId;
+    req.user.role = 'owner';
     return true;
   }
-
   const permissions = await storage.getUserPermissions(userId);
-  const hasAccess = permissions.some((p: any) => p.locationId === locationId && p.isActive);
-  if (!hasAccess) {
-    await logSecurityEvent(req, 'location_access_denied', 'high', {
-      user_id: userId,
-      attempted_location: locationId,
-      user_locations: permissions.map((p: any) => p.locationId),
-    });
+  const membership = permissions.find((p: any) => p.locationId === locationId && p.isActive);
+  if (!membership) {
+    await logSecurityEvent(req, 'location_access_denied', 'high', { user_id: userId, attempted_location: locationId });
     res.status(403).json({ message: 'Access denied to this location' });
     return false;
   }
+  req.authorizedLocationId = locationId;
+  req.user.role = membership.role;
+
   return true;
 }
 
@@ -240,6 +227,10 @@ export async function assertLocationAccess(req: any, res: Response, locationId: 
 export function requireLocationAccess(locationId?: string) {
   return async (req: any, res: Response, next: NextFunction) => {
     try {
+      const supplied = [req.params.locationId, req.query.locationId, req.query.location, req.body?.locationId].filter(Boolean);
+      if (supplied.some(value => typeof value !== 'string') || new Set(supplied).size > 1) {
+        return res.status(400).json({ message: 'Conflicting restaurant IDs in request' });
+      }
       const targetLocationId = locationId || req.params.locationId || (req.query.locationId as string) || (req.query.location as string) || req.body?.locationId;
 
       if (!targetLocationId) {
@@ -256,4 +247,14 @@ export function requireLocationAccess(locationId?: string) {
       res.status(500).json({ message: 'Access control error' });
     }
   };
+}
+
+// Existing records stay in their restaurant. Moving them needs an explicit,
+// separately authorized transfer workflow rather than a generic edit.
+export function assertSameLocation(res: Response, current: string | null, proposed: unknown): boolean {
+  if (proposed !== undefined && proposed !== current) {
+    res.status(400).json({ message: 'An existing record cannot be moved to another restaurant.' });
+    return false;
+  }
+  return true;
 }

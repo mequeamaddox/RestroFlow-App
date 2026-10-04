@@ -1,3 +1,4 @@
+import { assertPermission, Permission } from '../permissions';
 import type { Express } from "express";
 import { storage } from "../storage";
 import { isAuthenticated } from "./helpers";
@@ -101,7 +102,8 @@ export function registerCsvRoutes(app: Express): void {
       }
       if (!await assertLocationAccess(req, res, locationId)) return;
 
-      const { userId } = getAuth(req);
+      if (!assertPermission(req, res, Permission.MANAGE_INVENTORY)) return;
+      const userId = req.user!.id;
       if (!userId) return res.status(401).json({ message: "Authentication required" });
       const rows = parseCSV(rawCsv);
       if (rows.length === 0) return res.status(400).json({ message: "No data rows found in CSV" });

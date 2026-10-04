@@ -1336,6 +1336,7 @@ export const invoiceProcessing = pgTable("invoice_processing", {
   attachmentPath: varchar("attachment_path", { length: 500 }), // Path to original invoice file
   notes: text("notes"),
   approvedBy: varchar("approved_by").references(() => users.id),
+  inventoryReceivedAt: timestamp("inventory_received_at"),
   processedAt: timestamp("processed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });

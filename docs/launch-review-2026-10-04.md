@@ -1,6 +1,6 @@
 # RestroFlow launch review — October 4, 2026
 
-Decision: do not open general customer onboarding yet. Owner sign-in and restaurant switching work on the user's rebuilt Android app, but the code review identified functional and authorization blockers. Stripe and mobile two-step verification are excluded at the user's direction.
+Update: the four confirmed blockers below are now fixed in code and covered by regression tests. Production acceptance checks are still required; this is not a blanket certification of every external integration. Owner sign-in and restaurant switching were confirmed by the user on Android. Stripe and mobile two-step verification are excluded at the user's direction.
 
 ## Verified
 
@@ -9,7 +9,7 @@ Decision: do not open general customer onboarding yet. Owner sign-in and restaur
 - `/health` returned HTTP 200 with `status: ok` (includes a database SELECT).
 - Anonymous locations, inventory, and platform-user requests returned HTTP 401.
 - Backend/web TypeScript, mobile TypeScript, production web/server build, and Android JavaScript export passed.
-- Automated suite: 39 tests passed. These include mocked route/transaction adapters, not a live PostgreSQL or signed-in production test.
+- Automated suite: 62 tests passed. These include mocked route/transaction adapters, not a live PostgreSQL or signed-in production test.
 - Reviewed route registrations and key paths for inventory, purchasing, waste, recipes, invoice upload/approval, object access, analytics, staff invitations, HR/documents, subscriptions, POS, bar features, mobile networking/session handling, and all current mobile screens. This is a targeted code review, not proof that every UI control or external integration works.
 
 ## Implemented in this change
@@ -24,9 +24,20 @@ Decision: do not open general customer onboarding yet. Owner sign-in and restaur
 - API single-item creation rejects malformed/negative amounts and category/vendor links belonging to another restaurant.
 - No new dependencies or database migration. New APK required; installed APK has no configured OTA update delivery.
 
-## Unresolved launch blockers
+## Fixes applied after review
 
-### 1. Restaurant isolation on writes — high priority
+- Invitations now commit user, employee, membership, and acceptance together. Existing accounts can sign in and accept; failed local setup remains retryable. The Add Employee flow uses the same invitation path.
+- Restaurant listing includes active assignments. Permission fields are mapped by Drizzle, and membership roles scope authorization. Staff inherit the owner subscription, including OCR entitlement. New migrations restore missing memberships for previously accepted invitations with employee records.
+- Query/body restaurant conflicts are rejected; generic record moves, unrelated linked items, ownership changes, and order-line deletion through another restaurant are blocked. Closed order-line mutations use the order lock.
+- Waste commits stock decrement, calculated cost, waste record, and audit together; invalid units, foreign items, and excess waste are rejected.
+- Invoice review supports inventory mapping and creation. Approval receives stock, updates inventory/supplier costs, and saves a persistent receipt timestamp in one transaction. Repeated approvals do not receive twice. An explicit Stock already received option avoids counting stock received through a purchase order again. Received invoices cannot be reopened or deleted; status changes/deletion recheck under the invoice lock.
+- Inventory initial stock and manual adjustments commit with audit entries; invalid stock amounts are rejected.
+- Unsupported POS menu sync returns an error instead of reporting a successful import.
+- These follow-up changes affect the backend and website. They do not add native dependencies or require a further APK rebuild beyond the earlier Add Item feature.
+
+## Original findings and resolution
+
+### 1. Restaurant isolation on writes — addressed
 
 `server/routes/inventory.ts` purchase-order-item DELETE verifies the caller's query location, then removes a line by ID without deriving its actual purchase order/location. An authorized location parameter must not authorize a record from another restaurant.
 
@@ -36,7 +47,7 @@ Inventory, vendor, recipe, and POS-integration updates check the existing locati
 
 These are code findings; no destructive or unauthorized request was sent to production.
 
-### 2. Staff onboarding and access — high priority
+### 2. Staff onboarding and access — addressed
 
 Invitation acceptance creates a Clerk account/user and attempts an employee record, but does not create an active `user_permissions` restaurant assignment. It also swallows employee-record failure and marks the invitation accepted.
 
@@ -48,24 +59,24 @@ Invitation acceptance creates a Clerk account/user and attempts an employee reco
 
 Permission checks on administrative mutations also need review: restaurant membership alone should not allow staff to change location ownership/settings or invite roles above their authority.
 
-### 3. Waste does not reduce current inventory — high priority
+### 3. Waste does not reduce current inventory — addressed
 
 `POST /api/waste` inserts a waste record and an out transaction, but neither called storage method decrements `inventory_items.quantity`. Inventory screens and low-stock/value calculations read that quantity directly, so logging waste leaves current stock overstated. Waste record, stock decrement, and audit entry should commit together after validating the item/location and quantity/unit.
 
-### 4. Invoice approval does not receive inventory — product blocker if promised
+### 4. Invoice approval does not receive inventory — addressed
 
 The upload path stores OCR results. Approval calls `updateInvoice`, which updates the invoice fields/status only. It does not map received line items into stock or supplier pricing. Invoice approval must be connected to an explicit receiving/import workflow before promising automatic inventory updates from invoices. It must be idempotent to prevent duplicate receiving.
 
 ### 5. POS readiness depends on provider — limited support
 
-The generic sync method logs unsupported providers without throwing, which can let a route report successful syncing without importing anything. Do not advertise all listed providers as verified. Real provider credentials/webhooks and reconciliation remain untested. Scheduler enablement (`ENABLE_SCHEDULERS=true`) cannot be confirmed from this workspace.
+The generic sync method now rejects unsupported providers. Real provider integrations still need production acceptance testing. Do not advertise all listed providers as verified. Real provider credentials/webhooks and reconciliation remain untested. Scheduler enablement (`ENABLE_SCHEDULERS=true`) cannot be confirmed from this workspace.
 
 ## Additional improvements
 
-- Inventory manual edits need strict numeric validation and a stock-adjustment audit entry; currently they directly replace quantity.
-- Purchase-order lines can still be edited after delivery; enforce order-state rules and consistent transaction locking.
+- Addressed: inventory manual edits validate quantities and save a stock-adjustment audit entry in the same transaction.
+- Addressed: purchase-order line additions/removals lock the order and reject delivered/cancelled orders.
 - Some stock/audit writes outside purchase-order receiving are separate operations and can partially succeed.
-- Invitation acceptance needs a recoverable path for already-existing Clerk accounts and partial failures.
+- Addressed: signed-in existing accounts can accept invitations; failed local setup leaves the invitation pending.
 - Production frontend bundle is approximately 2 MB before gzip (650 KB gzipped); split heavy report/PDF modules as a performance improvement.
 - Backups/restore, production secrets and object storage, delivery of invitation emails, real OCR accuracy, real POS sync, and staff-role behavior remain unverified. No account changes, invoices, payments, or stock were created in production during this review.
 
@@ -78,3 +89,10 @@ The generic sync method logs unsupported providers without throwing, which can l
 5. Switch to restaurant B: the new items must not appear there.
 6. Try a failed save/offline save: retain the draft, show an error, and allow retry. Confirm invalid quantities cannot be saved.
 7. Test waste, staff invitations, invoice receiving, and forbidden cross-restaurant access after their blockers are fixed.
+
+## Deployment notes for the fixes
+
+- Railway release migrations and startup migrations both add `invoice_processing.inventory_received_at` idempotently and restore missing memberships for accepted invitations with employee records. Production execution is not verified from this workspace.
+- Historical waste and invoices are not automatically replayed into stock. Correct existing counts deliberately before receiving older invoices that may already have been counted manually.
+- For new invoices, review names, units, quantities, and item mappings, then use Approve & Receive. Old approvals with no receipt timestamp need deliberate review before using the new receiving flow.
+- Stripe and mobile two-step verification remain deferred by request.

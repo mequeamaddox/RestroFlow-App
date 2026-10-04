@@ -435,6 +435,8 @@ export default function InvoiceProcessing() {
                           onClick={() => {
                             setReviewInvoice({
                               id: invoice.id,
+                              locationId: invoice.locationId || invoice.location_id || currentLocation?.id,
+                              inventoryReceivedAt: invoice.inventoryReceivedAt,
                               vendor: invoice.vendor?.name || invoice.vendorName || '',
                               invoiceNumber: invoice.invoiceNumber,
                               invoiceDate: invoice.invoiceDate,
@@ -641,7 +643,7 @@ export default function InvoiceProcessing() {
                                     variant="outline"
                                     onClick={() => updateInvoiceStatusMutation.mutate({ 
                                       id: invoice.id, 
-                                      status: 'rejected' 
+                                      status: 'cancelled'
                                     })}
                                     disabled={updateInvoiceStatusMutation.isPending}
                                     className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
@@ -649,10 +651,7 @@ export default function InvoiceProcessing() {
                                     Reject
                                   </Button>
                                   <Button
-                                    onClick={() => updateInvoiceStatusMutation.mutate({ 
-                                      id: invoice.id, 
-                                      status: 'approved' 
-                                    })}
+                                    onClick={() => { setReviewInvoice({ ...invoice, locationId: invoice.locationId || invoice.location_id || currentLocation?.id, vendor: invoice.vendor?.name || '', total: invoice.totalAmount || invoice.total || 0, subtotal: invoice.subtotal || 0, lineItems: invoice.lineItems || [], fees: invoice.fees || [] }); setIsReviewOpen(true); }}
                                     disabled={updateInvoiceStatusMutation.isPending}
                                     className="bg-green-600 hover:bg-green-700 text-white"
                                   >
@@ -680,10 +679,7 @@ export default function InvoiceProcessing() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => updateInvoiceStatusMutation.mutate({ 
-                              id: invoice.id, 
-                              status: 'approved' 
-                            })}
+                            onClick={() => { setReviewInvoice({ ...invoice, locationId: invoice.locationId || invoice.location_id || currentLocation?.id, vendor: invoice.vendor?.name || '', total: invoice.totalAmount || invoice.total || 0, subtotal: invoice.subtotal || 0, lineItems: invoice.lineItems || [], fees: invoice.fees || [] }); setIsReviewOpen(true); }}
                             disabled={updateInvoiceStatusMutation.isPending}
                           >
                             <CheckCircle className="h-4 w-4 text-green-400" />

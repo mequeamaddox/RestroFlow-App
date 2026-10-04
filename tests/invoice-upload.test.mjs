@@ -22,7 +22,7 @@ await build({
     builder.onLoad({ filter: /.*/, namespace: 'stub' }, ({ path }) => ({ contents: {
       storage: `export const storage = {
         getLocationById: async id => ({ id, ownerId: id === 'A' ? 'owner-A' : 'owner-B' }),
-        createSecurityLog: async () => {}, getUser: async () => ({ subscriptionPlan: 'core' }),
+        createSecurityLog: async () => {}, getUserPermissions: async () => [], getUser: async () => ({ subscriptionPlan: 'core' }),
         createInvoice: async data => data,
       };`,
       helpers: `import multer from 'multer'; export const upload = multer({ storage: multer.memoryStorage() });
@@ -58,8 +58,7 @@ try {
     assert.equal((await upload(null)).status, 400);
   });
   await test('authorized query location cannot save an invoice to unauthorized body location', async () => {
-    const response = await upload('B', '?locationId=A'); assert.equal(response.status, 201);
-    assert.equal((await response.json()).locationId, 'A');
+    const response = await upload('B', '?locationId=A'); assert.equal(response.status, 400);
   });
 } finally {
   await new Promise(resolve => server.close(resolve));

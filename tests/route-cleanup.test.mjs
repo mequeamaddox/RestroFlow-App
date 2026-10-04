@@ -19,6 +19,12 @@ let writes = 0;
 globalThis.__restroRouteStorage = {
   getLocationById: async id => ({ id, ownerId: id === '11111111-1111-4111-8111-111111111111' ? 'owner-A' : 'owner-B' }),
   createSecurityLog: async () => {},
+  getUserPermissions: async () => globalThis.__restroRouteMemberships || [],
+  getLocations: async () => [{ id: '11111111-1111-4111-8111-111111111111', name: 'Owned', ownerId: 'owner-A' }],
+  getInventoryItem: async id => items.find(item => item.id === id),
+  getPurchaseOrderItem: async id => ({ id, purchaseOrderId: id === 'foreign-line' ? 'foreign-order' : 'own-order' }),
+  getPurchaseOrder: async id => ({ id, locationId: id === 'foreign-order' ? '22222222-2222-4222-8222-222222222222' : '11111111-1111-4111-8111-111111111111' }),
+  removePurchaseOrderItem: async () => { writes++; },
   getCategory: async id => categories.find(category => category.id === id),
   updateCategory: async (id, data) => { writes++; return { ...categories.find(category => category.id === id), ...data }; },
   deleteCategory: async () => { writes++; },
@@ -97,6 +103,24 @@ try {
     assert.equal((await request('/api/inventory', 'POST', { ...payload, vendorId: '44444444-4444-4444-8444-444444444444' })).status, 400);
     assert.equal((await request('/api/inventory', 'POST', { ...payload, locationId: '22222222-2222-4222-8222-222222222222' })).status, 403);
     assert.equal(items.length, before);
+  });
+  await test('a restaurant parameter cannot authorize deletion of another restaurant order line', async () => {
+    const before = writes;
+    assert.equal((await request('/api/purchase-order-items/foreign-line?locationId=11111111-1111-4111-8111-111111111111', 'DELETE')).status, 403);
+    assert.equal(writes, before);
+    assert.equal((await request('/api/purchase-order-items/own-line', 'DELETE')).status, 204);
+  });
+  await test('inventory cannot be moved through a generic update', async () => {
+    const item = items[0]; const original = item.locationId;
+    assert.equal((await request(`/api/inventory/${item.id}`, 'PUT', { locationId: '22222222-2222-4222-8222-222222222222' })).status, 400);
+    assert.equal(item.locationId, original);
+  });
+  await test('restaurant picker includes active assigned locations as well as owned locations', async () => {
+    globalThis.__restroRouteMemberships = [{ locationId: '22222222-2222-4222-8222-222222222222', role: 'employee', isActive: true }];
+    try {
+      const result = await (await request('/api/locations', 'GET')).json();
+      assert.deepEqual(result.map(location => location.id).sort(), ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222']);
+    } finally { delete globalThis.__restroRouteMemberships; }
   });
 } finally {
   await new Promise(resolve => server.close(resolve));

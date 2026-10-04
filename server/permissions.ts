@@ -216,7 +216,13 @@ export function requirePermission(permission: Permission) {
       const { storage } = await import('./storage');
       const userId = user.id;
       const dbUser = await storage.getUser(userId);
-      const userRole = dbUser?.role || 'employee';
+      let userRole = dbUser?.role || 'employee';
+      const locationId = (req as any).authorizedLocationId || req.params.locationId || req.query.locationId || req.query.location || req.body?.locationId;
+      if (locationId && dbUser?.role !== 'platform_admin') {
+        const location = await storage.getLocationById(String(locationId));
+        const memberships = await storage.getUserPermissions(userId);
+        userRole = location?.ownerId === userId ? 'owner' : memberships.find(p => p.locationId === locationId && p.isActive)?.role || 'employee';
+      }
 
       if (userRole === 'platform_admin') return next();
 
@@ -248,7 +254,13 @@ export function requireAnyPermission(permissions: Permission[]) {
       const { storage } = await import('./storage');
       const userId = user.id;
       const dbUser = await storage.getUser(userId);
-      const userRole = dbUser?.role || 'employee';
+      let userRole = dbUser?.role || 'employee';
+      const locationId = (req as any).authorizedLocationId || req.params.locationId || req.query.locationId || req.query.location || req.body?.locationId;
+      if (locationId && dbUser?.role !== 'platform_admin') {
+        const location = await storage.getLocationById(String(locationId));
+        const memberships = await storage.getUserPermissions(userId);
+        userRole = location?.ownerId === userId ? 'owner' : memberships.find(p => p.locationId === locationId && p.isActive)?.role || 'employee';
+      }
       
       if (!hasAnyPermission(userRole, permissions)) {
         return res.status(403).json({ 
@@ -288,4 +300,9 @@ export function canManageUser(managerRole: string, targetRole: string): boolean 
   const managerLevel = ROLE_HIERARCHY[managerRole as RestaurantRole] || 0;
   const targetLevel = ROLE_HIERARCHY[targetRole as RestaurantRole] || 0;
   return managerLevel > targetLevel;
+}
+export function assertPermission(req: Request, res: Response, permission: Permission): boolean {
+  if (hasPermission(req.user?.role || 'employee', permission)) return true;
+  res.status(403).json({ message: 'Insufficient permissions for this restaurant.' });
+  return false;
 }

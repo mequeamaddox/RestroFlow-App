@@ -3,7 +3,7 @@ import { clerkMiddleware, getAuth, createClerkClient } from '@clerk/express';
 import { storage } from './storage';
 import { db } from './db';
 import { invitationTokens } from '@shared/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq, gt } from 'drizzle-orm';
 
 declare global {
   namespace Express {
@@ -149,7 +149,7 @@ export async function requireAuth(
       const [pendingInvite] = await db
         .select()
         .from(invitationTokens)
-        .where(eq(invitationTokens.email, email))
+        .where(and(eq(invitationTokens.email, email), eq(invitationTokens.status, 'pending'), gt(invitationTokens.expiresAt, new Date())))
         .limit(1);
 
       user = await storage.upsertUser({

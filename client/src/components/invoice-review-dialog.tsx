@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Plus, Trash2, Edit3, Check, X, FileText, ExternalLink } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -18,6 +18,7 @@ interface LineItem {
   unitType: string; // e.g., "lbs", "cases", "each", "gallons"
   unitPrice: number;
   totalPrice: number;
+  inventoryItemId?: string;
 }
 
 interface Fee {
@@ -39,6 +40,8 @@ interface InvoiceReviewDialogProps {
     fees: Fee[];
     ocrConfidence: number;
     attachmentPath?: string;
+    locationId?: string;
+    inventoryReceivedAt?: string | null;
   } | null;
 }
 
@@ -48,6 +51,11 @@ export function InvoiceReviewDialog({ isOpen, onClose, invoiceData }: InvoiceRev
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const inventory = useQuery<Array<{ id: string; name: string; unit: string }>>({
+    queryKey: ['/api/inventory', { locationId: invoiceData?.locationId }],
+    queryFn: () => apiRequest('GET', `/api/inventory?locationId=${invoiceData?.locationId}`).then(response => response.json()),
+    enabled: isOpen && !!invoiceData?.locationId,
+  });
   // Initialize editable data when dialog opens
   React.useEffect(() => {
     if (invoiceData && isOpen) {
@@ -58,6 +66,7 @@ export function InvoiceReviewDialog({ isOpen, onClose, invoiceData }: InvoiceRev
         total: invoiceData.total,
         subtotal: invoiceData.subtotal,
         lineItems: [...invoiceData.lineItems],
+        receiveInventory: true,
         fees: [...(invoiceData.fees || [])]
       });
     }
@@ -71,16 +80,19 @@ export function InvoiceReviewDialog({ isOpen, onClose, invoiceData }: InvoiceRev
       // Invalidate all invoice queries regardless of status filter
       queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
       queryClient.invalidateQueries({ queryKey: ['/api/invoices/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/vendors'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/metrics'] });
       toast({
         title: "Success",
-        description: "Invoice approved and saved successfully",
+        description: editableData.receiveInventory === false ? "Invoice approved; stock was already received" : "Invoice approved and inventory received",
       });
       onClose();
     },
     onError: (error) => {
       toast({
         title: "Error",
-        description: "Failed to approve invoice",
+        description: error instanceof Error ? error.message : "Failed to approve invoice",
         variant: "destructive",
       });
     },
@@ -244,7 +256,12 @@ export function InvoiceReviewDialog({ isOpen, onClose, invoiceData }: InvoiceRev
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
+        {invoiceData.inventoryReceivedAt && <p className="text-sm text-muted-foreground">Inventory was already received. Use an inventory adjustment to correct stock.</p>}
+        {!invoiceData.inventoryReceivedAt && <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={editableData.receiveInventory === false} disabled={approveInvoiceMutation.isPending} onChange={event => setEditableData({ ...editableData, receiveInventory: !event.target.checked })} />
+          Stock already received, for example through a purchase order. Approve without adding stock again.
+        </label>}
+        <fieldset disabled={!!invoiceData.inventoryReceivedAt || approveInvoiceMutation.isPending} className="space-y-6">
           {/* Invoice Header Information */}
           <Card>
             <CardHeader>
@@ -334,6 +351,12 @@ export function InvoiceReviewDialog({ isOpen, onClose, invoiceData }: InvoiceRev
                         />
                       </div>
                       <div>
+                        <Label>Inventory Item</Label>
+                        <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={item.inventoryItemId || ''} onChange={e => handleLineItemEdit(index, 'inventoryItemId', e.target.value || undefined)}>
+                          <option value="">Match by name or create new</option>
+                          {(inventory.data ?? []).map(stock => <option key={stock.id} value={stock.id}>{stock.name} ({stock.unit})</option>)}
+                        </select>
+                        {inventory.isError && <p className="text-sm text-red-400">Could not load inventory choices. <button type="button" onClick={() => inventory.refetch()}>Retry</button></p>}
                         <Label>Quantity</Label>
                         <Input
                           type="number"
@@ -477,11 +500,11 @@ export function InvoiceReviewDialog({ isOpen, onClose, invoiceData }: InvoiceRev
                 className="bg-green-600 hover:bg-green-700"
               >
                 <Check className="h-4 w-4 mr-2" />
-                {approveInvoiceMutation.isPending ? "Approving..." : "Approve & Save"}
+                {approveInvoiceMutation.isPending ? "Approving..." : (editableData.receiveInventory === false ? "Approve Already Received" : "Approve & Receive")}
               </Button>
             </div>
           </div>
-        </div>
+        </fieldset>
       </DialogContent>
     </Dialog>
   );

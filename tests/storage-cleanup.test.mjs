@@ -81,6 +81,11 @@ try {
     await storage.saveDocumentFormResponse({ assignmentId: 'assignment', fieldId: 'field', fieldValue: 'new' });
     assert.ok(queries[0].sql.includes(' and ')); assert.deepEqual(queries[0].params, ['assignment', 'field']);
   });
+  await test('staff restaurant permission fields map into the camelCase access guards expect', async () => {
+    scenario(() => [{ id: 'membership', user_id: 'staff', location_id: 'A', role: 'employee', permissions: [], is_active: true }]);
+    const [permission] = await storage.getUserPermissions('staff');
+    assert.equal(permission.locationId, 'A'); assert.equal(permission.isActive, true); assert.equal(permission.userId, 'staff');
+  });
 } finally {
   delete globalThis.__restroCleanupDb;
   await rm(directory, { recursive: true, force: true });

@@ -1,8 +1,10 @@
+import { assertPermission, Permission } from '../permissions';
 import type { Express } from 'express';
 import { storage } from '../storage';
+import { StockError } from '../stockOperations';
 import { ReceivingError } from '../purchaseOrderReceiving';
 import { isAuthenticated, csvUpload, PLAN_LOCATION_LIMITS } from './helpers';
-import { requireLocationAccess, assertLocationAccess } from '../securityMiddleware';
+import { requireLocationAccess, assertLocationAccess, assertSameLocation } from '../securityMiddleware';
 import {
   insertLocationSchema,
   insertCategorySchema,
@@ -26,8 +28,10 @@ export function registerInventoryRoutes(app: Express): void {
     try {
       // platform_admin sees all locations across all tenants for testing
       const ownerId = req.user!.role === 'platform_admin' ? undefined : req.user!.id;
-      const locations = await storage.getLocations(ownerId);
-      res.json(locations);
+      const owned = await storage.getLocations(ownerId);
+      const permissions = ownerId ? await storage.getUserPermissions(req.user!.id) : [];
+      const assigned = await Promise.all(permissions.filter(p => p.isActive).map(p => storage.getLocationById(p.locationId)));
+      res.json([...new Map([...owned, ...assigned.filter(Boolean)].map(location => [location!.id, location])).values()]);
     } catch (error) {
       console.error('Error fetching locations:', error);
       res.status(500).json({ message: 'Failed to fetch locations' });
@@ -36,6 +40,7 @@ export function registerInventoryRoutes(app: Express): void {
 
   app.post('/api/locations', isAuthenticated, async (req, res) => {
     try {
+      if (!['owner', 'platform_admin'].includes(req.user!.role)) return res.status(403).json({ message: 'Only owners can create restaurants.' });
       const user = await storage.getUser(req.user!.id);
       // Enforce per-plan location limits (platform_admin is unlimited)
       if (req.user!.role !== 'platform_admin') {
@@ -65,7 +70,10 @@ export function registerInventoryRoutes(app: Express): void {
   app.patch('/api/locations/:id', isAuthenticated, async (req, res) => {
     try {
       if (!await assertLocationAccess(req, res, req.params.id)) return;
+      if (req.user!.role !== 'owner' && req.user!.role !== 'platform_admin') return res.status(403).json({ message: 'Only the restaurant owner can change location settings.' });
       const locationData = insertLocationSchema.partial().parse(req.body);
+      const existing = await storage.getLocationById(req.params.id);
+      if (locationData.ownerId !== undefined && locationData.ownerId !== existing?.ownerId) return res.status(400).json({ message: 'Location ownership cannot be changed here.' });
       const location = await storage.updateLocation(req.params.id, locationData);
       res.json(location);
     } catch (error) {
@@ -77,6 +85,7 @@ export function registerInventoryRoutes(app: Express): void {
   app.delete('/api/locations/:id', isAuthenticated, async (req, res) => {
     try {
       if (!await assertLocationAccess(req, res, req.params.id)) return;
+      if (req.user!.role !== 'owner' && req.user!.role !== 'platform_admin') return res.status(403).json({ message: 'Only the restaurant owner can delete a location.' });
       await storage.deleteLocation(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -99,6 +108,7 @@ export function registerInventoryRoutes(app: Express): void {
   app.post('/api/categories', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
       const categoryData = insertCategorySchema.parse(req.body);
+      if (!assertPermission(req, res, Permission.MANAGE_INVENTORY)) return;
       const category = await storage.createCategory(categoryData);
       res.status(201).json(category);
     } catch (error) {
@@ -119,6 +129,7 @@ export function registerInventoryRoutes(app: Express): void {
       if (categoryData.locationId === null && req.user!.role !== 'platform_admin') {
         return res.status(403).json({ message: 'Shared categories require platform administrator access' });
       }
+      if (!assertPermission(req, res, Permission.MANAGE_INVENTORY)) return;
       const category = await storage.updateCategory(req.params.id, categoryData);
       res.json(category);
     } catch (error) {
@@ -134,6 +145,7 @@ export function registerInventoryRoutes(app: Express): void {
       if (!category.locationId) {
         if (req.user!.role !== 'platform_admin') return res.status(403).json({ message: 'Shared categories require platform administrator access' });
       } else if (!await assertLocationAccess(req, res, category.locationId)) return;
+      if (!assertPermission(req, res, Permission.MANAGE_INVENTORY)) return;
       await storage.deleteCategory(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -175,6 +187,7 @@ export function registerInventoryRoutes(app: Express): void {
         return res.status(400).json({ message: 'Vendor has no location assigned' });
       }
       if (!await assertLocationAccess(req, res, vendorData.locationId)) return;
+      if (!assertPermission(req, res, Permission.MANAGE_VENDORS)) return;
       const vendor = await storage.createVendor(vendorData);
       res.status(201).json(vendor);
     } catch (error) {
@@ -191,6 +204,7 @@ export function registerInventoryRoutes(app: Express): void {
         return res.status(400).json({ message: 'Vendor has no location assigned' });
       }
       if (!await assertLocationAccess(req, res, existing.locationId)) return;
+      if (!assertSameLocation(res, existing.locationId, req.body.locationId) || !assertPermission(req, res, Permission.MANAGE_VENDORS)) return;
       const vendor = await storage.updateVendor(req.params.id, insertVendorSchema.partial().parse(req.body));
       res.json(vendor);
     } catch (error) {
@@ -207,6 +221,7 @@ export function registerInventoryRoutes(app: Express): void {
         return res.status(400).json({ message: 'Vendor has no location assigned' });
       }
       if (!await assertLocationAccess(req, res, existing.locationId)) return;
+      if (!assertPermission(req, res, Permission.MANAGE_VENDORS)) return;
       await storage.deleteVendor(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -283,15 +298,8 @@ export function registerInventoryRoutes(app: Express): void {
           return res.status(400).json({ message: 'Vendor does not belong to this restaurant' });
         }
       }
-      const item = await storage.createInventoryItem({ ...itemData, name: itemData.name.trim() });
-      await storage.createInventoryTransaction({
-        inventoryItemId: item.id,
-        locationId: itemData.locationId,
-        type: 'in',
-        quantity: itemData.quantity?.toString() || '0',
-        reference: 'Initial stock',
-        createdBy: req.user!.id || 'system',
-      });
+      if (!assertPermission(req, res, Permission.MANAGE_INVENTORY)) return;
+      const item = await storage.createInventoryItem({ ...itemData, name: itemData.name.trim() }, req.user!.id);
       res.status(201).json(item);
     } catch (error) {
       console.error('Error creating inventory item:', error);
@@ -304,7 +312,13 @@ export function registerInventoryRoutes(app: Express): void {
       const existing = await storage.getInventoryItem(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Inventory item not found' });
       if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
-      const item = await storage.updateInventoryItem(req.params.id, insertInventoryItemSchema.partial().parse(req.body));
+      if (!assertSameLocation(res, existing.locationId, req.body.locationId) || !assertPermission(req, res, Permission.MANAGE_INVENTORY)) return;
+      for (const key of ['categoryId', 'vendorId'] as const) {
+        if (!req.body[key]) continue;
+        const linked = key === 'categoryId' ? await storage.getCategory(req.body[key]) : await storage.getVendor(req.body[key]);
+        if (!linked || (linked.locationId !== existing.locationId && !(key === 'categoryId' && !linked.locationId))) return res.status(400).json({ message: 'Category or vendor belongs to a different restaurant.' });
+      }
+      const item = await storage.updateInventoryItem(req.params.id, insertInventoryItemSchema.partial().parse(req.body), req.user!.id);
       res.json(item);
     } catch (error) {
       console.error('Error updating inventory item:', error);
@@ -317,6 +331,7 @@ export function registerInventoryRoutes(app: Express): void {
       const existing = await storage.getInventoryItem(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Inventory item not found' });
       if (existing.locationId && !await assertLocationAccess(req, res, existing.locationId)) return;
+      if (!assertPermission(req, res, Permission.MANAGE_INVENTORY)) return;
       await storage.deleteInventoryItem(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -333,6 +348,11 @@ export function registerInventoryRoutes(app: Express): void {
       const userId = req.user!.id;
       if (!locationId) return res.status(400).json({ message: 'Location ID is required' });
       if (!await assertLocationAccess(req, res, locationId)) return;
+      if (!assertPermission(req, res, Permission.MANAGE_INVENTORY)) return;
+      if (vendorId) {
+        const vendor = await storage.getVendor(vendorId);
+        if (!vendor || vendor.locationId !== locationId) return res.status(400).json({ message: 'Vendor belongs to another restaurant.' });
+      }
       if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
 
       const results: any[] = [];
@@ -551,7 +571,13 @@ print(json.dumps(rows))
         notes: req.body.notes || null,
         createdBy: req.user!.id,
       };
-      if (orderData.locationId && !await assertLocationAccess(req, res, orderData.locationId)) return;
+      if (!orderData.locationId) return res.status(400).json({ message: 'Restaurant required' });
+      if (!await assertLocationAccess(req, res, orderData.locationId) || !assertPermission(req, res, Permission.MANAGE_PURCHASE_ORDERS)) return;
+      if (orderData.status === 'delivered') return res.status(400).json({ message: 'Create the order, add items, then receive it.' });
+      if (orderData.vendorId) {
+        const vendor = await storage.getVendor(orderData.vendorId);
+        if (!vendor || vendor.locationId !== orderData.locationId) return res.status(400).json({ message: 'Vendor belongs to another restaurant' });
+      }
       const order = await storage.createPurchaseOrder(orderData);
       res.status(201).json(order);
     } catch (error) {
@@ -573,6 +599,12 @@ print(json.dumps(rows))
         totalAmount: req.body.totalAmount,
         notes: req.body.notes || null,
       };
+      if (!assertPermission(req, res, Permission.MANAGE_PURCHASE_ORDERS)) return;
+      if (!assertSameLocation(res, currentOrder.locationId, req.body.locationId)) return;
+      if (orderData.vendorId) {
+        const vendor = await storage.getVendor(orderData.vendorId);
+        if (!vendor || vendor.locationId !== currentOrder.locationId) return res.status(400).json({ message: 'Vendor belongs to another restaurant' });
+      }
       let confirmedItems;
       if (req.body.receivedItems !== undefined) {
         if (!Array.isArray(req.body.receivedItems) || req.body.receivedItems.some((item: unknown) => !item || typeof item !== 'object' || typeof (item as { id?: unknown }).id !== 'string' || typeof (item as { quantity?: unknown }).quantity !== 'string')) {
@@ -593,6 +625,8 @@ print(json.dumps(rows))
       const order = await storage.getPurchaseOrder(req.params.id);
       if (!order) return res.status(404).json({ message: 'Purchase order not found' });
       if (order.locationId && !await assertLocationAccess(req, res, order.locationId)) return;
+      if (!assertPermission(req, res, Permission.MANAGE_PURCHASE_ORDERS)) return;
+      if (order.status === 'delivered') return res.status(400).json({ message: 'Received orders cannot be deleted.' });
       await storage.deletePurchaseOrder(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -620,6 +654,9 @@ print(json.dumps(rows))
       const order = await storage.getPurchaseOrder(itemData.purchaseOrderId);
       if (!order) return res.status(404).json({ message: 'Purchase order not found' });
       if (order.locationId && !await assertLocationAccess(req, res, order.locationId)) return;
+      if (!assertPermission(req, res, Permission.MANAGE_PURCHASE_ORDERS)) return;
+      const linked = itemData.inventoryItemId ? await storage.getInventoryItem(itemData.inventoryItemId) : undefined;
+      if (!linked || linked.locationId !== order.locationId) return res.status(400).json({ message: 'Order item must belong to this restaurant.' });
       const item = await storage.addPurchaseOrderItem(itemData);
       res.status(201).json(item);
     } catch (error) {
@@ -630,9 +667,11 @@ print(json.dumps(rows))
 
   app.delete('/api/purchase-order-items/:id', isAuthenticated, async (req, res) => {
     try {
-      const locationId = req.query.locationId as string;
-      if (!locationId) return res.status(400).json({ message: 'locationId required' });
-      if (!await assertLocationAccess(req, res, locationId)) return;
+      const item = await storage.getPurchaseOrderItem(req.params.id);
+      if (!item?.purchaseOrderId) return res.status(404).json({ message: 'Order item not found' });
+      const order = await storage.getPurchaseOrder(item.purchaseOrderId);
+      if (!order || !await assertLocationAccess(req, res, order.locationId)) return;
+      if (!assertPermission(req, res, Permission.MANAGE_PURCHASE_ORDERS)) return;
       await storage.removePurchaseOrderItem(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -656,19 +695,10 @@ print(json.dumps(rows))
     try {
       const wasteData = insertWasteEntrySchema.parse({ ...req.body, reportedBy: req.user!.id });
       const entry = await storage.createWasteEntry(wasteData);
-      await storage.createInventoryTransaction({
-        inventoryItemId: wasteData.inventoryItemId!,
-        locationId: wasteData.locationId,
-        type: 'out',
-        quantity: wasteData.quantity,
-        reference: `Waste: ${wasteData.reason}`,
-        notes: wasteData.notes,
-        createdBy: req.user!.id,
-      });
       res.status(201).json(entry);
     } catch (error) {
       console.error('Error creating waste entry:', error);
-      res.status(400).json({ message: 'Failed to create waste entry' });
+      res.status(error instanceof StockError ? 400 : 500).json({ message: error instanceof StockError ? error.message : 'Failed to record waste. No stock was changed.' });
     }
   });
 
@@ -709,7 +739,10 @@ print(json.dumps(rows))
     try {
       const transactionData = insertInventoryTransactionSchema.parse({ ...req.body, createdBy: req.user!.id });
       if (transactionData.locationId && !await assertLocationAccess(req, res, transactionData.locationId)) return;
-      const transaction = await storage.createInventoryTransaction(transactionData);
+      if (!assertPermission(req, res, Permission.MANAGE_INVENTORY)) return;
+      const linked = transactionData.inventoryItemId ? await storage.getInventoryItem(transactionData.inventoryItemId) : undefined;
+      if (!linked || linked.locationId !== transactionData.locationId) return res.status(400).json({ message: 'Transaction item belongs to another restaurant.' });
+      const transaction = await storage.createInventoryTransaction({ ...transactionData, createdBy: req.user!.id });
       res.status(201).json(transaction);
     } catch (error) {
       console.error('Error creating inventory transaction:', error);

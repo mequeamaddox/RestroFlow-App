@@ -105,6 +105,9 @@ function Router() {
     );
   }
 
+  // Keep invitations reachable after modal sign-in, including existing accounts.
+  if (currentPath.startsWith('/invitation/accept/')) return <Switch><Route path="/invitation/accept/:token" component={InvitationAccept} /></Switch>;
+
   if (!isAuthenticated) {
     return (
       <Switch>
@@ -120,7 +123,7 @@ function Router() {
   }
 
   // Owners without an active subscription are gated to subscription/settings/onboarding only
-  const hasActiveSubscription = user?.subscriptionStatus === 'active';
+  const hasActiveSubscription = ['active', 'past_due'].includes(user?.subscriptionStatus || '');
   const isSubscriptionFreePath = SUBSCRIPTION_FREE_PATHS.some(p => currentPath.startsWith(p));
 
   if (isOwner && !hasActiveSubscription && !isSubscriptionFreePath) {

@@ -2,8 +2,8 @@ import crypto from 'crypto';
 import type { Express } from 'express';
 import { storage } from '../storage';
 import { isAuthenticated } from './helpers';
-import { requireLocationAccess, assertLocationAccess } from '../securityMiddleware';
-import { requireAnyPermission, Permission } from '../permissions';
+import { requireLocationAccess, assertLocationAccess, assertSameLocation } from '../securityMiddleware';
+import { assertPermission, requireAnyPermission, Permission } from '../permissions';
 import { insertPosIntegrationSchema, posEmployeeMappings, posMenuItems } from '@shared/schema';
 import { posService } from '../posService';
 import { cloverService } from '../cloverService';
@@ -35,6 +35,7 @@ export function registerPosRoutes(app: Express): void {
 
   app.post('/api/pos/integrations', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
+      if (!assertPermission(req, res, Permission.MANAGE_SETTINGS)) return;
       const integration = await storage.createPosIntegration(insertPosIntegrationSchema.parse(req.body));
       res.status(201).json(sanitizeIntegration(integration));
     } catch (error) {
@@ -87,6 +88,7 @@ export function registerPosRoutes(app: Express): void {
       const existing = await storage.getPosIntegration(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Integration not found' });
       if (!await assertLocationAccess(req, res, existing.locationId)) return;
+      if (!assertSameLocation(res, existing.locationId, req.body.locationId) || !assertPermission(req, res, Permission.MANAGE_SETTINGS)) return;
       const integration = await storage.updatePosIntegration(req.params.id, insertPosIntegrationSchema.partial().parse(req.body));
       res.json(sanitizeIntegration(integration));
     } catch (error) {
@@ -100,6 +102,7 @@ export function registerPosRoutes(app: Express): void {
       const existing = await storage.getPosIntegration(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Integration not found' });
       if (!await assertLocationAccess(req, res, existing.locationId)) return;
+      if (!assertPermission(req, res, Permission.MANAGE_SETTINGS)) return;
       await storage.deletePosIntegration(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -128,6 +131,9 @@ export function registerPosRoutes(app: Express): void {
       const integration = await storage.getPosIntegration(existingMenuItem.posIntegrationId);
       if (!integration) return res.status(404).json({ message: 'Integration not found' });
       if (integration.locationId && !await assertLocationAccess(req, res, integration.locationId)) return;
+      if (!assertPermission(req, res, Permission.MANAGE_RECIPES)) return;
+      const linked = recipeId ? await storage.getRecipe(recipeId) : inventoryItemId ? await storage.getInventoryItem(inventoryItemId) : undefined;
+      if ((recipeId || inventoryItemId) && (!linked || linked.locationId !== integration.locationId)) return res.status(400).json({ message: 'Linked item belongs to another restaurant.' });
       const menuItem = await storage.updatePosMenuItemRecipe(req.params.id, recipeId, inventoryItemId);
       res.json(menuItem);
     } catch (error) {

@@ -1,8 +1,10 @@
+import { StockError, amount, recordWaste, receiveInvoice } from './stockOperations';
 import { calculateWorkedLabor } from "./laborAnalytics";
 import { updateOrderAndReceive, type ReceiptConfirmation } from './purchaseOrderReceiving';
 import crypto from 'crypto';
 import {
   users,
+  userPermissions,
   locations,
   categories,
   vendors,
@@ -236,8 +238,8 @@ export interface IStorage {
   // Inventory operations
   getInventoryItems(locationId?: string): Promise<(InventoryItem & { category?: Category; vendor?: Vendor })[]>;
   getInventoryItem(id: string): Promise<(InventoryItem & { category?: Category; vendor?: Vendor }) | undefined>;
-  createInventoryItem(item: InsertInventoryItem): Promise<InventoryItem>;
-  updateInventoryItem(id: string, item: Partial<InsertInventoryItem>): Promise<InventoryItem>;
+  createInventoryItem(item: InsertInventoryItem, actor?: string): Promise<InventoryItem>;
+  updateInventoryItem(id: string, item: Partial<InsertInventoryItem>, actor?: string): Promise<InventoryItem>;
   deleteInventoryItem(id: string): Promise<void>;
   getLowStockItems(): Promise<(InventoryItem & { category?: Category; vendor?: Vendor })[]>;
   getTotalInventoryValue(): Promise<number>;
@@ -271,6 +273,7 @@ export interface IStorage {
   deletePurchaseOrder(id: string): Promise<void>;
   addPurchaseOrderItem(item: InsertPurchaseOrderItem): Promise<PurchaseOrderItem>;
   removePurchaseOrderItem(id: string): Promise<void>;
+  getPurchaseOrderItem(id: string): Promise<PurchaseOrderItem | undefined>;
 
   // Waste tracking operations
   getWasteEntries(): Promise<(WasteEntry & { inventoryItem: InventoryItem; reporter?: User })[]>;
@@ -332,6 +335,7 @@ export interface IStorage {
   createInvoice(invoice: any): Promise<any>;
   updateInvoiceStatus(id: string, status: string): Promise<any>;
   updateInvoice(id: string, data: any): Promise<any>;
+  receiveInvoice(id: string, data: any, actor: string): Promise<any>;
   getInvoiceStats(locationId?: string): Promise<any>;
 
   // Cost Monitoring & Alerts
@@ -1391,18 +1395,26 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async createInventoryItem(item: InsertInventoryItem): Promise<InventoryItem> {
-    const [result] = await db.insert(inventoryItems).values(item).returning();
-    return result;
+  async createInventoryItem(item: InsertInventoryItem, actor?: string): Promise<InventoryItem> {
+    for (const field of ['quantity', 'costPerUnit', 'costPerPurchaseUnit', 'reorderLevel'] as const) if (item[field] !== undefined && item[field] !== null) amount(item[field], field);
+    if (!actor) return (await db.insert(inventoryItems).values(item).returning())[0];
+    return db.transaction(async tx => {
+      const [saved] = await tx.insert(inventoryItems).values(item).returning();
+      await tx.insert(inventoryTransactions).values({ inventoryItemId: saved.id, locationId: saved.locationId, type: 'in', quantity: saved.quantity, reference: 'Initial stock', createdBy: actor });
+      return saved;
+    });
   }
 
-  async updateInventoryItem(id: string, item: Partial<InsertInventoryItem>): Promise<InventoryItem> {
-    const [result] = await db
-      .update(inventoryItems)
-      .set({ ...item, updatedAt: new Date() })
-      .where(eq(inventoryItems.id, id))
-      .returning();
-    return result;
+  async updateInventoryItem(id: string, item: Partial<InsertInventoryItem>, actor?: string): Promise<InventoryItem> {
+    for (const field of ['quantity', 'costPerUnit', 'costPerPurchaseUnit', 'reorderLevel'] as const) if (item[field] !== undefined && item[field] !== null) amount(item[field], field);
+    if (!actor) return (await db.update(inventoryItems).set({ ...item, updatedAt: new Date() }).where(eq(inventoryItems.id, id)).returning())[0];
+    return db.transaction(async tx => {
+      const [current] = await tx.select().from(inventoryItems).where(eq(inventoryItems.id, id)).for('update');
+      if (!current || (item.locationId !== undefined && item.locationId !== current.locationId)) throw new Error('Inventory item cannot be moved to another restaurant.');
+      const [saved] = await tx.update(inventoryItems).set({ ...item, updatedAt: new Date() }).where(eq(inventoryItems.id, id)).returning();
+      if (Number(saved.quantity) !== Number(current.quantity)) await tx.insert(inventoryTransactions).values({ inventoryItemId: id, locationId: current.locationId, type: 'adjustment', quantity: (Number(saved.quantity) - Number(current.quantity)).toFixed(2), reference: 'Manual inventory count', notes: `Count changed from ${current.quantity} to ${saved.quantity}`, createdBy: actor });
+      return saved;
+    });
   }
 
   async deleteInventoryItem(id: string): Promise<void> {
@@ -1667,16 +1679,36 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deletePurchaseOrder(id: string): Promise<void> {
-    await db.delete(purchaseOrders).where(eq(purchaseOrders.id, id));
+    await db.transaction(async tx => {
+      const [order] = await tx.select().from(purchaseOrders).where(eq(purchaseOrders.id, id)).for('update');
+      if (!order || order.status === 'delivered') throw new Error('Received orders cannot be deleted.');
+      await tx.delete(purchaseOrderItems).where(eq(purchaseOrderItems.purchaseOrderId, id));
+      await tx.delete(purchaseOrders).where(eq(purchaseOrders.id, id));
+    });
+  }
+
+  async getPurchaseOrderItem(id: string): Promise<PurchaseOrderItem | undefined> {
+    return (await db.select().from(purchaseOrderItems).where(eq(purchaseOrderItems.id, id)))[0];
   }
 
   async addPurchaseOrderItem(item: InsertPurchaseOrderItem): Promise<PurchaseOrderItem> {
-    const [result] = await db.insert(purchaseOrderItems).values(item).returning();
-    return result;
+    return db.transaction(async tx => {
+      const [order] = await tx.select().from(purchaseOrders).where(eq(purchaseOrders.id, item.purchaseOrderId!)).for('update');
+      if (!order || ['delivered', 'cancelled'].includes(order.status || '')) throw new Error('This order is closed.');
+      const [inventory] = await tx.select().from(inventoryItems).where(and(eq(inventoryItems.id, item.inventoryItemId!), eq(inventoryItems.locationId, order.locationId)));
+      if (!inventory) throw new Error('Order item belongs to another restaurant.');
+      return (await tx.insert(purchaseOrderItems).values(item).returning())[0];
+    });
   }
 
   async removePurchaseOrderItem(id: string): Promise<void> {
-    await db.delete(purchaseOrderItems).where(eq(purchaseOrderItems.id, id));
+    await db.transaction(async tx => {
+      const [line] = await tx.select().from(purchaseOrderItems).where(eq(purchaseOrderItems.id, id));
+      if (!line?.purchaseOrderId) throw new Error('Order item not found.');
+      const [order] = await tx.select().from(purchaseOrders).where(eq(purchaseOrders.id, line.purchaseOrderId)).for('update');
+      if (!order || ['delivered', 'cancelled'].includes(order.status || '')) throw new Error('This order is closed.');
+      await tx.delete(purchaseOrderItems).where(eq(purchaseOrderItems.id, id));
+    });
   }
 
   // Waste tracking operations
@@ -1700,8 +1732,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createWasteEntry(entry: InsertWasteEntry): Promise<WasteEntry> {
-    const [result] = await db.insert(wasteEntries).values(entry).returning();
-    return result;
+    return recordWaste(db, entry);
   }
 
   async getWasteStats(startDate?: Date, endDate?: Date, locationId?: string): Promise<{ totalCost: number; totalEntries: number }> {
@@ -1892,15 +1923,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserPermissions(userId: string): Promise<any[]> {
-    try {
-      const result = await db.execute(sql`
-        SELECT * FROM user_permissions WHERE user_id = ${userId} AND is_active = true
-      `);
-      return result.rows;
-    } catch (error) {
-      console.error('Failed to get user permissions:', error);
-      return [];
-    }
+    return db.select().from(userPermissions).where(and(eq(userPermissions.userId, userId), eq(userPermissions.isActive, true)));
   }
 
   async createCostAlert(data: any): Promise<any> {
@@ -2020,7 +2043,8 @@ export class DatabaseStorage implements IStorage {
 
   async getInvoiceById(id: string): Promise<any | null> {
     const result = await db.execute(sql`SELECT * FROM invoice_processing WHERE id = ${id} LIMIT 1`);
-    return result.rows[0] || null;
+    const row = result.rows[0];
+    return row ? { ...row, inventoryReceivedAt: row.inventory_received_at } : null;
   }
 
   async getInvoices(status?: string, locationId?: string): Promise<any[]> {
@@ -2137,23 +2161,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateInvoiceStatus(id: string, status: string): Promise<any> {
-    try {
-      const [result] = await db
-        .update(invoiceProcessing)
-        .set({ status: invoiceStatusSchema.parse(status) })
-        .where(eq(invoiceProcessing.id, id))
-        .returning();
-      
-      return {
-        ...result,
-        totalAmount: parseFloat(result.total || '0'),
-        subtotal: parseFloat(result.subtotal || '0'),
-        tax: parseFloat(result.tax || '0'),
-      };
-    } catch (error) {
-      console.error('Error updating invoice status:', error);
-      throw error;
-    }
+    const parsed = invoiceStatusSchema.parse(status);
+    return db.transaction(async tx => {
+      const [invoice] = await tx.select().from(invoiceProcessing).where(eq(invoiceProcessing.id, id)).for('update');
+      if (!invoice) throw new StockError('Invoice not found.');
+      if (invoice.inventoryReceivedAt && !['approved', 'paid'].includes(parsed)) throw new StockError('A received invoice cannot be reopened.');
+      if (['approved', 'paid'].includes(parsed) && !invoice.inventoryReceivedAt) throw new StockError('Review and receive inventory before updating this invoice.');
+      const [saved] = await tx.update(invoiceProcessing).set({ status: parsed }).where(eq(invoiceProcessing.id, id)).returning();
+      return { ...saved, totalAmount: Number(saved.total), subtotal: Number(saved.subtotal), tax: Number(saved.tax) };
+    });
+  }
+
+  async receiveInvoice(id: string, data: any, actor: string): Promise<any> {
+    const result = await receiveInvoice(db, id, data, actor);
+    return { ...result, location_id: result.locationId, totalAmount: Number(result.total), subtotal: Number(result.subtotal) };
   }
 
   async updateInvoice(id: string, data: any): Promise<any> {
@@ -2187,14 +2208,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteInvoice(id: string): Promise<void> {
-    try {
-      await db
-        .delete(invoiceProcessing)
-        .where(eq(invoiceProcessing.id, id));
-    } catch (error) {
-      console.error('Error deleting invoice:', error);
-      throw error;
-    }
+    await db.transaction(async tx => {
+      const [invoice] = await tx.select().from(invoiceProcessing).where(eq(invoiceProcessing.id, id)).for('update');
+      if (invoice?.inventoryReceivedAt) throw new StockError('Received invoices cannot be deleted. Use an inventory adjustment.');
+      await tx.delete(invoiceProcessing).where(eq(invoiceProcessing.id, id));
+    });
   }
 
   async getInvoiceStats(locationId?: string): Promise<any> {
@@ -4215,8 +4233,9 @@ export class DatabaseStorage implements IStorage {
 
     const invitationData = {
       ...invitation,
+      email: invitation.email.trim().toLowerCase(),
       token,
-      expiresAt,
+      expiresAt: invitation.expiresAt || expiresAt,
       status: 'pending' as const,
     };
 

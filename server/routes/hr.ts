@@ -1,9 +1,10 @@
+import { InvitationEmailService } from '../invitationEmailService';
 import type { Express } from 'express';
 import { storage } from '../storage';
 import { ObjectStorageService } from '../objectStorage';
 import { isAuthenticated, clerkClient, mapPositionToRole, requireHRAccess } from './helpers';
-import { requireLocationAccess, assertLocationAccess, strictLimiter } from '../securityMiddleware';
-import { requirePermission, requireAnyPermission, Permission } from '../permissions';
+import { requireLocationAccess, assertLocationAccess, assertSameLocation, strictLimiter } from '../securityMiddleware';
+import { canManageUser, requirePermission, requireAnyPermission, Permission } from '../permissions';
 import { isOwnerLevel, isManagerLevel } from '@shared/roles';
 import { teamResources, insertTeamResourceSchema, timeEntries, timeOffRequests, employeeDocuments, employeeOnboarding, employeeOnboardingSteps, recipeAssignments, departments, onboardingTemplates } from '@shared/schema';
 import { db } from '../db';
@@ -38,6 +39,7 @@ export function registerHRRoutes(app: Express): void {
       const existing = await storage.getDepartment(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Department not found' });
       if (!await assertLocationAccess(req, res, existing.locationId)) return;
+      if (!assertSameLocation(res, existing.locationId, req.body.locationId)) return;
       const department = await storage.updateDepartment(req.params.id, req.body);
       res.json(department);
     } catch (error) {
@@ -127,49 +129,21 @@ export function registerHRRoutes(app: Express): void {
       const employee = await storage.createEmployee(employeeData);
 
       if (employee.email) {
-        try {
-          const { randomBytes } = await import('crypto');
-          const randomPassword = randomBytes(32).toString('base64url') + 'Aa1!';
-          const clerkUser = await clerkClient.users.createUser({
-            emailAddress: [employee.email],
-            password: randomPassword,
-            firstName: employee.firstName,
-            lastName: employee.lastName,
-          });
-          const userId = clerkUser.id;
-          const employeeWithPosition = await storage.getEmployee(employee.id);
-          const userRole = mapPositionToRole(employeeWithPosition?.position?.title);
-          await storage.upsertUser({ id: userId, email: employee.email, firstName: employee.firstName, lastName: employee.lastName, role: userRole });
-          await storage.updateEmployee(employee.id, { notes: `Clerk ID: ${userId}` });
-
-          let loginUrl = `${req.protocol}://${req.get('host')}`;
-          try {
-            const signInToken = await clerkClient.signInTokens.createSignInToken({ userId, expiresInSeconds: 60 * 60 * 24 * 3 });
-            loginUrl = `${req.protocol}://${req.get('host')}?__clerk_ticket=${signInToken.token}`;
-          } catch (tokenError) {
-            console.error('Could not generate sign-in token:', tokenError);
-          }
-
-          try {
-            const { sendEmail } = await import('../email');
-            await sendEmail({
-              to: employee.email,
-              from: process.env.FROM_EMAIL || 'noreply@restroflowsolutions.com',
-              subject: 'Welcome to RestroFlow - Activate Your Account',
-              html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2>Welcome to RestroFlow!</h2><p>Hi ${employee.firstName},</p><p>Your employee account has been created. Click below to activate your account (link valid for 3 days).</p><div style="text-align:center;margin:30px 0;"><a href="${loginUrl}" style="background-color:#f97316;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;display:inline-block;font-weight:bold;">Activate My Account</a></div><p>After signing in, go to Settings → Privacy & Security to set your own password.</p><p>Best regards,<br>The RestroFlow Team</p></div>`,
-            });
-          } catch (emailError) {
-            console.error('Failed to send welcome email:', emailError);
-          }
-
-          return res.status(201).json({ ...employee, loginInstructions: { email: employee.email, message: 'Welcome email with one-time login link sent to employee.' } });
-        } catch (userCreationError) {
-          console.error('User account creation failed:', userCreationError);
-          return res.status(201).json({ ...employee, warning: 'Employee created but login account setup failed. Employee will need manual account setup.' });
-        }
-      } else {
-        return res.status(201).json({ ...employee, warning: 'Employee created without email. Login account cannot be created without email address.' });
+        const details = await storage.getEmployee(employee.id);
+        const proposedRole = mapPositionToRole(details?.position?.title);
+        const role = req.user!.role === 'platform_admin' || canManageUser(req.user!.role, proposedRole) ? proposedRole : 'employee';
+        const invitation = await storage.createInvitationToken({
+          email: employee.email, firstName: employee.firstName, lastName: employee.lastName, role, locationId,
+          departmentId: employee.departmentId, positionId: employee.positionId, hourlyRate: employee.hourlyRate || undefined,
+          salary: employee.salary || undefined, startDate: employee.hireDate, invitedBy: req.user!.id, expiresAt: new Date(Date.now() + 7 * 86400000),
+        });
+        const restaurant = await storage.getLocationById(locationId);
+        let emailSent = false;
+        try { emailSent = await InvitationEmailService.sendInvitationEmail(invitation, `${req.user!.firstName} ${req.user!.lastName}`.trim(), restaurant?.name || 'RestroFlow', restaurant?.name); }
+        catch (err) { console.error('Invitation email failed:', err); }
+        return res.status(201).json({ ...employee, loginInstructions: { email: employee.email, invitationUrl: `${process.env.APP_URL || 'https://restroflowsolutions.com'}/invitation/accept/${invitation.token}`, emailSent, message: emailSent ? 'Invitation sent. Restaurant access is granted when the employee joins.' : 'Employee and invitation created. Share the invitation link to finish setup.' } });
       }
+      return res.status(201).json({ ...employee, warning: 'Employee created without email. Add an email and send an invitation for login access.' });
     } catch (error) {
       console.error('Error creating employee:', error);
       res.status(500).json({ message: 'Failed to create employee' });
@@ -181,6 +155,7 @@ export function registerHRRoutes(app: Express): void {
       const existing = await storage.getEmployee(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Employee not found' });
       if (!await assertLocationAccess(req, res, existing.locationId)) return;
+      if (!assertSameLocation(res, existing.locationId, req.body.locationId)) return;
       const employee = await storage.updateEmployee(req.params.id, req.body);
       res.json(employee);
     } catch (error) {

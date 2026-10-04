@@ -1,3 +1,4 @@
+  import { useUser, SignInButton } from '@clerk/clerk-react';
   import { useState } from 'react';
   import { useParams, useLocation } from 'wouter';
   import { useForm } from 'react-hook-form';
@@ -40,6 +41,7 @@
   }
 
   export default function InvitationAccept() {
+    const { isSignedIn } = useUser();
     const { token } = useParams<{ token: string }>();
     const [, setLocation] = useLocation();
     const [showPassword, setShowPassword] = useState(false);
@@ -62,15 +64,15 @@
     });
 
     const acceptInvitationMutation = useMutation({
-      mutationFn: async (data: AcceptInvitationFormData) => {
+      mutationFn: async (data: Partial<AcceptInvitationFormData>) => {
         const response = await apiRequest('POST', `/api/invite/${token}/accept`, {
           password: data.password,
         });
         return response.json();
       },
       onSuccess: () => {
-        toast({ title: "Account Created", description: "Redirecting to login..." });
-        setTimeout(() => setLocation('/login'), 2000);
+        toast({ title: "Account Created", description: "Restaurant access is ready." });
+        setTimeout(() => setLocation(isSignedIn ? '/' : '/login'), 2000);
       },
       onError: (error: Error) => {
         toast({ title: "Error", description: error.message || "Failed to create account", variant: "destructive" });
@@ -218,6 +220,8 @@
 
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">Create Your Account</h3>
+              {isSignedIn ? <Button className="w-full" disabled={acceptInvitationMutation.isPending} onClick={() => acceptInvitationMutation.mutate({})}>{acceptInvitationMutation.isPending ? 'Joining…' : 'Join Team'}</Button> : <>
+              <SignInButton mode="modal"><Button variant="outline" className="w-full">Already have an account? Sign in</Button></SignInButton>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                   <FormField
@@ -264,7 +268,7 @@
                     }
                   </Button>
                 </form>
-              </Form>
+              </Form></>}
             </div>
             <div className="text-center text-sm text-muted-foreground">
               <p>By creating an account, you agree to our terms of service and privacy policy.</p>

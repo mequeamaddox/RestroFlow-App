@@ -115,6 +115,11 @@ const migrations = [
     name: "messages.read_by",
     sql: `ALTER TABLE messages ADD COLUMN IF NOT EXISTS read_by jsonb DEFAULT '[]'::jsonb`,
   },
+  { name: "invoice_processing.inventory_received_at", sql: `ALTER TABLE invoice_processing ADD COLUMN IF NOT EXISTS inventory_received_at timestamp` },
+  { name: "accepted invitation restaurant memberships", sql: `INSERT INTO user_permissions (user_id, location_id, role, permissions, is_active, granted_by)
+    SELECT DISTINCT ON (u.id, i.location_id) u.id, i.location_id, i.role, '[]'::jsonb, true, i.invited_by FROM invitation_tokens i JOIN users u ON lower(u.email) = lower(i.email)
+    WHERE i.status = 'accepted' AND i.employee_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_permissions p WHERE p.user_id = u.id AND p.location_id = i.location_id) ORDER BY u.id, i.location_id, i.accepted_at DESC` },
+
 ];
 
 async function run() {

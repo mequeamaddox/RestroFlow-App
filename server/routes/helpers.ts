@@ -60,7 +60,7 @@ export async function checkOcrAccess(userId: string): Promise<{ hasAccess: boole
 export function mapPositionToRole(positionTitle: string | null | undefined): string {
   if (!positionTitle) return 'employee';
   const title = positionTitle.toLowerCase();
-  if (title.includes('manager') || title.includes('supervisor')) return 'manager';
+  if (title.includes('manager') || title.includes('supervisor')) return 'foh_manager';
   if (title.includes('lead') || title.includes('team lead')) return 'team_lead';
   return 'employee';
 }
@@ -99,6 +99,7 @@ export function requirePlatformAdmin(req: any, res: any, next: any) {
 
 export const requireHRAccess = async (req: any, res: any, next: any) => {
   try {
+    if (req.query.locationId && req.body?.locationId && req.query.locationId !== req.body.locationId) return res.status(400).json({ message: 'Conflicting restaurant IDs in request' });
     const locationId = (req.query.locationId || req.body?.locationId) as string;
     if (!locationId) {
       return res.status(400).json({ message: 'Location ID required', code: 'LOCATION_REQUIRED' });
@@ -129,6 +130,7 @@ export const requireHRAccess = async (req: any, res: any, next: any) => {
 
 export const requireBarAccess = async (req: any, res: any, next: any) => {
   try {
+    if (req.query.locationId && req.body?.locationId && req.query.locationId !== req.body.locationId) return res.status(400).json({ message: 'Conflicting restaurant IDs in request' });
     const locationId = (req.query.locationId || req.body?.locationId) as string;
     if (!locationId) {
       return res.status(400).json({ message: 'Location ID required', code: 'LOCATION_REQUIRED' });
