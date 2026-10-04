@@ -263,8 +263,27 @@ export function registerInventoryRoutes(app: Express): void {
   app.post('/api/inventory', isAuthenticated, async (req, res) => {
     try {
       const itemData = insertInventoryItemSchema.parse(req.body);
-      if (itemData.locationId && !await assertLocationAccess(req, res, itemData.locationId)) return;
-      const item = await storage.createInventoryItem(itemData);
+      if (!itemData.locationId || !await assertLocationAccess(req, res, itemData.locationId)) return;
+      if (!itemData.name.trim()) return res.status(400).json({ message: 'Item name is required' });
+      for (const field of ['quantity', 'costPerUnit', 'reorderLevel', 'costPerPurchaseUnit'] as const) {
+        const value = itemData[field];
+        if (value !== undefined && value !== null && !/^(?:\d{1,8}(?:\.\d{1,2})?|\.\d{1,2})$/.test(value)) {
+          return res.status(400).json({ message: `${field} must be zero or more, with at most two decimal places` });
+        }
+      }
+      if (itemData.categoryId) {
+        const category = await storage.getCategory(itemData.categoryId);
+        if (!category || (category.locationId && category.locationId !== itemData.locationId)) {
+          return res.status(400).json({ message: 'Category does not belong to this restaurant' });
+        }
+      }
+      if (itemData.vendorId) {
+        const vendor = await storage.getVendor(itemData.vendorId);
+        if (!vendor || vendor.locationId !== itemData.locationId) {
+          return res.status(400).json({ message: 'Vendor does not belong to this restaurant' });
+        }
+      }
+      const item = await storage.createInventoryItem({ ...itemData, name: itemData.name.trim() });
       await storage.createInventoryTransaction({
         inventoryItemId: item.id,
         locationId: itemData.locationId,

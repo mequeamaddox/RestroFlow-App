@@ -23,10 +23,12 @@ import { apiFetch } from '../lib/api';
 import { QueryNotice } from '../components/QueryNotice';
 import { useSelectedLocation } from '../contexts/LocationContext';
 import { colors } from '../lib/colors';
+import { InventoryCreateScreen } from './InventoryCreateScreen';
+import { barcodeKey } from '../lib/inventoryDraft';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface InventoryItem {
+export interface InventoryItem {
   id: string;
   name: string;
   displayName?: string;
@@ -43,6 +45,7 @@ export type InventoryStackParamList = {
   InventoryList: undefined;
   InventoryDetail: { itemId: string };
   BarcodeScanner: undefined;
+  InventoryCreate: { barcode?: string } | undefined;
 };
 
 const Stack = createNativeStackNavigator<InventoryStackParamList>();
@@ -55,6 +58,7 @@ export function InventoryNavigator() {
       <Stack.Screen name="InventoryList" component={InventoryListScreen} />
       <Stack.Screen name="InventoryDetail" component={InventoryDetailScreen} />
       <Stack.Screen name="BarcodeScanner" component={BarcodeScannerScreen} />
+      <Stack.Screen name="InventoryCreate" component={InventoryCreateScreen} />
     </Stack.Navigator>
   );
 }
@@ -111,6 +115,9 @@ function InventoryListScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
+        <TouchableOpacity style={styles.scanBtn} onPress={() => navigation.navigate('InventoryCreate')} accessibilityRole="button">
+          <Text style={styles.scanBtnText}>+ Add</Text>
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Inventory</Text>
         <TouchableOpacity
           style={styles.scanBtn}
@@ -329,6 +336,8 @@ function BarcodeScannerScreen() {
   const { locationId } = useSelectedLocation();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+  const scanLock = useRef(false);
+  const scanAgain = () => { scanLock.current = false; setScanned(false); };
 
   const { data: items = [], isLoading, error, refetch } = useQuery<InventoryItem[]>({
     queryKey: ['inventory', locationId],
@@ -368,18 +377,20 @@ function BarcodeScannerScreen() {
   }
 
   function onBarcodeScanned({ data }: { data: string }) {
-    if (scanned) return;
+    if (scanLock.current) return;
+    scanLock.current = true;
     setScanned(true);
 
-    const match = items.find(i => i.barcode === data);
+    const match = items.find(i => i.barcode && barcodeKey(i.barcode) === barcodeKey(data));
     if (match) {
       navigation.replace('InventoryDetail', { itemId: match.id });
     } else {
       Alert.alert(
         'Barcode Not Found',
-        `Scanned: ${data}\n\nNo inventory item has this barcode. Add the barcode to an item from the web dashboard.`,
+        `Scanned: ${data}\n\nThis product is not in this restaurant’s inventory. Add it now?`,
         [
-          { text: 'Scan Again', onPress: () => setScanned(false) },
+          { text: 'Add Item', onPress: () => navigation.replace('InventoryCreate', { barcode: data }) },
+          { text: 'Scan Again', onPress: scanAgain },
           { text: 'Back to List', onPress: () => navigation.goBack() },
         ]
       );
@@ -402,7 +413,7 @@ function BarcodeScannerScreen() {
         <View style={styles.scanFrame} />
         <Text style={styles.scanHint}>Align barcode within the frame</Text>
         {scanned && (
-          <TouchableOpacity style={styles.scanAgainBtn} onPress={() => setScanned(false)}>
+          <TouchableOpacity style={styles.scanAgainBtn} onPress={scanAgain}>
             <Text style={styles.scanAgainText}>Tap to Scan Again</Text>
           </TouchableOpacity>
         )}
