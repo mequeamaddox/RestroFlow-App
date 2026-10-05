@@ -205,6 +205,9 @@ export async function assertLocationAccess(req: any, res: Response, locationId: 
 
   const location = await storage.getLocationById(locationId);
   if (!location) { res.status(404).json({ message: 'Location not found' }); return false; }
+  if (location.isActive === false || location.deletedAt) {res.status(403).json({message:'This restaurant is disabled.'});return false;}
+  const owner = location.ownerId ? await storage.getUser(location.ownerId) : undefined;
+  if (owner?.accountState && owner.accountState !== 'active') {res.status(403).json({message:'The restaurant owner account is disabled.'});return false;}
   if (location.ownerId === userId) {
     req.authorizedLocationId = locationId;
     req.user.role = 'owner';

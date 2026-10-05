@@ -17,7 +17,8 @@ const vendors = [];
 const items = [];
 let writes = 0;
 globalThis.__restroRouteStorage = {
-  getLocationById: async id => ({ id, ownerId: id === '11111111-1111-4111-8111-111111111111' ? 'owner-A' : 'owner-B' }),
+  getLocationById: async id => ({ id, isActive:!globalThis.__restroLocationDisabled,deletedAt:globalThis.__restroLocationDeleted?new Date():null,ownerId: id === '11111111-1111-4111-8111-111111111111' ? 'owner-A' : 'owner-B' }),
+  getUser:async()=>({accountState:globalThis.__restroOwnerState || 'active'}),
   createSecurityLog: async () => {},
   getUserPermissions: async () => globalThis.__restroRouteMemberships || [],
   getLocations: async () => [{ id: '11111111-1111-4111-8111-111111111111', name: 'Owned', ownerId: 'owner-A' }],
@@ -45,10 +46,12 @@ await build({ stdin: { contents: `export { registerInventoryRoutes } from './ser
   plugins: [{ name: 'isolated-services', setup(builder) {
     builder.onResolve({ filter: /^(\.\.\/storage|\.\/storage)$/ }, () => ({ path: 'storage', namespace: 'stub' }));
     builder.onResolve({ filter: /^\.\/helpers$/ }, () => ({ path: 'helpers', namespace: 'stub' }));
+    builder.onResolve({filter:/^\.\.\/executePlatformChange$/},()=>({path:'management',namespace:'stub'}));
     builder.onResolve({ filter: /^\.\.\/db$/ }, () => ({ path: 'db', namespace: 'stub' }));
     builder.onResolve({ filter: /^@clerk\/express$/ }, () => ({ path: 'clerk', namespace: 'stub' }));
     builder.onLoad({ filter: /.*/, namespace: 'stub' }, ({ path }) => ({ contents: {
       storage: 'export const storage = globalThis.__restroRouteStorage;',
+      management:'export const executePlatformChange=async()=>{};',
       db: 'export const db = {};',
       clerk: 'export const getAuth = () => ({ userId: "owner-A" });',
       helpers: `import multer from 'multer'; export const csvUpload = multer(); export const PLAN_LOCATION_LIMITS = {};
@@ -64,6 +67,13 @@ await new Promise(resolve => server.once('listening', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 const request = (path, method, data) => fetch(base + path, { method, headers: { 'Content-Type': 'application/json' }, body: data ? JSON.stringify(data) : undefined });
 try {
+  await test('disabled restaurants and disabled owners block access even for the restaurant owner',async()=>{
+    for(const state of ['suspended','deleted']){globalThis.__restroOwnerState=state;assert.equal((await request('/api/categories/category-A','PUT',{name:'Denied'})).status,403);}
+    delete globalThis.__restroOwnerState;globalThis.__restroLocationDisabled=true;
+    assert.equal((await request('/api/categories/category-A','PUT',{name:'Denied'})).status,403);delete globalThis.__restroLocationDisabled;
+    globalThis.__restroLocationDeleted=true;assert.equal((await request('/api/categories/category-A','PUT',{name:'Denied'})).status,403);delete globalThis.__restroLocationDeleted;
+    assert.equal(writes,0);
+  });
   await test('category editing and deletion work for the authorized restaurant', async () => {
     assert.equal((await request('/api/categories/category-A', 'PUT', { name: 'New name' })).status, 200);
     assert.equal((await request('/api/categories/category-A?locationId=11111111-1111-4111-8111-111111111111', 'DELETE')).status, 204);

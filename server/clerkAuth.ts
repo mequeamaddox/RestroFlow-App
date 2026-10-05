@@ -168,6 +168,7 @@ export async function requireAuth(
       });
     }
 
+    if (user.accountState && user.accountState !== 'active') return res.status(403).json({message:'This account is '+user.accountState+'. Contact support.',code:'ACCOUNT_DISABLED'});
     req.user = {
       id: user.id,
       email: user.email || '',
@@ -245,7 +246,7 @@ export async function optionalAuth(
       const email = await resolveEmail(userId, sessionClaims);
       const user = email ? await storage.getUserByEmail(email) : null;
 
-      if (user) {
+      if (user && (!user.accountState || user.accountState === "active")) {
         req.user = {
           id: user.id,
           email: user.email || '',

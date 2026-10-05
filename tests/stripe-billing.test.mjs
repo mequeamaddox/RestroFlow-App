@@ -90,4 +90,14 @@ try {
     globalThis.__billingStorage.getUser = async () => ({ id: 'staff', role: 'employee', stripeCustomerId: 'cus_owner' });
     const staff = response(); await handlers['/api/billing/portal']({ user: { id: 'staff' } }, staff); assert.equal(staff.code, 403);
   });
+  await test('late subscription events cannot undo an admin cancellation or deleted-account protection',async()=>{
+    process.env.STRIPE_WEBHOOK_SECRET='whsec_test';let writes=0;let processed=0;
+    Object.assign(globalThis.__billingStorage,{getUser:async()=>({id:'owner',accountState:'deleted',subscriptionPlan:'free',stripeSubscriptionId:null}),hasProcessedWebhook:async()=>false,markWebhookProcessed:async()=>{processed++;},updateUserSubscription:async()=>{writes++;}});
+    globalThis.__stripeMock.subscriptions.retrieve=async()=>({id:'sub_old',status:'canceled',metadata:{userId:'owner'},items:{data:[{price:{id:'price_core'}}]}});
+    for(const type of ['customer.subscription.updated','checkout.session.completed']){
+      globalThis.__stripeMock.webhooks={constructEvent:()=>({id:'evt_'+type,type,data:{object:{id:'sub_old',customer:'cus_owner',subscription:'sub_old',metadata:{userId:'owner',plan:'core'},payment_status:'paid'}}})};
+      const res=response();await handlers['/api/billing/webhook']({headers:{'stripe-signature':'test'},rawBody:Buffer.from('test')},res);assert.equal(res.code,200);
+    }
+    assert.equal(writes,0);assert.equal(processed,2);
+  });
 } finally { delete globalThis.__billingPool; delete globalThis.__stripeMock; delete globalThis.__billingStorage; await rm(dir, { recursive: true, force: true }); }

@@ -1,3 +1,4 @@
+import { CustomerAccounts } from '@/components/admin/CustomerAccounts';
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
@@ -66,6 +67,8 @@ const CONFIG_SECTIONS: ConfigSection[] = [
     description: "Stripe integration, pricing, and checkout settings",
     icon: <CreditCard className="h-4 w-4 text-green-400" />,
     items: [
+      {key:"stripe_price_hr",label:"Stripe Price ID — HR Add-on",description:"Recurring Stripe price used for HR charges",type:"text"},
+      {key:"stripe_price_bar",label:"Stripe Price ID — Bar Add-on",description:"Recurring Stripe price used for Bar & Beverage charges",type:"text"},
       {
         key: "stripe_price_core",
         label: "Stripe Price ID — Core Plan",
@@ -451,6 +454,7 @@ export default function PlatformSettings() {
         </CardContent>
       </Card>
 
+      <CustomerAccounts />
       {/* Users */}
       <Card className="bg-slate-800/80 border-slate-700">
         <CardHeader className="pb-3">

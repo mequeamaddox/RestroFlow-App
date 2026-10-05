@@ -254,6 +254,9 @@ const migrations: { name: string; sql: string }[] = [
     SELECT DISTINCT ON (u.id, i.location_id) u.id, i.location_id, i.role, '[]'::jsonb, true, i.invited_by FROM invitation_tokens i JOIN users u ON lower(u.email) = lower(i.email)
     WHERE i.status = 'accepted' AND i.employee_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_permissions p WHERE p.user_id = u.id AND p.location_id = i.location_id) ORDER BY u.id, i.location_id, i.accepted_at DESC` },
 
+  {"name": "users.account_state", "sql": "ALTER TABLE users ADD COLUMN IF NOT EXISTS account_state varchar(20) NOT NULL DEFAULT 'active'"},
+  {"name": "locations.deleted_at", "sql": "ALTER TABLE locations ADD COLUMN IF NOT EXISTS deleted_at timestamp"},
+  {"name": "platform_operations", "sql": "CREATE TABLE IF NOT EXISTS platform_operations (id uuid PRIMARY KEY, owner_id varchar NOT NULL REFERENCES users(id), actor_id varchar NOT NULL REFERENCES users(id), fingerprint varchar(64) NOT NULL, status varchar(20) NOT NULL DEFAULT 'pending', snapshot jsonb NOT NULL, draft jsonb NOT NULL, result jsonb, completed_at timestamp, created_at timestamp NOT NULL DEFAULT now())"},
   {"name": "inventory_items.containers_per_purchase", "sql": "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS containers_per_purchase numeric(18,8)"},
   {"name": "inventory_items.container_unit", "sql": "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS container_unit varchar(20)"},
   {"name": "inventory_items.amount_per_container", "sql": "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS amount_per_container numeric(18,8)"},

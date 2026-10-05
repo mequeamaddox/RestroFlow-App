@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { executePlatformChange } from '../executePlatformChange';
 import { normalizePackaging } from '@shared/inventoryUnits';
 import { countStock, receiveSingleItem } from '../stockAdjustments';
 import { assertPermission, Permission } from '../permissions';
@@ -61,6 +63,8 @@ export function registerInventoryRoutes(app: Express): void {
         }
       }
       const locationData = insertLocationSchema.parse(req.body);
+      if(locationData.deletedAt) return res.status(400).json({message:'New restaurants cannot be deleted.'});
+      if(locationData.hrAddonEnabled || locationData.barAddonEnabled) return res.status(400).json({message:'Create the restaurant first, then enable paid add-ons from Platform Admin.'});
       const location = await storage.createLocation({ ...locationData, ownerId: req.user!.id });
       res.status(201).json(location);
     } catch (error) {
@@ -76,11 +80,23 @@ export function registerInventoryRoutes(app: Express): void {
       const locationData = insertLocationSchema.partial().parse(req.body);
       const existing = await storage.getLocationById(req.params.id);
       if (locationData.ownerId !== undefined && locationData.ownerId !== existing?.ownerId) return res.status(400).json({ message: 'Location ownership cannot be changed here.' });
+      if(locationData.deletedAt!==undefined) return res.status(400).json({message:'Use restaurant management to delete or restore a restaurant.'});
+      if(existing && locationData.isActive!==undefined && locationData.isActive!==existing.isActive) {
+        if(locationData.hrAddonEnabled!==undefined || locationData.barAddonEnabled!==undefined) return res.status(400).json({message:'Save active status separately from paid add-on changes.'});
+        if(!existing.ownerId) return res.status(400).json({message:'Assign an owner before changing restaurant status.'});
+        await executePlatformChange(req.user!.id,{action:locationData.isActive?'restore_restaurant':'delete_restaurant',ownerId:existing.ownerId,locationId:existing.id,confirmation:existing.name,requestKey:req.body.requestKey || randomUUID(),reason:'Restaurant status changed by owner'});
+        delete locationData.isActive;
+      }
+      if(existing && ((locationData.hrAddonEnabled!==undefined && locationData.hrAddonEnabled!==existing.hrAddonEnabled) || (locationData.barAddonEnabled!==undefined && locationData.barAddonEnabled!==existing.barAddonEnabled))) {
+        if(!existing.ownerId) return res.status(400).json({message:'Assign the restaurant owner before changing paid add-ons.'});
+        await executePlatformChange(req.user!.id,{action:'addons',ownerId:existing.ownerId,locationId:existing.id,hrAddonEnabled:locationData.hrAddonEnabled ?? !!existing.hrAddonEnabled,barAddonEnabled:locationData.barAddonEnabled ?? !!existing.barAddonEnabled,requestKey:req.body.requestKey || randomUUID(),reason:'Restaurant add-ons updated by owner'});
+        delete locationData.hrAddonEnabled;delete locationData.barAddonEnabled;
+      }
       const location = await storage.updateLocation(req.params.id, locationData);
       res.json(location);
     } catch (error) {
       console.error('Error updating location:', error);
-      res.status(400).json({ message: 'Failed to update location' });
+      res.status(400).json({ message: error instanceof Error?error.message:'Failed to update location' });
     }
   });
 
@@ -88,11 +104,13 @@ export function registerInventoryRoutes(app: Express): void {
     try {
       if (!await assertLocationAccess(req, res, req.params.id)) return;
       if (req.user!.role !== 'owner' && req.user!.role !== 'platform_admin') return res.status(403).json({ message: 'Only the restaurant owner can delete a location.' });
-      await storage.deleteLocation(req.params.id);
+      const existing=await storage.getLocationById(req.params.id);
+      if(!existing?.ownerId) return res.status(400).json({message:'Assign the restaurant owner before deleting it.'});
+      await executePlatformChange(req.user!.id,{action:'delete_restaurant',ownerId:existing.ownerId,locationId:existing.id,confirmation:existing.name,requestKey:req.body?.requestKey || randomUUID(),reason:'Restaurant deleted by owner'});
       res.status(204).send();
     } catch (error) {
       console.error('Error deleting location:', error);
-      res.status(400).json({ message: 'Failed to delete location' });
+      res.status(400).json({ message: error instanceof Error?error.message:'Failed to delete location' });
     }
   });
 

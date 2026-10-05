@@ -259,7 +259,7 @@ export function registerBillingRoutes(app: Express): void {
         for (const [flag, env] of [['hrAddonEnabled', 'STRIPE_PRICE_HR'], ['barAddonEnabled', 'STRIPE_PRICE_BAR']] as const) {
           const quantity = ownedLocations.filter(location => location[flag]).length;
           if (quantity) {
-            const price = process.env[env];
+            const price = await storage.getPlatformSetting(env==='STRIPE_PRICE_HR'?'stripe_price_hr':'stripe_price_bar') || process.env[env];
             if (!price) throw new Error(`Configure ${env} before billing enabled add-ons.`);
             addonItems.push({ price, quantity });
           }
@@ -323,6 +323,7 @@ export function registerBillingRoutes(app: Express): void {
             if (!stripe || !session.subscription || plan !== 'core') throw new Error('Invalid subscription checkout.');
             const sub = await stripe.subscriptions.retrieve(session.subscription);
             const user = await storage.getUser(userId);
+            if(user?.accountState==='deleted' || sub.status==='canceled' || sub.status==='incomplete_expired') break;
             if (user?.stripeSubscriptionId && user.stripeSubscriptionId !== sub.id) break;
             const status = session.payment_status === 'paid' || session.payment_status === 'no_payment_required'
               ? mapStripeStatusToPlan(sub.status) : 'inactive';
@@ -345,6 +346,7 @@ export function registerBillingRoutes(app: Express): void {
         case 'customer.subscription.updated': {
           const sub = await stripe!.subscriptions.retrieve((event.data.object as Stripe.Subscription).id);
           const { userId } = sub.metadata || {};
+          if(sub.status==='canceled' || sub.status==='incomplete_expired') break;
           const mappedStatus = mapStripeStatusToPlan(sub.status);
           const priceId: string = sub.items?.data?.[0]?.price?.id;
           // Read stripe_price_core from DB admin settings; fall back to env var

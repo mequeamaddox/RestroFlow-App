@@ -37,6 +37,7 @@ export const locations = pgTable("locations", {
   phone: varchar("phone"),
   manager: varchar("manager"),
   isActive: boolean("is_active").default(true),
+  deletedAt: timestamp("deleted_at"),
   hrAddonEnabled: boolean("hr_addon_enabled").default(false),
   barAddonEnabled: boolean("bar_addon_enabled").default(false),
   ownerId: varchar("owner_id"), // user ID of the owner — enforces cross-tenant isolation
@@ -56,6 +57,7 @@ export const users = pgTable("users", {
   profileImageUrl: varchar("profile_image_url"),
   role: varchar("role").default("employee"), // owner, gm, foh_manager, boh_manager, team_lead, employee
   defaultLocationId: uuid("default_location_id").references(() => locations.id),
+  accountState: varchar("account_state", {length:20}).notNull().default("active"),
   // Subscription fields
   subscriptionPlan: subscriptionPlanEnum("subscription_plan").default("free"),
   subscriptionStatus: subscriptionStatusEnum("subscription_status").default("inactive"),
@@ -1961,3 +1963,17 @@ export const barWasteLog = pgTable("bar_waste_log", {
 export type BarInventoryCount = typeof barInventoryCounts.$inferSelect;
 export type BarInventoryCountItem = typeof barInventoryCountItems.$inferSelect;
 export type BarWasteEntry = typeof barWasteLog.$inferSelect;
+
+// Durable platform billing changes: retry Stripe/DB failures without billing twice.
+export const platformOperations = pgTable("platform_operations", {
+  id: uuid("id").primaryKey(),
+  ownerId: varchar("owner_id").notNull().references(()=>users.id),
+  actorId: varchar("actor_id").notNull().references(()=>users.id),
+  fingerprint: varchar("fingerprint",{length:64}).notNull(),
+  status: varchar("status",{length:20}).notNull().default("pending"),
+  snapshot: jsonb("snapshot").notNull(),
+  draft: jsonb("draft").notNull(),
+  result: jsonb("result"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});

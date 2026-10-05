@@ -47,7 +47,7 @@ export function requirePlan(minPlan: Plan) {
       const memberships = await storage.getUserPermissions(userId);
       if (locationId) {
         const location = await storage.getLocationById(locationId);
-        if (!location || (location.ownerId !== userId && !memberships.some(p => p.locationId === locationId && p.isActive))) {
+        if (!location || location.isActive === false || location.deletedAt || (location.ownerId !== userId && !memberships.some(p => p.locationId === locationId && p.isActive))) {
           return res.status(403).json({ message: 'Access denied to this location' });
         }
         billingUser = location.ownerId ? await storage.getUser(location.ownerId) : undefined;
@@ -55,8 +55,9 @@ export function requirePlan(minPlan: Plan) {
         const owned = await storage.getLocations(userId);
         const assigned = await Promise.all(memberships.filter(p => p.isActive).map(p => storage.getLocationById(p.locationId)));
         const owners = await Promise.all([...new Set([...owned, ...assigned.filter(Boolean)].map(location => location!.ownerId).filter(Boolean))].map(id => storage.getUser(id!)));
-        billingUser = owners.find(owner => owner?.subscriptionPlan === 'core' && ACTIVE_STATUSES.has(owner.subscriptionStatus || 'inactive')) || user;
+        billingUser = owners.find(owner => (!owner?.accountState || owner.accountState === 'active') && owner?.subscriptionPlan === 'core' && ACTIVE_STATUSES.has(owner.subscriptionStatus || 'inactive')) || user;
       }
+      if (billingUser?.accountState && billingUser.accountState !== 'active') return res.status(403).json({message:'The restaurant owner account is disabled.'});
       const plan = (billingUser?.subscriptionPlan as Plan) || 'free';
 
       // Step 1 — plan tier check

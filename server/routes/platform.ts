@@ -2,14 +2,29 @@ import type { Express } from 'express';
 import { isAuthenticated, requirePlatformAdmin } from './helpers';
 import { strictLimiter } from '../securityMiddleware';
 import { storage } from '../storage';
+import { managementDraft } from '../platformManagement';
+import { executePlatformChange } from '../executePlatformChange';
 import { db } from '../db';
 import { sql, eq } from 'drizzle-orm';
 import {
-  locations, vendors, inventoryItems, invoiceProcessing, sales, salesItems, budgets,
+  users, platformOperations, locations, vendors, inventoryItems, invoiceProcessing, sales, salesItems, budgets,
 } from '@shared/schema';
 
 export function registerPlatformRoutes(app: Express): void {
   // All platform routes require platform_admin
+  app.get('/api/platform/accounts', isAuthenticated, requirePlatformAdmin, async (_req,res)=>{
+    try {
+      const [owners,restaurants,operations]=await Promise.all([db.select().from(users).where(eq(users.role,'owner')),db.select().from(locations),db.select().from(platformOperations).where(eq(platformOperations.status,'pending'))]);
+      res.json(owners.map(owner=>({...owner,restaurants:restaurants.filter(l=>l.ownerId===owner.id),pendingRequests:operations.filter(o=>o.ownerId===owner.id).map(o=>({id:o.id,draft:o.draft}))})));
+    } catch {res.status(500).json({message:'Failed to load customer accounts.'});}
+  });
+  app.post('/api/platform/accounts/manage',isAuthenticated,requirePlatformAdmin,strictLimiter,async(req,res)=>{
+    try {
+      const draft=managementDraft.parse(req.body);
+      const result=await executePlatformChange(req.user!.id,draft);
+      res.json(result);
+    } catch(error:any) {res.status(400).json({message:error.message || 'Account change failed. No paid features were granted.'});}
+  });
 
   app.get('/api/platform/settings', isAuthenticated, requirePlatformAdmin, async (_req, res) => {
     try {

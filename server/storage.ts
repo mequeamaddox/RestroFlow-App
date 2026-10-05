@@ -498,7 +498,7 @@ export class DatabaseStorage implements IStorage {
   // Location operations
   async getLocations(ownerId?: string): Promise<Location[]> {
     if (ownerId) {
-      return await db.select().from(locations).where(eq(locations.ownerId, ownerId)).orderBy(locations.name);
+      return await db.select().from(locations).where(and(eq(locations.ownerId, ownerId),eq(locations.isActive,true),isNull(locations.deletedAt))).orderBy(locations.name);
     }
     return await db.select().from(locations).orderBy(locations.name);
   }

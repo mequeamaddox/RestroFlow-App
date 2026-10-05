@@ -87,11 +87,12 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(401).json({ ok: false, message: 'User not found' });
       }
 
+      if(user.accountState && user.accountState!=='active') return res.status(403).json({ok:false,message:'This account is '+user.accountState+'. Contact support.',code:'ACCOUNT_DISABLED'});
       const owned = user.role === 'platform_admin' ? [] : await storage.getLocations(user.id);
       const memberships = user.role === 'platform_admin' ? [] : await storage.getUserPermissions(user.id);
       const assigned = await Promise.all(memberships.filter(p => p.isActive).map(p => storage.getLocationById(p.locationId)));
       const assignedOwners = await Promise.all(assigned.filter(Boolean).map(location => location!.ownerId ? storage.getUser(location!.ownerId) : undefined));
-      const inherited = assignedOwners.find(owner => owner?.subscriptionPlan === 'core' && ['active', 'past_due'].includes(owner.subscriptionStatus || ''));
+      const inherited = assignedOwners.find(owner => (!owner?.accountState || owner.accountState==='active') && owner?.subscriptionPlan === 'core' && ['active', 'past_due'].includes(owner.subscriptionStatus || ''));
       const billing = user.subscriptionPlan === 'core' && ['active', 'past_due'].includes(user.subscriptionStatus || '') ? user : inherited || user;
       res.json({
         ok: true,
