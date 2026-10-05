@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { createHash } from 'node:crypto';
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 
@@ -28,6 +29,7 @@ export async function createCheckoutSession(params: {
   cancelUrl: string;
   trialDays?: number;
   priceIdOverride?: string;
+  addonItems?: Array<{ price: string; quantity: number }>;
 }): Promise<string> {
   if (!stripe) throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY.');
   const plan = PLANS[params.plan];
@@ -40,12 +42,16 @@ export async function createCheckoutSession(params: {
 
   const sessionParams: Stripe.Checkout.SessionCreateParams = {
     mode: 'subscription',
-    line_items: [{ price: priceId, quantity: 1 }],
+    line_items: [{ price: priceId, quantity: 1 }, ...(params.addonItems || [])],
+    automatic_tax: { enabled: process.env.STRIPE_AUTOMATIC_TAX === 'true' },
+    billing_address_collection: 'required',
+    tax_id_collection: { enabled: true },
     success_url: params.successUrl,
     cancel_url: params.cancelUrl,
     metadata: { userId: params.userId, plan: params.plan },
     subscription_data: {
       metadata: { userId: params.userId, plan: params.plan },
+      billing_mode: { type: 'flexible' },
       ...(params.trialDays ? { trial_period_days: params.trialDays } : {}),
     },
     allow_promotion_codes: true,
@@ -53,11 +59,15 @@ export async function createCheckoutSession(params: {
 
   if (params.stripeCustomerId) {
     sessionParams.customer = params.stripeCustomerId;
+    sessionParams.customer_update = { address: 'auto', name: 'auto' };
   } else {
     sessionParams.customer_email = params.email;
   }
 
-  const session = await stripe.checkout.sessions.create(sessionParams);
+  const fingerprint = createHash('sha256').update(JSON.stringify(sessionParams)).digest('hex').slice(0, 24);
+  const session = await stripe.checkout.sessions.create(sessionParams, {
+    idempotencyKey: `checkout:${params.userId}:${fingerprint}:${Math.floor(Date.now() / 300000)}`,
+  });
   if (!session.url) throw new Error('Stripe did not return a checkout URL');
   return session.url;
 }
@@ -102,12 +112,25 @@ export function mapStripeStatusToPlan(
     case 'trialing':
       return 'active';
     case 'past_due':
-    case 'unpaid':
       return 'past_due';
+    case 'unpaid':
+    case 'paused':
+      return 'inactive';
     case 'canceled':
     case 'incomplete_expired':
       return 'cancelled';
     default:
       return 'inactive';
   }
+}
+
+/** Basil moved billing periods onto subscription items. */
+export function subscriptionPeriodEnd(sub: Stripe.Subscription): Date | undefined {
+  const ends = sub.items.data.map(item => item.current_period_end).filter(Boolean);
+  return ends.length ? new Date(Math.min(...ends) * 1000) : undefined;
+}
+
+export function invoiceSubscriptionId(invoice: Stripe.Invoice): string | undefined {
+  const sub = invoice.parent?.subscription_details?.subscription;
+  return typeof sub === 'string' ? sub : sub?.id;
 }

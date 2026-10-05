@@ -86,3 +86,52 @@ Example: analytics routes such as `/api/analytics/profit-loss` and
 See [OCR](OCR.md). Credits live on the `users` table (`ocr_credits_used`,
 `ocr_credits_limit`, default 5 for free, 999 for paid). `checkOcrAccess(userId)` gates
 processing; `updateOcrCreditsUsed` increments after a successful run.
+
+## Stripe integration plan and launch checks (2026-10-05)
+
+The Stripe implementation planner recommends hosted subscription Checkout, flexible
+billing mode, a customer portal, signature-verified lifecycle webhooks, and Smart
+Retries with recovery emails. The connected Stripe session is **test mode**.
+The existing application uses v1 Customers; retain that model rather than adopting
+the planner's Accounts v2 portal example without a deliberate migration.
+
+- Configure `STRIPE_SECRET_KEY`, `STRIPE_PRICE_CORE`, and `STRIPE_WEBHOOK_SECRET`
+  from the **same account and environment**. Database platform setting
+  `stripe_price_core` overrides the environment value; update it when switching modes.
+- Configure recurring `STRIPE_PRICE_HR` and `STRIPE_PRICE_BAR` when locations have
+  those add-ons enabled. Initial Checkout includes their owned-location quantities.
+  **Post-purchase add-on toggles/location deletion are not yet synchronized with
+  Stripe subscription item quantities.** Do not launch self-service add-on changes
+  until that workflow includes payment confirmation and entitlement synchronization.
+- Existing pricing documentation has free access, annual pricing, and add-ons;
+  Checkout currently implements monthly Core plus enabled add-ons. Annual prices
+  need a separate implementation. Verify the intended catalog before creating prices.
+- Set admin `trial_days` to `0` for upfront payment without trials. No new trial is
+  introduced by this change; the existing configurable trial setting is preserved.
+- Confirm `APP_URL` is the canonical HTTPS app URL. Redirects no longer trust Host.
+- Create an endpoint at `/api/billing/webhook` using the app's pinned Basil version.
+  Subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+  `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`,
+  `invoice.payment_failed`, and (only if using trials) `customer.subscription.trial_will_end`.
+- Webhook processing serializes by customer across replicas and records completion
+  after durable updates. Failed updates remain retryable; a retry can repeat completed
+  partial work, so subscription updates are assignments rather than increments.
+  Emails remain best effort and may be repeated after a process crash.
+- `unpaid` and `paused` map to inactive; `past_due` retains the existing recovery access
+  policy. Configure Stripe recovery's final action to cancel or mark unpaid; a separate
+  app-enforced grace deadline remains a follow-up if retaining `past_due` indefinitely.
+- Configure the customer portal for payment method updates, invoice history,
+  cancellation at period end, and approved product/price changes. Enable Smart Retries.
+- Tax: confirm head office address, software product tax category, tax behavior,
+  and applicable registrations. `STRIPE_AUTOMATIC_TAX=true` enables Checkout automatic
+  tax after those settings are ready; default false avoids guessing tax obligations.
+- Connect is a separate requirement only if RestroFlow moves money for restaurants,
+  vendors, or other parties. Subscription revenue collected by RestroFlow uses the
+  platform's own account. Confirm the intended third-party payment flow before building
+  connected-account onboarding or creating connected accounts.
+
+Before live launch, test payment success, delayed payment, declines/recovery,
+concurrent Checkout requests, portal cancellation, out-of-order events, duplicate
+webhook delivery, and a failed DB update followed by a retry. Use new live Customer,
+Price, Subscription and webhook IDs/secrets; never reuse sandbox IDs in production.
+Unit tests use mocks, so they do not establish live Stripe, database or portal readiness.

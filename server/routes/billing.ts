@@ -1,4 +1,6 @@
 import type { Express } from 'express';
+import type Stripe from 'stripe';
+import { withBillingLock, processBillingEvent } from '../billingLock';
 import { storage } from '../storage';
 import { isAuthenticated, calculateSubscriptionTotal } from './helpers';
 import { requireLocationAccess } from '../securityMiddleware';
@@ -13,6 +15,8 @@ import {
   cancelStripeSubscription,
   constructWebhookEvent,
   mapStripeStatusToPlan,
+  subscriptionPeriodEnd,
+  invoiceSubscriptionId,
   type StripePlan,
 } from '../stripeService';
 
@@ -225,23 +229,48 @@ export function registerBillingRoutes(app: Express): void {
       if (billingEnabled === 'false')
         return res.status(503).json({ message: 'Billing is temporarily disabled. Please try again later.', configured: false });
 
-      const user = await storage.getUser(userId);
-      if (!user) return res.status(404).json({ message: 'User not found' });
-      const host = `${req.protocol}://${req.get('host')}`;
+      const checkoutUrl = await withBillingLock(`stripe-checkout:${userId}`, async () => {
+        const user = await storage.getUser(userId);
+        if (!user || !isOwnerLevel(user.role)) throw new Error('Only business owners can manage billing.');
+        if (!stripe) throw new Error('Stripe billing is not configured.');
+        if (!user.stripeCustomerId) {
+          const customer = await stripe.customers.create({ email: user.email!, metadata: { userId } }, { idempotencyKey: `restroflow-customer:${userId}` });
+          await storage.updateUserSubscription(userId, { stripeCustomerId: customer.id });
+          user.stripeCustomerId = customer.id;
+        }
+        const existing = await stripe.subscriptions.list({ customer: user.stripeCustomerId, status: 'all', limit: 100 });
+        if (existing.data.some(sub => !['canceled', 'incomplete_expired'].includes(sub.status))) {
+          throw new Error('You already have a subscription. Use Manage Billing to update it.');
+        }
+        const openSessions = await stripe.checkout.sessions.list({ customer: user.stripeCustomerId, status: 'open', limit: 100 });
+        const open = openSessions.data.find(session => session.mode === 'subscription' && session.metadata?.userId === userId && session.url);
+        if (open?.url) return open.url;
+        const host = billingOrigin();
 
-      // trial_days and stripe_price_core: server-only settings — never accept from client
-      const [trialDaysSetting, stripePriceCoreDb] = await Promise.all([
-        storage.getPlatformSetting('trial_days'),
-        storage.getPlatformSetting('stripe_price_core'),
-      ]);
-      const trialDays = trialDaysSetting !== null ? parseInt(trialDaysSetting) : undefined;
+        // trial_days and stripe_price_core: server-only settings — never accept from client
+        const [trialDaysSetting, stripePriceCoreDb] = await Promise.all([
+          storage.getPlatformSetting('trial_days'),
+          storage.getPlatformSetting('stripe_price_core'),
+        ]);
+        const trialDays = trialDaysSetting !== null ? parseInt(trialDaysSetting) : undefined;
 
-      const checkoutUrl = await createCheckoutSession({
-        userId, email: user.email!, plan: plan as StripePlan, stripeCustomerId: user.stripeCustomerId,
-        successUrl: `${host}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
-        cancelUrl: `${host}/subscription`,
-        ...(trialDays && trialDays > 0 ? { trialDays } : {}),
-        ...(stripePriceCoreDb ? { priceIdOverride: stripePriceCoreDb } : {}),
+        const ownedLocations = await storage.getLocations(userId);
+        const addonItems = [];
+        for (const [flag, env] of [['hrAddonEnabled', 'STRIPE_PRICE_HR'], ['barAddonEnabled', 'STRIPE_PRICE_BAR']] as const) {
+          const quantity = ownedLocations.filter(location => location[flag]).length;
+          if (quantity) {
+            const price = process.env[env];
+            if (!price) throw new Error(`Configure ${env} before billing enabled add-ons.`);
+            addonItems.push({ price, quantity });
+          }
+        }
+        return createCheckoutSession({
+          addonItems, userId, email: user.email!, plan: plan as StripePlan, stripeCustomerId: user.stripeCustomerId,
+          successUrl: `${host}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
+          cancelUrl: `${host}/subscription`,
+          ...(trialDays && trialDays > 0 ? { trialDays } : {}),
+          ...(stripePriceCoreDb ? { priceIdOverride: stripePriceCoreDb } : {}),
+        });
       });
       res.json({ checkoutUrl });
     } catch (error: any) {
@@ -253,10 +282,11 @@ export function registerBillingRoutes(app: Express): void {
   app.post('/api/billing/portal', isAuthenticated, async (req, res) => {
     try {
       const user = await storage.getUser(req.user!.id);
+      if (!isOwnerLevel(user?.role)) return res.status(403).json({ message: 'Only business owners can manage billing.' });
       if (!user?.stripeCustomerId)
         return res.status(400).json({ message: 'No Stripe billing account found. Please subscribe first.' });
       if (!isStripeEnabled) return res.status(503).json({ message: 'Stripe billing is not configured.' });
-      const host = `${req.protocol}://${req.get('host')}`;
+      const host = billingOrigin();
       const portalUrl = await createPortalSession({ stripeCustomerId: user.stripeCustomerId, returnUrl: `${host}/subscription` });
       res.json({ portalUrl });
     } catch (error: any) {
@@ -279,27 +309,27 @@ export function registerBillingRoutes(app: Express): void {
       console.error('Stripe webhook signature verification failed:', err.message);
       return res.status(400).json({ error: `Webhook Error: ${err.message}` });
     }
-    // C1: Idempotency — claim the event ID before processing to prevent concurrent retries
     try {
-      await storage.markWebhookProcessed(event.id, {
-        provider: 'stripe',
-        integrationId: event.type,
-        receivedAt: new Date().toISOString(),
-      });
-    } catch (dupErr: any) {
-      if (dupErr?.code === '23505') return res.json({ received: true });
-      throw dupErr;
-    }
-
-    try {
+      const customer = (event.data.object as any).customer;
+      const customerId = typeof customer === 'string' ? customer : customer?.id;
+      await processBillingEvent(`stripe-events:${customerId || event.id}`,
+        () => storage.hasProcessedWebhook(event.id), async () => {
       switch (event.type) {
-        case 'checkout.session.completed': {
+        case 'checkout.session.completed':
+        case 'checkout.session.async_payment_succeeded': {
           const session = event.data.object as any;
           const { userId, plan } = session.metadata || {};
           if (userId && plan) {
+            if (!stripe || !session.subscription || plan !== 'core') throw new Error('Invalid subscription checkout.');
+            const sub = await stripe.subscriptions.retrieve(session.subscription);
+            const user = await storage.getUser(userId);
+            if (user?.stripeSubscriptionId && user.stripeSubscriptionId !== sub.id) break;
+            const status = session.payment_status === 'paid' || session.payment_status === 'no_payment_required'
+              ? mapStripeStatusToPlan(sub.status) : 'inactive';
             await storage.updateUserSubscription(userId, {
-              subscriptionPlan: plan as 'core',
-              subscriptionStatus: 'active',
+              subscriptionPlan: 'core',
+              subscriptionStatus: status,
+              subscriptionEndDate: subscriptionPeriodEnd(sub),
               stripeCustomerId: session.customer,
               stripeSubscriptionId: session.subscription,
               ocrCreditsLimit: 999,
@@ -313,7 +343,7 @@ export function registerBillingRoutes(app: Express): void {
           break;
         }
         case 'customer.subscription.updated': {
-          const sub = event.data.object as any;
+          const sub = await stripe!.subscriptions.retrieve((event.data.object as Stripe.Subscription).id);
           const { userId } = sub.metadata || {};
           const mappedStatus = mapStripeStatusToPlan(sub.status);
           const priceId: string = sub.items?.data?.[0]?.price?.id;
@@ -323,27 +353,32 @@ export function registerBillingRoutes(app: Express): void {
           let plan: 'core' | undefined;
           if (priceId && stripePriceCore && priceId === stripePriceCore) plan = 'core';
           if (userId) {
+            const user = await storage.getUser(userId);
+            if (user?.stripeSubscriptionId && user.stripeSubscriptionId !== sub.id) break;
             await storage.updateUserSubscription(userId, {
               ...(plan ? { subscriptionPlan: plan, ocrCreditsLimit: 999 } : {}),
+              stripeSubscriptionId: sub.id,
               subscriptionStatus: mappedStatus,
-              subscriptionEndDate: sub.current_period_end ? new Date(sub.current_period_end * 1000) : undefined,
+              subscriptionEndDate: subscriptionPeriodEnd(sub),
             });
           }
           break;
         }
         case 'customer.subscription.deleted': {
-          const sub = event.data.object as any;
+          const sub = await stripe!.subscriptions.retrieve((event.data.object as Stripe.Subscription).id);
           const { userId } = sub.metadata || {};
           if (userId) {
+            const user = await storage.getUser(userId);
+            if (user?.stripeSubscriptionId && user.stripeSubscriptionId !== sub.id) break;
             await storage.updateUserSubscription(userId, {
               subscriptionPlan: 'free', subscriptionStatus: 'inactive',
-              stripeSubscriptionId: undefined, ocrCreditsLimit: 5,
-              subscriptionEndDate: sub.current_period_end ? new Date(sub.current_period_end * 1000) : undefined,
+              stripeSubscriptionId: null, ocrCreditsLimit: 5,
+              subscriptionEndDate: subscriptionPeriodEnd(sub),
             });
             // C2: Disable HR addon on all locations owned by this user when subscription is cancelled
             const ownedLocations = await storage.getLocations(userId);
             await Promise.all(ownedLocations.map((loc: any) =>
-              storage.updateLocation(loc.id, { hrAddonEnabled: false }),
+              storage.updateLocation(loc.id, { hrAddonEnabled: false, barAddonEnabled: false }),
             ));
           }
           break;
@@ -352,9 +387,11 @@ export function registerBillingRoutes(app: Express): void {
           const invoice = event.data.object as any;
           if (invoice.customer && stripe) {
             try {
-              const subscriptions = await stripe.subscriptions.list({ customer: invoice.customer, limit: 1 });
-              const sub = subscriptions.data[0];
+              const subscriptionId = invoiceSubscriptionId(invoice);
+              const sub = subscriptionId ? await stripe.subscriptions.retrieve(subscriptionId) : undefined;
               if (sub?.metadata?.userId) {
+                const user = await storage.getUser(sub.metadata.userId);
+                if (user?.stripeSubscriptionId && user.stripeSubscriptionId !== sub.id) break;
                 await storage.updateUserSubscription(sub.metadata.userId, { subscriptionStatus: mapStripeStatusToPlan(sub.status) });
               }
               if (invoice.customer_email) {
@@ -370,20 +407,20 @@ export function registerBillingRoutes(app: Express): void {
                   plan: sub?.metadata?.plan,
                 }).catch(e => console.error('Failed to send invoice receipt email:', e));
               }
-            } catch (e) { console.error('Failed to refresh subscription after invoice.paid:', e); }
+            } catch (e) { console.error('Failed to refresh subscription after invoice.paid:', e); throw e; }
           }
           break;
         }
         case 'customer.subscription.trial_will_end': {
-          const sub = event.data.object as any;
+          const sub = await stripe!.subscriptions.retrieve((event.data.object as Stripe.Subscription).id);
           const { userId } = sub.metadata || {};
-          let email = sub.customer_email;
+          let email = '';
           if (!email && userId) {
             const u = await storage.getUser(userId);
             email = u?.email ?? '';
           }
           if (email) {
-            const trialEndDate = new Date(sub.trial_end * 1000).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            const trialEndDate = new Date((sub.trial_end || 0) * 1000).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
             const appUrl = process.env.APP_URL || 'https://restroflowsolutions.com';
             await sendEmail({
               to: email, from: process.env.FROM_EMAIL || 'noreply@restroflowsolutions.com', subject: 'Your RestroFlow trial ends soon',
@@ -406,10 +443,21 @@ export function registerBillingRoutes(app: Express): void {
         default:
           console.log(`Unhandled Stripe event: ${event.type}`);
       }
+      }, () => storage.markWebhookProcessed(event.id, {
+        provider: 'stripe', integrationId: event.type, receivedAt: new Date().toISOString(),
+      }));
       res.json({ received: true });
     } catch (err) {
       console.error('Stripe webhook processing error:', err);
       res.status(500).json({ error: 'Webhook processing failed' });
     }
   });
+}
+
+function billingOrigin(): string {
+  const url = new URL(process.env.APP_URL || 'https://restroflowsolutions.com');
+  if (url.protocol !== 'https:' && process.env.NODE_ENV === 'production') {
+    throw new Error('APP_URL must use HTTPS in production.');
+  }
+  return url.origin;
 }
