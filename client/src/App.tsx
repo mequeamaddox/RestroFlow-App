@@ -105,6 +105,9 @@ function Router() {
     );
   }
 
+  // Profile paperwork links work for signed-in staff as well as new accounts.
+  if (currentPath.startsWith('/onboarding/')) return <Switch><Route path="/onboarding/:token" component={PublicOnboarding} /></Switch>;
+
   // Keep invitations reachable after modal sign-in, including existing accounts.
   if (currentPath.startsWith('/invitation/accept/')) return <Switch><Route path="/invitation/accept/:token" component={InvitationAccept} /></Switch>;
 

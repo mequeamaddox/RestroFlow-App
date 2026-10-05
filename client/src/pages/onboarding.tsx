@@ -93,6 +93,7 @@ const restaurantInfoSchema = z.object({
 
 const departmentsSchema = z.object({
   departments: z.array(z.object({
+    id: z.string().optional(),
     name: z.string().min(2, "Department name is required"),
     description: z.string().optional(),
     budget: z.string().optional()
@@ -101,6 +102,7 @@ const departmentsSchema = z.object({
 
 const positionsSchema = z.object({
   positions: z.array(z.object({
+    id: z.string().optional(),
     title: z.string().min(2, "Position title is required"),
     departmentId: z.string().min(1, "Department is required"),
     description: z.string().optional(),
@@ -189,10 +191,12 @@ export default function Onboarding() {
       const res = await apiRequest('POST', '/api/owner-onboarding/start');
       return res.json();
     },
-    onSuccess: (data) => {
-      setOnboardingData(data.data || {});
-      const stepIndex = ONBOARDING_STEPS.findIndex(step => step.key === data.currentStep);
-      setCurrentStep(Math.max(0, stepIndex));
+    onSuccess: (result) => {
+      setOnboardingData(result.data || {});
+      const stepIndex = ONBOARDING_STEPS.findIndex(step => step.key === result.currentStep);
+      const data = result.data as any;
+      const resumeStep = !data?.restaurant_info?.locationId ? 0 : !data?.departments?.departments?.every((d: any) => d.id) ? 1 : !data?.positions?.positions?.every((p: any) => p.id) ? 2 : Math.max(0, stepIndex);
+      setCurrentStep(resumeStep);
     },
     onError: () => {
       toast({
@@ -220,12 +224,18 @@ export default function Onboarding() {
       const res = await apiRequest('POST', '/api/owner-onboarding/complete');
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      queryClient.setQueryData(['/api/owner-onboarding/progress'], result);
       toast({
         title: "Onboarding Complete!",
         description: "Welcome to RestroFlow! Your restaurant is ready to manage."
       });
+      queryClient.invalidateQueries({ queryKey: ['/api/owner-onboarding/progress'] });
       setLocation('/');
+    },
+    onError: (error: Error) => {
+      setIsCompleting(false);
+      toast({ title: 'Setup could not finish', description: error.message, variant: 'destructive' });
     }
   });
 
@@ -246,101 +256,46 @@ export default function Onboarding() {
       // Existing DB record — resume from saved state
       setOnboardingData(progress.data || {});
       const stepIndex = ONBOARDING_STEPS.findIndex(step => step.key === progress.currentStep);
-      setCurrentStep(Math.max(0, stepIndex));
+      const data = progress.data as any;
+      const resumeStep = !data?.restaurant_info?.locationId ? 0 : !data?.departments?.departments?.every((d: any) => d.id) ? 1 : !data?.positions?.positions?.every((p: any) => p.id) ? 2 : Math.max(0, stepIndex);
+      setCurrentStep(resumeStep);
     } else {
       // No record yet (server returned default) — create one
       startOnboardingMutation.mutate();
     }
   }, [user?.role, isLoadingProgress, progress, progressError]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleStepComplete = async (stepData: any) => {
-    const currentStepKey = ONBOARDING_STEPS[currentStep].key;
-    const updatedData = { ...onboardingData, [currentStepKey]: stepData };
-    setOnboardingData(updatedData);
+  const [isSavingStep, setIsSavingStep] = useState(false);
+  const [invitationLinks, setInvitationLinks] = useState<Array<{email: string; invitationUrl: string}>>([]);
 
-    // Save progress to backend
-    await updateStepMutation.mutateAsync({ stepName: currentStepKey, stepData });
-
-    // After restaurant info step: auto-create a location if none exists yet.
-    // This is required for the invitation step to work (invitations need a locationId).
-    if (currentStepKey === 'restaurant_info' && locations.length === 0) {
-      try {
-        await apiRequest('POST', '/api/locations', {
-          name: stepData.name,
-          type: stepData.type || 'restaurant',
-          address: stepData.address,
-          phone: stepData.phone,
-          manager: stepData.manager,
-        });
-        queryClient.invalidateQueries({ queryKey: ['/api/locations'] });
-      } catch {
-        // Non-critical: invitation step will still show a helpful error if needed
+  const saveStep = async (stepData: any, status: 'completed' | 'skipped') => {
+    if (isSavingStep) return;
+    setIsSavingStep(true);
+    try {
+      const saved = await updateStepMutation.mutateAsync({ stepName: ONBOARDING_STEPS[currentStep].key, stepData, status });
+      setOnboardingData(saved.data || {});
+      queryClient.invalidateQueries({ queryKey: ['/api/locations'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/hr/departments'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/hr/positions'] });
+      const unsent = (saved.invitationResults || []).filter((invite: any) => !invite.emailSent);
+      if (unsent.length) {
+        setInvitationLinks(unsent);
+        toast({ title: 'Invitations created', description: 'Email delivery failed. Copy the invitation links below before finishing setup.' });
+        return;
       }
-    }
-
-    // If this is the employee invitations step, send the actual invitations
-    if (currentStepKey === 'employee_invitations' && stepData?.invitations?.length > 0) {
-      const firstLocationId = locations[0]?.id;
-      const sentCount = { emailSent: 0, tokenOnly: 0, failed: 0 };
-      const inviteLinks: string[] = [];
-      for (const invite of stepData.invitations) {
-        if (!invite.email) continue;
-        try {
-          const res = await apiRequest('POST', '/api/invitations', {
-            email: invite.email,
-            role: 'employee',
-            firstName: invite.firstName,
-            lastName: invite.lastName,
-            locationId: firstLocationId,
-            expiresInHours: 168,
-          });
-          const data = await res.json();
-          if (data.emailSent) {
-            sentCount.emailSent++;
-          } else {
-            sentCount.tokenOnly++;
-            if (data.invitationUrl) inviteLinks.push(`${invite.firstName || invite.email}: ${data.invitationUrl}`);
-          }
-        } catch {
-          sentCount.failed++;
-        }
-      }
-      const total = sentCount.emailSent + sentCount.tokenOnly;
-      if (total > 0) {
-        toast({
-          title: sentCount.emailSent > 0 ? `${sentCount.emailSent} invitation email${sentCount.emailSent > 1 ? 's' : ''} sent` : "Invitations created",
-          description: sentCount.tokenOnly > 0
-            ? `${sentCount.tokenOnly} invitation${sentCount.tokenOnly > 1 ? 's' : ''} created (email not configured — share links manually from HR → Invitations).`
-            : sentCount.failed > 0 ? `${sentCount.failed} failed to send.` : "Team members will receive an email to create their accounts.",
-        });
-      } else if (sentCount.failed > 0) {
-        toast({ title: "Invitations failed", description: "Could not create invitations. You can retry from HR → Invitations.", variant: "destructive" });
-      }
-    }
-
-    // Move to next step or complete
-    if (currentStep < ONBOARDING_STEPS.length - 1) {
-      setCurrentStep(currentStep + 1);
-    } else {
-      setIsCompleting(true);
-      await completeOnboardingMutation.mutateAsync();
-    }
-  };
-
-  const handleSkipStep = async () => {
-    const currentStepKey = ONBOARDING_STEPS[currentStep].key;
-    
-    if (!ONBOARDING_STEPS[currentStep].required) {
-      // Save as skipped
-      await updateStepMutation.mutateAsync({ stepName: currentStepKey, stepData: null, status: 'skipped' });
-      
-      if (currentStep < ONBOARDING_STEPS.length - 1) {
-        setCurrentStep(currentStep + 1);
-      } else {
+      if (currentStep < ONBOARDING_STEPS.length - 1) setCurrentStep(currentStep + 1);
+      else {
         setIsCompleting(true);
         await completeOnboardingMutation.mutateAsync();
       }
-    }
+    } catch (error) {
+      setIsCompleting(false);
+      toast({ title: 'Setup could not save', description: error instanceof Error ? error.message : 'Please try again.', variant: 'destructive' });
+    } finally { setIsSavingStep(false); }
+  };
+  const handleStepComplete = (stepData: any) => saveStep(stepData, 'completed');
+  const handleSkipStep = () => {
+    if (!ONBOARDING_STEPS[currentStep].required) return saveStep(null, 'skipped');
   };
 
   const progressPercent = ((currentStep + 1) / ONBOARDING_STEPS.length) * 100;
@@ -386,6 +341,18 @@ export default function Onboarding() {
     );
   }
 
+  if (invitationLinks.length) {
+    return <div className="max-w-2xl mx-auto p-6 space-y-4">
+      <h1 className="text-2xl font-bold text-white">Share team invitations</h1>
+      <p className="text-slate-300">Your invitations are saved, but the emails were not delivered. Copy and share these links with your employees.</p>
+      {invitationLinks.map(invite => <Card key={invite.email} className="p-4 space-y-2"><p>{invite.email}</p><Input readOnly value={invite.invitationUrl} onFocus={event => event.target.select()} /><Button onClick={() => navigator.clipboard.writeText(invite.invitationUrl).then(() => toast({title:'Invitation link copied'})).catch(() => toast({title:'Select and copy the link',variant:'destructive'}))}>Copy link</Button></Card>)}
+      <Button disabled={completeOnboardingMutation.isPending} onClick={async () => {
+        try { await completeOnboardingMutation.mutateAsync(); }
+        catch { /* Mutation displays the error; keep the invitation links available. */ }
+      }}>Finish setup</Button>
+    </div>;
+  }
+
   if (isCompleting) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
@@ -394,9 +361,9 @@ export default function Onboarding() {
             <div className="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="w-8 h-8 text-green-600 dark:text-green-400" />
             </div>
-            <CardTitle className="text-2xl">Setup Complete!</CardTitle>
+            <CardTitle className="text-2xl">Finishing Setup…</CardTitle>
             <CardDescription>
-              Your restaurant onboarding is complete. Redirecting to your dashboard...
+              Saving your completed setup. Please wait…
             </CardDescription>
           </CardHeader>
         </Card>
@@ -476,14 +443,14 @@ export default function Onboarding() {
               <RestaurantInfoStep
                 data={onboardingData.restaurant_info}
                 onComplete={handleStepComplete}
-                isLoading={updateStepMutation.isPending}
+                isLoading={isSavingStep}
               />
             )}
             {currentStep === 1 && (
               <DepartmentsStep
                 data={onboardingData.departments}
                 onComplete={handleStepComplete}
-                isLoading={updateStepMutation.isPending}
+                isLoading={isSavingStep}
               />
             )}
             {currentStep === 2 && (
@@ -491,7 +458,7 @@ export default function Onboarding() {
                 data={onboardingData.positions}
                 departmentsData={onboardingData.departments}
                 onComplete={handleStepComplete}
-                isLoading={updateStepMutation.isPending}
+                isLoading={isSavingStep}
               />
             )}
             {currentStep === 3 && (
@@ -499,7 +466,7 @@ export default function Onboarding() {
                 data={onboardingData.hr_addon}
                 onComplete={handleStepComplete}
                 onSkip={handleSkipStep}
-                isLoading={updateStepMutation.isPending}
+                isLoading={isSavingStep}
               />
             )}
             {currentStep === 4 && (
@@ -509,7 +476,7 @@ export default function Onboarding() {
                 positionsData={onboardingData.positions}
                 onComplete={handleStepComplete}
                 onSkip={handleSkipStep}
-                isLoading={updateStepMutation.isPending}
+                isLoading={isSavingStep}
               />
             )}
           </CardContent>
@@ -520,7 +487,7 @@ export default function Onboarding() {
           <Button
             variant="outline"
             onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}
-            disabled={currentStep === 0}
+            disabled={currentStep === 0 || isSavingStep}
             className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -531,7 +498,7 @@ export default function Onboarding() {
             <Button
               variant="ghost"
               onClick={handleSkipStep}
-              disabled={updateStepMutation.isPending}
+              disabled={isSavingStep}
               className="text-slate-400 hover:text-white"
             >
               Skip Step
@@ -1154,7 +1121,7 @@ function PositionsStep({ data, departmentsData, onComplete, isLoading }: {
                               </FormControl>
                               <SelectContent>
                                 {departments.map((dept, deptIndex) => (
-                                  <SelectItem key={deptIndex} value={deptIndex.toString()}>
+                                  <SelectItem key={deptIndex} value={dept.id || deptIndex.toString()}>
                                     {dept.name}
                                   </SelectItem>
                                 ))}
@@ -1329,12 +1296,14 @@ function HRAddonStep({ data, onComplete, onSkip, isLoading }: {
   });
 
   const watchEnableHR = form.watch("enableHR");
+  const { data: pricing } = useQuery<{hrAddon: {pricePerLocation: number}}>({ queryKey: ['/api/subscriptions/plans'] });
 
   const { data: locationsData } = useQuery<any[]>({
     queryKey: ['/api/locations'],
     enabled: watchEnableHR,
   });
-  const availableLocations = (locationsData || []).map((loc: any) => ({ id: loc.id, name: loc.name }));
+  const { user } = useAuth();
+  const availableLocations = (locationsData || []).filter((loc: any) => loc.ownerId === user?.id && loc.isActive && !loc.deletedAt).map((loc: any) => ({ id: loc.id, name: loc.name }));
 
   const onSubmit = (values: z.infer<typeof hrAddonSchema>) => {
     onComplete(values);
@@ -1400,7 +1369,7 @@ function HRAddonStep({ data, onComplete, onSkip, isLoading }: {
                       Enable HR Management Features
                     </FormLabel>
                     <FormDescription className="text-slate-300">
-                      Add advanced employee management capabilities to your restaurant
+                      Add HR for ${pricing?.hrAddon?.pricePerLocation ?? 79} per restaurant each month. Continuing activates billing, including any prorated charge.
                     </FormDescription>
                   </div>
                   <FormControl>
@@ -1673,7 +1642,7 @@ function EmployeeInvitationsStep({ data, departmentsData, positionsData, onCompl
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel className="text-white">Department *</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={value => { field.onChange(value); form.setValue(`invitations.${index}.positionId`,''); }} value={field.value}>
                               <FormControl>
                                 <SelectTrigger data-testid={`select-invitation-department-${index}`} className="bg-slate-600 border-slate-500 text-white">
                                   <SelectValue placeholder="Select department" />
@@ -1681,7 +1650,7 @@ function EmployeeInvitationsStep({ data, departmentsData, positionsData, onCompl
                               </FormControl>
                               <SelectContent>
                                 {departments.map((dept, deptIndex) => (
-                                  <SelectItem key={deptIndex} value={deptIndex.toString()}>
+                                  <SelectItem key={deptIndex} value={dept.id || deptIndex.toString()}>
                                     {dept.name}
                                   </SelectItem>
                                 ))}
@@ -1698,15 +1667,15 @@ function EmployeeInvitationsStep({ data, departmentsData, positionsData, onCompl
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel className="text-white">Position *</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} value={field.value}>
                               <FormControl>
                                 <SelectTrigger data-testid={`select-invitation-position-${index}`} className="bg-slate-600 border-slate-500 text-white">
                                   <SelectValue placeholder="Select position" />
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                {positions.map((pos, posIndex) => (
-                                  <SelectItem key={posIndex} value={posIndex.toString()}>
+                                {positions.map((pos, posIndex) => ({pos, posIndex})).filter(({pos}) => pos.departmentId === form.watch(`invitations.${index}.departmentId`)).map(({pos, posIndex}) => (
+                                  <SelectItem key={posIndex} value={pos.id || posIndex.toString()}>
                                     {pos.title}
                                   </SelectItem>
                                 ))}

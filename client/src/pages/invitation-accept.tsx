@@ -70,9 +70,9 @@
         });
         return response.json();
       },
-      onSuccess: () => {
-        toast({ title: "Account Created", description: "Restaurant access is ready." });
-        setTimeout(() => setLocation(isSignedIn ? '/' : '/login'), 2000);
+      onSuccess: (result) => {
+        toast({ title: 'Restaurant access is ready', description: result.onboardingUrl ? 'Complete your employee information next.' : 'You can now sign in to your restaurant.' });
+        setTimeout(() => setLocation(result.onboardingUrl || (isSignedIn ? '/' : '/login')), 1000);
       },
       onError: (error: Error) => {
         toast({ title: "Error", description: error.message || "Failed to create account", variant: "destructive" });

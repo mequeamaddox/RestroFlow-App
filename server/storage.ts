@@ -3843,6 +3843,11 @@ export class DatabaseStorage implements IStorage {
     }
 
     const employee = await this.getEmployee(tokenRecord.employeeId);
+    if (!employee) return { isValid:false };
+    const location = await this.getLocationById(employee.locationId);
+    if (!location?.isActive || location.deletedAt || !location.hrAddonEnabled || !location.ownerId) return { isValid:false };
+    const owner = await this.getUser(location.ownerId);
+    if (!owner || owner.accountState !== 'active') return { isValid:false };
     return { isValid: true, employee };
   }
 

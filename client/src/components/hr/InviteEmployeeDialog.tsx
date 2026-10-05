@@ -31,6 +31,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import { apiRequest } from '@/lib/queryClient';
 import { UserPlus, Mail, Clock, MapPin, Users, Briefcase } from 'lucide-react';
 import type { Location, Department, Position } from '@shared/schema';
@@ -40,7 +41,7 @@ const inviteEmployeeSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   email: z.string().email('Valid email is required'),
-  role: z.enum(['owner', 'manager', 'team_lead', 'employee'], {
+  role: z.enum(['gm', 'foh_manager', 'boh_manager', 'team_lead', 'employee'], {
     required_error: 'Role is required',
   }),
   locationId: z.string().min(1, 'Location is required'),
@@ -67,6 +68,8 @@ export default function InviteEmployeeDialog({
 }: InviteEmployeeDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
+  const authority: Record<string,number> = {employee:1,team_lead:2,foh_manager:3,boh_manager:3,gm:4,owner:5,platform_admin:10};
   const queryClient = useQueryClient();
 
   // Control dialog state
@@ -100,7 +103,7 @@ export default function InviteEmployeeDialog({
       // Convert string values to appropriate types
       const payload = {
         ...data,
-        startDate: data.startDate ? new Date(data.startDate) : undefined,
+        startDate: data.startDate || undefined,
         hourlyRate: data.hourlyRate ? parseFloat(data.hourlyRate) : undefined,
         salary: data.salary ? parseFloat(data.salary) : undefined,
         departmentId: data.departmentId || undefined,
@@ -169,8 +172,9 @@ export default function InviteEmployeeDialog({
   });
 
   const roleDescriptions = {
-    owner: 'Full access to all system features and business management',
-    manager: 'Manage teams, view reports, and oversee daily operations',
+    gm: 'Manage restaurant teams and daily operations',
+    foh_manager: 'Manage front of house teams and service',
+    boh_manager: 'Manage kitchen teams and operations',
     team_lead: 'Lead a team and manage specific department operations',
     employee: 'Access to assigned tasks and basic features',
   };
@@ -285,9 +289,10 @@ export default function InviteEmployeeDialog({
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="employee">Employee</SelectItem>
-                        <SelectItem value="team_lead">Team Lead</SelectItem>
-                        <SelectItem value="manager">Manager</SelectItem>
-                        <SelectItem value="owner">Owner</SelectItem>
+                        {(authority[user?.role || ''] || 0) > 2 && <SelectItem value="team_lead">Team Lead</SelectItem>}
+                        {(authority[user?.role || ''] || 0) > 3 && <SelectItem value="foh_manager">Front of House Manager</SelectItem>}
+                        {(authority[user?.role || ''] || 0) > 3 && <SelectItem value="boh_manager">Kitchen Manager</SelectItem>}
+                        {(authority[user?.role || ''] || 0) > 4 && <SelectItem value="gm">General Manager</SelectItem>}
                       </SelectContent>
                     </Select>
                     <FormDescription>
@@ -312,7 +317,7 @@ export default function InviteEmployeeDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Restaurant Location</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={value => { field.onChange(value); form.setValue('departmentId',''); form.setValue('positionId',''); }} value={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="select-location">
                           <SelectValue placeholder="Select location..." />
@@ -338,7 +343,7 @@ export default function InviteEmployeeDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Department (Optional)</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={value => { field.onChange(value); form.setValue('positionId',''); }} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-department">
                             <SelectValue placeholder="Select department..." />
@@ -363,14 +368,14 @@ export default function InviteEmployeeDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Position (Optional)</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-position">
                             <SelectValue placeholder="Select position..." />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {positions.map((position) => (
+                          {positions.filter(position => !form.watch('departmentId') || position.departmentId === form.watch('departmentId')).map((position) => (
                             <SelectItem key={position.id} value={position.id}>
                               {position.title}
                             </SelectItem>

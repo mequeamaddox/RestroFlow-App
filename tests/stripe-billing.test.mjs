@@ -24,11 +24,11 @@ globalThis.__stripeMock = { checkout: { sessions: { create: async (params, optio
 process.env.STRIPE_SECRET_KEY = 'sk_test_placeholder';
 process.env.STRIPE_PRICE_CORE = 'price_core';
 await build({ stdin: { contents: `export * from './server/stripeService'; export * from './server/billingLock'; export { registerBillingRoutes } from './server/routes/billing';`, resolveDir: process.cwd() }, outfile: join(dir, 'billing.mjs'), bundle: true, platform: 'node', format: 'esm', packages: 'external', plugins: [{ name: 'billing-stubs', setup(b) {
-  b.onResolve({ filter: /^\.\/db$/ }, () => ({ path: 'db', namespace: 'stub' }));
-  b.onResolve({ filter: /^\.\.\/(storage|securityMiddleware|email|transactionalEmails)$|^\.\/helpers$/ }, args => ({ path: args.path, namespace: 'routes-stub' }));
-  b.onLoad({ filter: /.*/, namespace: 'routes-stub' }, args => ({ contents: args.path === '../storage' ? 'export const storage = globalThis.__billingStorage;' : args.path === './helpers' ? 'export const isAuthenticated = (_req,_res,next) => next(); export const calculateSubscriptionTotal = () => 179;' : args.path === '../securityMiddleware' ? 'export const requireLocationAccess = () => (_req,_res,next) => next();' : 'export const sendEmail = async () => {}; export const sendWelcomeEmail = async () => {}; export const sendInvoiceReceiptEmail = async () => {};', loader: 'js' }));
+  b.onResolve({ filter: /^\.{1,2}\/db$/ }, () => ({ path: 'db', namespace: 'stub' }));
+  b.onResolve({ filter: /^\.\.\/(storage|securityMiddleware|email|transactionalEmails)$|^\.\/(helpers|email|storage)$/ }, args => ({ path: args.path, namespace: 'routes-stub' }));
+  b.onLoad({ filter: /.*/, namespace: 'routes-stub' }, args => ({ contents: ['../storage','./storage'].includes(args.path) ? 'export const storage = globalThis.__billingStorage;' : args.path === './helpers' ? 'export const isAuthenticated = (_req,_res,next) => next(); export const calculateSubscriptionTotal = () => 179;' : args.path === '../securityMiddleware' ? 'export const requireLocationAccess = () => (_req,_res,next) => next();' : 'export const sendEmail = async () => {}; export const sendWelcomeEmail = async () => {}; export const sendInvoiceReceiptEmail = async () => {};', loader: 'js' }));
   b.onResolve({ filter: /^stripe$/ }, () => ({ path: 'stripe', namespace: 'stub' }));
-  b.onLoad({ filter: /.*/, namespace: 'stub' }, args => ({ contents: args.path === 'db' ? 'export const pool = globalThis.__billingPool;' : 'export default class Stripe { constructor() { return globalThis.__stripeMock; } }', loader: 'js' }));
+  b.onLoad({ filter: /.*/, namespace: 'stub' }, args => ({ contents: args.path === 'db' ? 'export const pool = globalThis.__billingPool; export const db = globalThis.__companyDatabase || {};' : 'export default class Stripe { constructor() { return globalThis.__stripeMock; } }', loader: 'js' }));
 } }] });
 await symlink(join(process.cwd(), 'node_modules'), join(dir, 'node_modules'));
 globalThis.__billingStorage = {};

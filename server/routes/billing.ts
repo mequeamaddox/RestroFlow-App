@@ -1,3 +1,8 @@
+import { db } from '../db';
+import { z } from 'zod';
+import { saveCompanyStep, finishCompanySetup, parseCompanyStep, setupBillingKey, CompanySetupError } from '../companyOnboarding';
+import { executePlatformChange } from '../executePlatformChange';
+import { InvitationEmailService } from '../invitationEmailService';
 import type { Express } from 'express';
 import type Stripe from 'stripe';
 import { withBillingLock, processBillingEvent } from '../billingLock';
@@ -177,10 +182,10 @@ export function registerBillingRoutes(app: Express): void {
     try {
       if (!isOwnerLevel(req.user!.role))
         return res.status(403).json({ message: 'Access denied. Onboarding is only available to business owners.' });
-      let onboarding = await storage.getOwnerOnboarding(req.user!.id);
-      if (!onboarding) {
-        onboarding = await storage.createOwnerOnboarding({ userId: req.user!.id, isCompleted: false, currentStep: 'restaurant_info', totalSteps: 5, completedSteps: 0, skippedSteps: [], data: {} });
-      }
+      const onboarding = await withBillingLock(`company-setup-start:${req.user!.id}`,async () => {
+        const existing = await storage.getOwnerOnboarding(req.user!.id);
+        return existing || storage.createOwnerOnboarding({ userId: req.user!.id, isCompleted: false, currentStep: 'restaurant_info', totalSteps: 5, completedSteps: 0, skippedSteps: [], data: {} });
+      });
       res.status(201).json(onboarding);
     } catch (error) {
       console.error('Error starting onboarding:', error);
@@ -192,12 +197,41 @@ export function registerBillingRoutes(app: Express): void {
     try {
       if (!isOwnerLevel(req.user!.role))
         return res.status(403).json({ message: 'Access denied. Onboarding is only available to business owners.' });
-      const { stepName, stepData, status = 'completed' } = req.body;
-      const onboarding = await storage.updateOwnerOnboardingStep(req.user!.id, stepName, stepData, status);
-      res.json(onboarding);
+      const request = parseCompanyStep(req.body);
+      const ownerId = req.user!.id;
+      if (request.stepName === 'hr_addon' && request.status === 'completed') {
+        const selection = request.stepData as { enableHR: boolean; enableForLocations?: string[] };
+        if (selection.enableHR) {
+          const progress = await storage.getOwnerOnboarding(ownerId);
+          if (!(progress?.data as any)?.restaurant_info?.locationId) throw new CompanySetupError('Complete restaurant setup first.');
+          if (!selection.enableForLocations?.length) throw new CompanySetupError('Choose at least one restaurant for HR.');
+          const owned = await storage.getLocations(ownerId);
+          const targets = selection.enableForLocations.map(id => owned.find(l => l.id === id && l.isActive && !l.deletedAt));
+          if (targets.some(l => !l)) throw new CompanySetupError('Choose active restaurants owned by your company.');
+          for (const target of targets) {
+            if (target!.hrAddonEnabled) continue;
+            await executePlatformChange(ownerId, { action:'addons', ownerId, locationId:target!.id, hrAddonEnabled:true, barAddonEnabled:!!target!.barAddonEnabled, requestKey:setupBillingKey(progress!.id,target!.id), reason:'HR activated during company onboarding' });
+          }
+        }
+      }
+      const { progress, invitations } = await saveCompanyStep(db,ownerId,request);
+      const invitationResults = [];
+      if (invitations.length) {
+        const owner = await storage.getUser(ownerId);
+        const location = await storage.getLocationById(invitations[0].locationId);
+        const inviter = `${owner?.firstName || ''} ${owner?.lastName || ''}`.trim() || 'Your manager';
+        const origin = (process.env.APP_URL || 'https://www.restroflowsolutions.com').replace(/\/$/,'');
+        for (const invitation of invitations) {
+          let emailSent = false;
+          try { emailSent = await InvitationEmailService.sendInvitationEmail(invitation,inviter,location?.name || 'RestroFlow',location?.name); }
+          catch (error) { console.error('Onboarding invitation email failed:',error); }
+          invitationResults.push({email:invitation.email,emailSent,invitationUrl:`${origin}/invitation/accept/${invitation.token}`});
+        }
+      }
+      res.json({ ...progress, invitationResults });
     } catch (error) {
       console.error('Error updating onboarding step:', error);
-      res.status(500).json({ message: 'Failed to update onboarding step' });
+      res.status(400).json({ message: error instanceof z.ZodError ? error.issues[0]?.message : error instanceof Error ? error.message : 'Failed to update onboarding step' });
     }
   });
 
@@ -205,11 +239,11 @@ export function registerBillingRoutes(app: Express): void {
     try {
       if (!isOwnerLevel(req.user!.role))
         return res.status(403).json({ message: 'Access denied. Onboarding is only available to business owners.' });
-      const onboarding = await storage.completeOwnerOnboarding(req.user!.id);
+      const onboarding = await finishCompanySetup(db,req.user!.id);
       res.json(onboarding);
     } catch (error) {
       console.error('Error completing onboarding:', error);
-      res.status(500).json({ message: 'Failed to complete onboarding' });
+      res.status(error instanceof CompanySetupError ? 400 : 500).json({ message: error instanceof CompanySetupError ? error.message : 'Failed to complete onboarding' });
     }
   });
 

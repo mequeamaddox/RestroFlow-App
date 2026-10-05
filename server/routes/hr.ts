@@ -1,3 +1,5 @@
+import { completeEmployeeProfile, EmployeeSetupError } from '../employeeOnboarding';
+import { z } from 'zod';
 import { InvitationEmailService } from '../invitationEmailService';
 import type { Express } from 'express';
 import { storage } from '../storage';
@@ -944,25 +946,11 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/onboarding/:token/complete', strictLimiter, async (req, res) => {
     try {
-      const validation = await storage.validateOnboardingToken(req.params.token);
-      if (!validation.isValid) return res.status(404).json({ error: 'Invalid or expired invitation link' });
-      const { personalInfo, emergencyContact, bankingInfo } = req.body;
-      if (validation.employee) {
-        const tokenRecord = await storage.getOnboardingTokenByToken(req.params.token);
-        await storage.saveEmployeeOnboardingData({
-          employeeId: validation.employee.id, tokenId: tokenRecord?.id,
-          phone: personalInfo?.phone, address: personalInfo?.address, city: personalInfo?.city, state: personalInfo?.state, zipCode: personalInfo?.zipCode, dateOfBirth: personalInfo?.dateOfBirth, socialSecurityNumber: personalInfo?.ssn,
-          emergencyContactName: emergencyContact?.name, emergencyContactPhone: emergencyContact?.phone, emergencyContactRelationship: emergencyContact?.relationship,
-          bankName: bankingInfo?.bankName, accountNumber: bankingInfo?.accountNumber, routingNumber: bankingInfo?.routingNumber, accountType: bankingInfo?.accountType,
-          ipAddress: req.ip, userAgent: req.get('User-Agent'),
-        });
-        await storage.updateEmployee(validation.employee.id, { status: 'active' });
-      }
-      await storage.markOnboardingTokenAsUsed(req.params.token);
+      await completeEmployeeProfile(db,req.params.token,req.body,{ipAddress:req.ip,userAgent:req.get('User-Agent')});
       res.json({ success: true, message: 'Onboarding completed successfully! Welcome to the team!' });
     } catch (error) {
       console.error('Error completing onboarding:', error);
-      res.status(500).json({ message: 'Failed to complete onboarding' });
+      res.status(error instanceof EmployeeSetupError || error instanceof z.ZodError ? 400 : 500).json({ message:error instanceof EmployeeSetupError ? error.message : error instanceof z.ZodError ? error.issues[0]?.message : 'Failed to complete onboarding' });
     }
   });
 

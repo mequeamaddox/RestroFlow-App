@@ -9,7 +9,8 @@ import { insertInvitationTokenSchema, invitationTokens, locations, departments, 
 import { InvitationEmailService } from '../invitationEmailService';
 import { db } from '../db';
 import { and, eq, gt, desc } from 'drizzle-orm';
-import { acceptStaffInvitation, StaffAccessError } from '../staffAccess';
+import { z } from 'zod';
+import { acceptStaffInvitation, StaffAccessError, staffInvitationRequest } from '../staffAccess';
 
 export function registerAuthRoutes(app: Express): void {
   app.get('/api/auth/me', async (req, res) => {
@@ -205,13 +206,13 @@ export function registerAuthRoutes(app: Express): void {
   app.post('/api/invitations', isAuthenticated, strictLimiter, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
     try {
       const userId = req.user!.id;
-      const { email, role = 'employee', locationId: bodyLocationId, firstName, lastName, departmentId, positionId, hourlyRate, salary, startDate, personalMessage, expiresInHours = 168 } = req.body;
+      const { email, role = 'employee', locationId: bodyLocationId, firstName, lastName, departmentId, positionId, hourlyRate, salary, startDate, personalMessage, expiresInHours = 168 } = staffInvitationRequest.parse(req.body);
 
       if (!email) {
         return res.status(400).json({ message: 'Email is required' });
       }
 
-      const ALLOWED_ROLES = ['employee', 'team_lead', 'foh_manager', 'boh_manager', 'gm', 'owner'];
+      const ALLOWED_ROLES = ['employee', 'team_lead', 'foh_manager', 'boh_manager', 'gm'];
       if (!ALLOWED_ROLES.includes(role)) {
         return res.status(400).json({ message: `Invalid role. Must be one of: ${ALLOWED_ROLES.join(', ')}` });
       }
@@ -229,6 +230,16 @@ export function registerAuthRoutes(app: Express): void {
       }
 
       if (req.user!.role !== 'platform_admin' && !canManageUser(req.user!.role, role)) return res.status(403).json({ message: 'You cannot grant this role in this restaurant.' });
+      if (departmentId) {
+        const department = await storage.getDepartment(departmentId);
+        if (!department || department.locationId !== locationId) return res.status(400).json({message:'Choose a department in this restaurant.'});
+      }
+      if (positionId) {
+        const position = await storage.getPosition(positionId);
+        const department = position ? await storage.getDepartment(position.departmentId) : undefined;
+        if (!department || department.locationId !== locationId || (departmentId && position?.departmentId !== departmentId)) return res.status(400).json({message:'Choose a position in the selected department.'});
+      }
+
       // Build the token record
       const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000);
       const invitation = await storage.createInvitationToken({
@@ -268,7 +279,7 @@ export function registerAuthRoutes(app: Express): void {
       res.status(201).json({ ...invitation, emailSent, invitationUrl });
     } catch (error) {
       console.error('Error creating invitation:', error);
-      res.status(500).json({ message: 'Failed to create invitation' });
+      res.status(error instanceof z.ZodError ? 400 : 500).json({ message:error instanceof z.ZodError ? error.issues[0]?.message : 'Failed to create invitation' });
     }
   });
 
@@ -298,7 +309,7 @@ export function registerAuthRoutes(app: Express): void {
       if (existing.acceptedAt) return res.status(400).json({ message: 'Accepted invitations cannot be changed.' });
       if (parsed.data.locationId !== undefined && parsed.data.locationId !== existing.locationId) return res.status(400).json({ message: 'Invitation cannot be moved to another restaurant.' });
       const nextRole = parsed.data.role || existing.role;
-      if (!['employee', 'team_lead', 'foh_manager', 'boh_manager', 'gm', 'owner'].includes(nextRole) || (req.user!.role !== 'platform_admin' && !canManageUser(req.user!.role, nextRole))) return res.status(403).json({ message: 'You cannot grant this role.' });
+      if (!['employee', 'team_lead', 'foh_manager', 'boh_manager', 'gm'].includes(nextRole) || (req.user!.role !== 'platform_admin' && !canManageUser(req.user!.role, nextRole))) return res.status(403).json({ message: 'You cannot grant this role.' });
       const [updated] = await db
         .update(invitationTokens)
         .set({ ...parsed.data, token: existing.token, invitedBy: existing.invitedBy, status: existing.status, acceptedAt: existing.acceptedAt, employeeId: existing.employeeId })
@@ -351,10 +362,13 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(410).json({ message: 'Invitation has expired' });
       }
 
-      if (invitation.acceptedAt) {
+      if (invitation.acceptedAt || invitation.status !== 'pending') {
         return res.status(410).json({ message: 'Invitation has already been used' });
       }
 
+      if (!location?.isActive || location.deletedAt) return res.status(410).json({message:'Restaurant is no longer active.'});
+      const owner = location.ownerId ? await storage.getUser(location.ownerId) : undefined;
+      if (!owner || owner.accountState !== 'active') return res.status(410).json({message:'Restaurant owner is no longer active.'});
       res.json({
         email: invitation.email,
         firstName: invitation.firstName || '',
@@ -396,8 +410,8 @@ export function registerAuthRoutes(app: Express): void {
       }
       // All local records and acceptance commit together. If this fails, the
       // Clerk account can sign in and retry this still-pending invitation.
-      await acceptStaffInvitation(db, req.params.token, { id: clerkUserId, email: invitation.email });
-      res.json({ success: true, message: 'Account created successfully. You can now log in.' });
+      const accepted = await acceptStaffInvitation(db, req.params.token, { id: clerkUserId, email: invitation.email });
+      res.json({ success: true, message: 'Restaurant access is ready.', onboardingUrl:accepted.onboardingToken ? `/onboarding/${accepted.onboardingToken}` : undefined });
     } catch (error) {
       console.error('Error accepting invitation:', error);
       res.status(error instanceof StaffAccessError ? 400 : 500).json({ message: error instanceof StaffAccessError ? error.message : 'Could not complete invitation. Sign in and reopen this invitation to retry.' });

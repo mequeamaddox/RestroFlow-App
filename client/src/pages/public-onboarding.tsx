@@ -165,11 +165,12 @@ export default function PublicOnboardingPage() {
             <CheckCircle className="w-16 h-16 mx-auto mb-4 text-green-600" />
             <h2 className="text-2xl font-semibold mb-2">Welcome to the Team!</h2>
             <p className="text-muted-foreground mb-4">
-              Your onboarding has been completed successfully. You can now close this window.
+              Your employee information has been saved. You can now sign in on the website or in the Android app.
             </p>
             <p className="text-sm text-muted-foreground">
               You'll receive further instructions from your manager about your first day.
             </p>
+            <Button className="mt-4" onClick={() => window.location.assign('/login')}>Continue to sign in</Button>
           </CardContent>
         </Card>
       </div>
