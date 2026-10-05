@@ -377,7 +377,7 @@ export interface IStorage {
   // HR Employee operations
   getEmployees(locationId?: string): Promise<(Employee & { department?: Department; position?: Position })[]>;
   getEmployee(id: string): Promise<(Employee & { department?: Department; position?: Position }) | undefined>;
-  getEmployeeByEmail(email: string): Promise<Employee | undefined>;
+  getEmployeeByEmail(email: string, locationId?: string): Promise<Employee | undefined>;
   createEmployee(employee: InsertEmployee): Promise<Employee>;
   updateEmployee(id: string, employee: Partial<InsertEmployee>): Promise<Employee>;
   deleteEmployee(id: string): Promise<void>;
@@ -2743,8 +2743,8 @@ export class DatabaseStorage implements IStorage {
     } : undefined;
   }
 
-  async getEmployeeByEmail(email: string): Promise<Employee | undefined> {
-    const [emp] = await db.select().from(employees).where(eq(employees.email, email)).limit(1);
+  async getEmployeeByEmail(email: string, locationId?: string): Promise<Employee | undefined> {
+    const [emp] = await db.select().from(employees).where(locationId ? and(eq(employees.email, email), eq(employees.locationId, locationId)) : eq(employees.email, email)).limit(1);
     return emp;
   }
 

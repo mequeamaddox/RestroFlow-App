@@ -1,3 +1,4 @@
+import { useEmployeeIdentity } from '@/hooks/useEmployeeIdentity';
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +39,7 @@ interface EmployeeDocument {
 
 export default function EmployeeDocuments() {
   const { user } = useAuth();
+  const {employeeId} = useEmployeeIdentity();
   const { toast } = useToast();
   const [selectedDocument, setSelectedDocument] = useState<EmployeeDocument | null>(null);
   const [showSignatureDialog, setShowSignatureDialog] = useState(false);
@@ -47,8 +49,8 @@ export default function EmployeeDocuments() {
 
   // Fetch employee documents
   const { data: documents = [], isLoading } = useQuery<EmployeeDocument[]>({
-    queryKey: [`/api/employees/${user?.id}/documents`],
-    enabled: !!user?.id,
+    queryKey: [`/api/employees/${employeeId}/documents`],
+    enabled: !!employeeId,
   });
 
   // Digital signature mutation
@@ -67,7 +69,7 @@ export default function EmployeeDocuments() {
         title: "Document Signed",
         description: "Your digital signature has been recorded successfully.",
       });
-      queryClient.invalidateQueries({ queryKey: [`/api/employees/${user?.id}/documents`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/employees/${employeeId}/documents`] });
       setShowDigitalForm(false);
       setSelectedDocument(null);
     },
@@ -90,7 +92,7 @@ export default function EmployeeDocuments() {
         title: "Document Started",
         description: "Document status updated to in progress.",
       });
-      queryClient.invalidateQueries({ queryKey: [`/api/employees/${user?.id}/documents`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/employees/${employeeId}/documents`] });
     },
     onError: () => {
       toast({
@@ -120,7 +122,7 @@ export default function EmployeeDocuments() {
         title: "Paper Copy Uploaded",
         description: "Paper document has been uploaded successfully.",
       });
-      queryClient.invalidateQueries({ queryKey: [`/api/employees/${user?.id}/documents`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/employees/${employeeId}/documents`] });
       setSelectedDocumentForUpload(null);
     },
     onError: () => {

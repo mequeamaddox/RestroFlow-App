@@ -44,6 +44,7 @@
     const { isSignedIn } = useUser();
     const { token } = useParams<{ token: string }>();
     const [, setLocation] = useLocation();
+    const [accountError, setAccountError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const { toast } = useToast();
@@ -75,11 +76,15 @@
         setTimeout(() => setLocation(result.onboardingUrl || (isSignedIn ? '/' : '/login')), 1000);
       },
       onError: (error: Error) => {
-        toast({ title: "Error", description: error.message || "Failed to create account", variant: "destructive" });
+        let message = error.message;
+        try { message = JSON.parse(message.replace(/^\d+:\s*/, '')).message || message; } catch {}
+        setAccountError(message);
+        toast({ title: "Error", description: message || "Failed to create account", variant: "destructive" });
       },
     });
 
     const onSubmit = (data: AcceptInvitationFormData) => {
+      setAccountError('');
       acceptInvitationMutation.mutate(data);
     };
 
@@ -219,7 +224,9 @@
             <Separator />
 
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Create Your Account</h3>
+              <h3 className="text-lg font-semibold">Join {invitation.location?.name || "Your Restaurant"}</h3>
+              <p className="text-sm text-muted-foreground">Your employee profile and restaurant access belong to this location. If this email already has a RestroFlow login, sign in to accept this location’s invitation.</p>
+              {accountError && <p role="alert" className="text-sm text-red-400">{accountError}</p>}
               {isSignedIn ? <Button className="w-full" disabled={acceptInvitationMutation.isPending} onClick={() => acceptInvitationMutation.mutate({})}>{acceptInvitationMutation.isPending ? 'Joining…' : 'Join Team'}</Button> : <>
               <SignInButton mode="modal"><Button variant="outline" className="w-full">Already have an account? Sign in</Button></SignInButton>
               <Form {...form}>
@@ -238,7 +245,7 @@
                             </Button>
                           </div>
                         </FormControl>
-                        <FormDescription>At least 8 characters with uppercase, lowercase, and number</FormDescription>
+                        <FormDescription>At least 8 characters with uppercase, lowercase, and number. Use a unique password or a longer passphrase; common or breached passwords may be rejected.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}

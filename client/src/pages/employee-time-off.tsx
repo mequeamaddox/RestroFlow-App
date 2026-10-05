@@ -1,3 +1,4 @@
+import { useEmployeeIdentity } from '@/hooks/useEmployeeIdentity';
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,7 +50,7 @@ export default function EmployeeTimeOff() {
   const { user } = useAuth();
   
   // Get current employee ID from auth
-  const employeeId = (user as any)?.id;
+  const {employeeId,locationId} = useEmployeeIdentity();
 
   const { data: timeOffRequests = [], isLoading } = useQuery<TimeOffRequest[]>({
     queryKey: [`/api/employees/${employeeId}/time-off-requests`],
@@ -72,6 +73,7 @@ export default function EmployeeTimeOff() {
       return await apiRequest('POST', '/api/hr/time-off-requests', {
         ...data,
         employeeId: employeeId,
+        locationId,
       });
     },
     onSuccess: () => {

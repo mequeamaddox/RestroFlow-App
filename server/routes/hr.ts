@@ -1,3 +1,4 @@
+import { selectedEmployee, ownEmployee, registerEmployeeIdentityRoute } from '../employeeIdentity';
 import { registerHROrganizationRoutes } from './hrOrganization';
 import { completeEmployeeProfile, EmployeeSetupError } from '../employeeOnboarding';
 import { z } from 'zod';
@@ -16,6 +17,7 @@ import { eq, desc, sql, or, isNull } from 'drizzle-orm';
 
 export function registerHRRoutes(app: Express): void {
   registerHROrganizationRoutes(app);
+  registerEmployeeIdentityRoute(app,isAuthenticated);
 
   // Employees (general endpoint)
   app.get('/api/employees', isAuthenticated, async (req, res) => {
@@ -32,7 +34,7 @@ export function registerHRRoutes(app: Express): void {
   });
 
   // HR Employees (with permission + HR add-on checks)
-  app.get('/api/hr/employees', isAuthenticated, requireAnyPermission([Permission.VIEW_ALL_EMPLOYEES, Permission.VIEW_EMPLOYEE_DETAILS]), requireHRAccess, async (req, res) => {
+  app.get('/api/hr/employees', isAuthenticated, requireHRAccess, requireAnyPermission([Permission.VIEW_ALL_EMPLOYEES, Permission.VIEW_EMPLOYEE_DETAILS]), async (req, res) => {
     try {
       const employees = await storage.getEmployees(req.query.locationId as string);
       res.json(employees);
@@ -42,7 +44,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/hr/employees', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), requireHRAccess, async (req, res) => {
+  app.post('/api/hr/employees', isAuthenticated, requireHRAccess, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
     try {
       const locationId = req.query.locationId as string;
       const employeeData = { ...req.body, locationId };
@@ -70,7 +72,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.put('/api/hr/employees/:id', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), requireHRAccess, async (req, res) => {
+  app.put('/api/hr/employees/:id', isAuthenticated, requireHRAccess, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
     try {
       const existing = await storage.getEmployee(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Employee not found' });
@@ -84,7 +86,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.delete('/api/hr/employees/:id', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), requireHRAccess, async (req, res) => {
+  app.delete('/api/hr/employees/:id', isAuthenticated, requireHRAccess, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
     try {
       const existing = await storage.getEmployee(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Employee not found' });
@@ -358,7 +360,7 @@ export function registerHRRoutes(app: Express): void {
       const user = await storage.getUser(userId);
       const isOwnerOrAdmin = isManagerLevel(user?.role);
       if (!isOwnerOrAdmin) {
-        const requestingEmployee = user?.email ? await storage.getEmployeeByEmail(user.email) : null;
+        const requestingEmployee = user?.email ? await storage.getEmployeeByEmail(user.email, (await storage.getEmployee(req.params.employeeId))?.locationId) : null;
         if (!requestingEmployee || requestingEmployee.id !== req.params.employeeId) {
           return res.status(403).json({ message: 'Access denied - can only view your own time entries' });
         }
@@ -396,7 +398,7 @@ export function registerHRRoutes(app: Express): void {
 
   app.get('/api/employees/:employeeId/shifts', isAuthenticated, async (req, res) => {
     try {
-      if (req.params.employeeId !== req.user!.id) return res.status(403).json({ message: 'Access denied - can only view your own shifts' });
+      if (!await ownEmployee(req,res,req.params.employeeId)) return;
       const shifts = await storage.getEmployeeShifts(req.params.employeeId);
       res.json(shifts);
     } catch (error) {
@@ -407,7 +409,7 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/employees/:employeeId/clock-in', isAuthenticated, async (req, res) => {
     try {
-      if (req.params.employeeId !== req.user!.id) return res.status(403).json({ message: 'Access denied - can only clock in for yourself' });
+      if (!await ownEmployee(req,res,req.params.employeeId)) return;
       const entry = await storage.clockIn(req.params.employeeId);
       res.status(201).json(entry);
     } catch (error) {
@@ -418,7 +420,7 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/employees/:employeeId/clock-out', isAuthenticated, async (req, res) => {
     try {
-      if (req.params.employeeId !== req.user!.id) return res.status(403).json({ message: 'Access denied - can only clock out for yourself' });
+      if (!await ownEmployee(req,res,req.params.employeeId)) return;
       const activeEntry = await storage.getActiveTimeEntry(req.params.employeeId);
       if (!activeEntry) return res.status(400).json({ message: 'No active time entry found' });
       const entry = await storage.clockOut(activeEntry.id);
@@ -431,7 +433,7 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/employees/:employeeId/break-start', isAuthenticated, async (req, res) => {
     try {
-      if (req.params.employeeId !== req.user!.id) return res.status(403).json({ message: 'Access denied - can only start break for yourself' });
+      if (!await ownEmployee(req,res,req.params.employeeId)) return;
       const activeEntry = await storage.getActiveTimeEntry(req.params.employeeId);
       if (!activeEntry) return res.status(400).json({ message: 'No active time entry found' });
       const entry = await storage.startBreak(activeEntry.id);
@@ -444,7 +446,7 @@ export function registerHRRoutes(app: Express): void {
 
   app.post('/api/employees/:employeeId/break-end', isAuthenticated, async (req, res) => {
     try {
-      if (req.params.employeeId !== req.user!.id) return res.status(403).json({ message: 'Access denied - can only end break for yourself' });
+      if (!await ownEmployee(req,res,req.params.employeeId)) return;
       const activeEntry = await storage.getActiveTimeEntry(req.params.employeeId);
       if (!activeEntry) return res.status(400).json({ message: 'No active time entry found' });
       const entry = await storage.endBreak(activeEntry.id);
@@ -824,7 +826,7 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/hr/onboarding/invite', isAuthenticated, requirePermission(Permission.MANAGE_EMPLOYEES), requireHRAccess, async (req, res) => {
+  app.post('/api/hr/onboarding/invite', isAuthenticated, requireHRAccess, requirePermission(Permission.MANAGE_EMPLOYEES), async (req, res) => {
     try {
       const { employeeId, email, phone, sendMethod = 'email' } = req.body;
       if (!employeeId) return res.status(400).json({ message: 'employeeId is required' });
@@ -878,8 +880,8 @@ export function registerHRRoutes(app: Express): void {
       const userId = req.user!.id;
       const user = await storage.getUser(userId);
       if (!user?.email) return res.status(404).json({ message: 'Employee not found' });
-      const employee = await storage.getEmployeeByEmail(user.email);
-      if (!employee) return res.status(404).json({ message: 'No employee record linked to your account' });
+      const employee = await selectedEmployee(req,res);
+      if (!employee) return;
       const onboardingRecords = await storage.getEmployeeOnboarding(employee.id);
       const active = onboardingRecords.find((o: any) => o.status === 'in-progress') || onboardingRecords[0];
       if (!active) return res.json(null);
@@ -897,8 +899,8 @@ export function registerHRRoutes(app: Express): void {
       const userId = req.user!.id;
       const user = await storage.getUser(userId);
       if (!user?.email) return res.status(403).json({ message: 'Access denied' });
-      const employee = await storage.getEmployeeByEmail(user.email);
-      if (!employee) return res.status(403).json({ message: 'Access denied' });
+      const employee = await selectedEmployee(req,res);
+      if (!employee) return;
       const [existingStep] = await db.select().from(employeeOnboardingSteps).where(eq(employeeOnboardingSteps.id, req.params.stepId)).limit(1);
       if (!existingStep) return res.status(404).json({ message: 'Step not found' });
       const [onboarding] = await db.select().from(employeeOnboarding).where(eq(employeeOnboarding.id, existingStep.employeeOnboardingId)).limit(1);
@@ -940,13 +942,9 @@ export function registerHRRoutes(app: Express): void {
 
   app.put('/api/employees/:id/profile', isAuthenticated, async (req, res) => {
     try {
-      if (req.params.id !== req.user!.id) return res.status(403).json({ error: 'You can only update your own profile' });
+      if (!await ownEmployee(req,res,req.params.id)) return;
       const { firstName, lastName, phone, emergencyContactName, emergencyContactPhone } = req.body;
-      const existingUser = await storage.getUser(req.params.id);
-      await Promise.all([
-        storage.updateEmployee(req.params.id, { firstName, lastName, phone, emergencyContactName, emergencyContactPhone }),
-        existingUser ? storage.upsertUser({ id: req.params.id, email: existingUser.email, firstName, lastName, role: existingUser.role }) : Promise.resolve(),
-      ]);
+      await storage.updateEmployee(req.params.id, { firstName, lastName, phone, emergencyContactName, emergencyContactPhone });
       res.json({ message: 'Profile updated successfully' });
     } catch (error) {
       console.error('Error updating employee profile:', error);

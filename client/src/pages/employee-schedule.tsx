@@ -1,3 +1,4 @@
+import { useEmployeeIdentity } from '@/hooks/useEmployeeIdentity';
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,11 +22,11 @@ interface Shift {
 export default function EmployeeSchedule() {
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const { user } = useAuth();
-  const userId = (user as any)?.claims?.sub;
+  const {employeeId:userId} = useEmployeeIdentity();
 
   // Get current user's scheduled shifts
   const { data: myShifts = [], isLoading: shiftsLoading } = useQuery<Shift[]>({
-    queryKey: ['/api/employees', userId, 'shifts'],
+    queryKey: [`/api/employees/${userId}/shifts`],
     enabled: !!userId,
   });
 

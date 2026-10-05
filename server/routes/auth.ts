@@ -1,3 +1,4 @@
+import { invitationAccountError } from '../invitationAccountError';
 import type { Express } from 'express';
 import { getAuth } from '@clerk/express';
 import { storage } from '../storage';
@@ -405,7 +406,8 @@ export function registerAuthRoutes(app: Express): void {
           const clerkUser = await clerkClient.users.createUser({ emailAddress: [invitation.email], password: req.body.password, firstName: invitation.firstName || undefined, lastName: invitation.lastName || undefined });
           clerkUserId = clerkUser.id;
         } catch (clerkErr: any) {
-          return res.status(400).json({ message: (clerkErr?.errors?.[0]?.longMessage || clerkErr?.errors?.[0]?.message || 'Account creation failed.') + ' If you already have an account, sign in and reopen this invitation.' });
+          const failure = invitationAccountError(clerkErr);
+          return res.status(failure.code === 'ACCOUNT_EXISTS' ? 409 : 400).json(failure);
         }
       }
       // All local records and acceptance commit together. If this fails, the

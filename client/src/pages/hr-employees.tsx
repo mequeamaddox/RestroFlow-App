@@ -1,3 +1,4 @@
+import { matchesEmployeeSearch } from '@shared/employeeSearch';
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -90,7 +91,7 @@ export default function HREmployees() {
 
   const updateEmployeeMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      return await apiRequest('PUT', `/api/hr/employees/${id}`, data);
+      return await apiRequest('PUT', `/api/hr/employees/${id}?locationId=${currentLocation?.id}`, data);
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Employee updated successfully" });
@@ -105,7 +106,7 @@ export default function HREmployees() {
 
   const deleteEmployeeMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiRequest('DELETE', `/api/hr/employees/${id}`);
+      return await apiRequest('DELETE', `/api/hr/employees/${id}?locationId=${currentLocation?.id}`);
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Employee deleted successfully" });
@@ -118,7 +119,7 @@ export default function HREmployees() {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: 'active' | 'inactive' | 'terminated' }) => {
-      return await apiRequest('PUT', `/api/hr/employees/${id}`, { status });
+      return await apiRequest('PUT', `/api/hr/employees/${id}?locationId=${currentLocation?.id}`, { status });
     },
     onSuccess: (_, variables) => {
       const statusLabels = { active: 'Active', inactive: 'Inactive', terminated: 'Terminated' };
@@ -132,10 +133,7 @@ export default function HREmployees() {
   });
 
   const filteredEmployees = employees.filter((employee: Employee) => {
-    const matchesSearch = searchTerm === "" ||
-      employee.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = matchesEmployeeSearch(employee,searchTerm);
     
     const matchesStatus = statusFilter === "all" || employee.status === statusFilter;
     const matchesDepartment = departmentFilter === "all" || 
@@ -178,7 +176,7 @@ export default function HREmployees() {
   };
 
   const getInitials = (firstName: string, lastName: string) => {
-    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+    return `${(firstName || "").charAt(0)}${(lastName || "").charAt(0)}`.toUpperCase();
   };
 
   // Show upgrade prompt if HR access is not enabled for this location

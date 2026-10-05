@@ -67,7 +67,7 @@ export const getQueryFn: <T>(options: {
     // Handle location-specific queries
     if (queryKey.length > 1 && queryKey[1]) {
       const locationId = queryKey[1] as string;
-      if (url.includes('/api/inventory') || url.includes('/api/dashboard') || url.includes('/api/waste') || url.includes('/api/hr/') || url.includes('/api/pos/') || url.includes('/api/variance') || url.includes('/api/analytics') || url.includes('/api/activities') || url.includes('/api/categories') || url.includes('/api/vendors') || url.includes('/api/purchase-orders') || url.includes('/api/recipes') || url.includes('/api/menu-items') || url.includes('/api/invoices')) {
+      if (url.includes('/api/employees/me/') || url.includes('/api/inventory') || url.includes('/api/dashboard') || url.includes('/api/waste') || url.includes('/api/hr/') || url.includes('/api/pos/') || url.includes('/api/variance') || url.includes('/api/analytics') || url.includes('/api/activities') || url.includes('/api/categories') || url.includes('/api/vendors') || url.includes('/api/purchase-orders') || url.includes('/api/recipes') || url.includes('/api/menu-items') || url.includes('/api/invoices')) {
         url += url.includes('?') ? `&locationId=${locationId}` : `?locationId=${locationId}`;
       }
     }

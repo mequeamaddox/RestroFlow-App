@@ -1,3 +1,4 @@
+import { useEmployeeIdentity } from '@/hooks/useEmployeeIdentity';
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,7 +47,7 @@ export default function EmployeeTimeClock() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const userId = (user as any)?.id || (user as any)?.claims?.sub;
+  const {employeeId:userId,locationId} = useEmployeeIdentity();
   
 
   // Update current time every second

@@ -1,3 +1,4 @@
+import { useEmployeeIdentity } from '@/hooks/useEmployeeIdentity';
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +14,7 @@ import { apiRequest } from "@/lib/queryClient";
 
 export default function EmployeeSettings() {
   const { user } = useAuth();
+  const {employeeId} = useEmployeeIdentity();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -36,7 +38,7 @@ export default function EmployeeSettings() {
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: { firstName: string; lastName: string; phone: string; emergencyContactName: string; emergencyContactPhone: string }) => {
-      return apiRequest('PUT', `/api/employees/${(user as any)?.id}/profile`, data);
+      return apiRequest('PUT', `/api/employees/${employeeId}/profile`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });

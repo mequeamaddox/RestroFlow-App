@@ -57,7 +57,8 @@ export function registerDocumentRoutes(app: Express): void {
         }
         // Fall back: Clerk user ID → look up by email
         const user = await storage.getUser(paramId);
-        if (user?.email) return storage.getEmployeeByEmail(user.email);
+        if (paramId !== requesterId || typeof req.query.locationId !== 'string') return undefined;
+        if (user?.email) return storage.getEmployeeByEmail(user.email, req.query.locationId);
         return undefined;
       })();
 
@@ -79,7 +80,8 @@ export function registerDocumentRoutes(app: Express): void {
         }
         if (!hasAccess) return res.status(404).json({ message: 'Employee not found' });
       }
-      const documents = await storage.getEmployeeDocumentAssignments(req.params.employeeId);
+      if (!await assertLocationAccess(req,res,employee.locationId)) return;
+      const documents = await storage.getEmployeeDocumentAssignments(employee.id);
       const transformedDocuments = documents.map((doc: any) => ({
         id: doc.id, templateId: doc.templateId || null, status: doc.status, deadline: doc.expiresAt || null,
         notes: doc.notes || null, assignedAt: doc.sentAt || null, completedAt: doc.completedAt || null, filePath: doc.completedFilePath || null,

@@ -1,3 +1,4 @@
+import { useEmployeeIdentity } from '@/hooks/useEmployeeIdentity';
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -66,7 +67,7 @@ interface Message {
 
 export default function EmployeeDashboard() {
   const { user } = useAuth();
-  const userId = (user as any)?.id || (user as any)?.claims?.sub;
+  const {employeeId:userId,locationId} = useEmployeeIdentity();
   const [activeTab, setActiveTab] = useState("overview");
 
   // Fetch employee-specific data
@@ -76,7 +77,7 @@ export default function EmployeeDashboard() {
   });
 
   const { data: onboardingProgress } = useQuery<any>({
-    queryKey: ['/api/employees/me/onboarding'],
+    queryKey: ['/api/employees/me/onboarding', locationId],
     enabled: !!userId,
   });
 
