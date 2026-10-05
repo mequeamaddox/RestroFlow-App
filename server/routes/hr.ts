@@ -1,3 +1,4 @@
+import { registerHROrganizationRoutes } from './hrOrganization';
 import { completeEmployeeProfile, EmployeeSetupError } from '../employeeOnboarding';
 import { z } from 'zod';
 import { InvitationEmailService } from '../invitationEmailService';
@@ -14,90 +15,7 @@ import { eq, desc, sql, or, isNull } from 'drizzle-orm';
 
 
 export function registerHRRoutes(app: Express): void {
-  // Departments
-  app.get('/api/hr/departments', isAuthenticated, requireHRAccess, async (req, res) => {
-    try {
-      const departments = await storage.getDepartments(req.query.locationId as string);
-      res.json(departments);
-    } catch (error) {
-      console.error('Error fetching departments:', error);
-      res.status(500).json({ message: 'Failed to fetch departments' });
-    }
-  });
-
-  app.post('/api/hr/departments', isAuthenticated, requireHRAccess, async (req, res) => {
-    try {
-      const locationId = req.query.locationId as string;
-      const department = await storage.createDepartment({ ...req.body, locationId });
-      res.status(201).json(department);
-    } catch (error) {
-      console.error('Error creating department:', error);
-      res.status(500).json({ message: 'Failed to create department' });
-    }
-  });
-
-  app.put('/api/hr/departments/:id', isAuthenticated, requireHRAccess, async (req, res) => {
-    try {
-      const existing = await storage.getDepartment(req.params.id);
-      if (!existing) return res.status(404).json({ message: 'Department not found' });
-      if (!await assertLocationAccess(req, res, existing.locationId)) return;
-      if (!assertSameLocation(res, existing.locationId, req.body.locationId)) return;
-      const department = await storage.updateDepartment(req.params.id, req.body);
-      res.json(department);
-    } catch (error) {
-      console.error('Error updating department:', error);
-      res.status(500).json({ message: 'Failed to update department' });
-    }
-  });
-
-  app.delete('/api/hr/departments/:id', isAuthenticated, requireHRAccess, async (req, res) => {
-    try {
-      const existing = await storage.getDepartment(req.params.id);
-      if (!existing) return res.status(404).json({ message: 'Department not found' });
-      if (!await assertLocationAccess(req, res, existing.locationId)) return;
-      await storage.deleteDepartment(req.params.id);
-      res.status(204).send();
-    } catch (error) {
-      console.error('Error deleting department:', error);
-      res.status(400).json({ message: 'Failed to delete department' });
-    }
-  });
-
-  // Positions
-  app.get('/api/hr/positions', isAuthenticated, requireHRAccess, async (req, res) => {
-    try {
-      const positions = await storage.getPositions(req.query.locationId as string | undefined);
-      res.json(positions);
-    } catch (error) {
-      console.error('Error fetching positions:', error);
-      res.status(500).json({ message: 'Failed to fetch positions' });
-    }
-  });
-
-  app.post('/api/hr/positions', isAuthenticated, requireHRAccess, async (req, res) => {
-    try {
-      const locationId = req.query.locationId as string;
-      const position = await storage.createPosition({ ...req.body, locationId });
-      res.status(201).json(position);
-    } catch (error) {
-      console.error('Error creating position:', error);
-      res.status(500).json({ message: 'Failed to create position' });
-    }
-  });
-
-  app.delete('/api/hr/positions/:id', isAuthenticated, requireHRAccess, async (req, res) => {
-    try {
-      const existing = await storage.getPosition(req.params.id);
-      if (!existing) return res.status(404).json({ message: 'Position not found' });
-      const dept = await storage.getDepartment(existing.departmentId);
-      if (dept && !await assertLocationAccess(req, res, dept.locationId)) return;
-      await storage.deletePosition(req.params.id);
-      res.status(204).send();
-    } catch (error) {
-      console.error('Error deleting position:', error);
-      res.status(400).json({ message: 'Failed to delete position' });
-    }
-  });
+  registerHROrganizationRoutes(app);
 
   // Employees (general endpoint)
   app.get('/api/employees', isAuthenticated, async (req, res) => {

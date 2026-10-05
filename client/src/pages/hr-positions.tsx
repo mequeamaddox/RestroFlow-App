@@ -58,7 +58,9 @@ export default function HRPositions() {
   });
 
   const { data: employees = [] } = useQuery<any[]>({
-    queryKey: ['/api/hr/employees'],
+    queryKey: ['/api/hr/employees', currentLocation?.id],
+    queryFn: async () => (await apiRequest('GET',`/api/hr/employees?locationId=${currentLocation?.id}`)).json(),
+    enabled: !!currentLocation?.id,
   });
 
   const createPositionMutation = useMutation({
@@ -70,8 +72,8 @@ export default function HRPositions() {
       queryClient.invalidateQueries({ queryKey: ['/api/hr/positions', currentLocation?.id] });
       setIsCreateDialogOpen(false);
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to create position", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to create position", variant: "destructive" });
     },
   });
 
@@ -110,14 +112,16 @@ export default function HRPositions() {
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!currentLocation?.id) { toast({title:"Select a restaurant first",variant:"destructive"}); return; }
     const formData = new FormData(e.currentTarget);
     const positionData = {
       title: formData.get('title'),
       description: formData.get('description'),
       hourlyRate: formData.get('hourlyRate') ? parseFloat(formData.get('hourlyRate') as string) : null,
-      departmentId: formData.get('departmentId') === 'none' ? null : formData.get('departmentId'),
+      departmentId: formData.get('departmentId'),
     };
 
+    if (!positionData.departmentId || positionData.departmentId === 'none') { toast({title:'Select a department',variant:'destructive'}); return; }
     if (editingPosition) {
       updatePositionMutation.mutate({ id: editingPosition.id, data: positionData });
     } else {
@@ -204,7 +208,7 @@ export default function HRPositions() {
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       data-testid="select-position-department"
                     >
-                      <option value="none">No department assigned</option>
+                      <option value="none">Select a department</option>
                       {departments.map((dept: any) => (
                         <option key={dept.id} value={dept.id}>
                           {dept.name}

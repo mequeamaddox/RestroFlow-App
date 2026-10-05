@@ -57,15 +57,15 @@ export default function HRDepartments() {
 
   const createDepartmentMutation = useMutation({
     mutationFn: async (departmentData: any) => {
-      return await apiRequest('POST', '/api/hr/departments', departmentData);
+      return await apiRequest('POST', `/api/hr/departments?locationId=${currentLocation?.id}`, departmentData);
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Department created successfully" });
       queryClient.invalidateQueries({ queryKey: ['/api/hr/departments', currentLocation?.id] });
       setIsCreateDialogOpen(false);
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to create department", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to create department", variant: "destructive" });
     },
   });
 
@@ -103,6 +103,7 @@ export default function HRDepartments() {
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!currentLocation?.id) { toast({title:"Select a restaurant first",variant:"destructive"}); return; }
     const formData = new FormData(e.currentTarget);
     const departmentData = {
       name: formData.get('name'),

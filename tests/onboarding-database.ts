@@ -24,6 +24,6 @@ export function onboardingDatabase() {
     update:(table:any)=>({set:(values:any)=>({where:(condition:any)=>query(()=>{if(failTable===getTableName(table))throw new Error('Simulated database failure');const rows=data[getTableName(table)].filter((r:any)=>matches(table,r,condition));rows.forEach((row:any)=>Object.assign(row,structuredClone(values)));return rows;})})}),
   });
   let tail=Promise.resolve();
-  const client:any={transaction:(work:any)=>{const next=tail.then(async()=>{const copy=structuredClone(state);const result=await work(adapter(copy));state=copy;return result;});tail=next.catch(()=>{});return next;}};
+  const client:any={select:()=>adapter(state).select(),transaction:(work:any)=>{const next=tail.then(async()=>{const copy=structuredClone(state);const result=await work(adapter(copy));state=copy;return result;});tail=next.catch(()=>{});return next;}};
   return {client,read:()=>state,fail:(table:string)=>failTable=table};
 }
