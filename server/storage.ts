@@ -206,7 +206,7 @@ export interface IStorage {
     subscriptionPlan?: 'free' | 'core';
     subscriptionStatus?: 'active' | 'inactive' | 'cancelled' | 'past_due';
     stripeCustomerId?: string;
-    stripeSubscriptionId?: string;
+    stripeSubscriptionId?: string | null;
     subscriptionEndDate?: Date;
     ocrCreditsLimit?: number;
     hrAddonEnabled?: boolean;
@@ -588,7 +588,7 @@ export class DatabaseStorage implements IStorage {
     subscriptionPlan?: 'free' | 'core';
     subscriptionStatus?: 'active' | 'inactive' | 'cancelled' | 'past_due';
     stripeCustomerId?: string;
-    stripeSubscriptionId?: string;
+    stripeSubscriptionId?: string | null;
     subscriptionEndDate?: Date;
     ocrCreditsLimit?: number;
     hrAddonEnabled?: boolean;
