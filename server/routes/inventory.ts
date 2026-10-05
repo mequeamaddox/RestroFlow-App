@@ -1,3 +1,5 @@
+import { normalizePackaging } from '@shared/inventoryUnits';
+import { countStock, receiveSingleItem } from '../stockAdjustments';
 import { assertPermission, Permission } from '../permissions';
 import type { Express } from 'express';
 import { storage } from '../storage';
@@ -230,6 +232,18 @@ export function registerInventoryRoutes(app: Express): void {
     }
   });
 
+  for (const action of ['count','receive'] as const) {
+    app.post(`/api/inventory/:id/${action}`, isAuthenticated, async (req,res)=>{
+      try {
+        const item=await storage.getInventoryItem(req.params.id);
+        if(!item) return res.status(404).json({message:'Inventory item not found'});
+        if(!await assertLocationAccess(req,res,item.locationId) || !assertPermission(req,res,Permission.MANAGE_INVENTORY)) return;
+        const saved=action==='count' ? await countStock(db,item.id,req.body,req.user!.id) : await receiveSingleItem(db,item.id,req.body,req.user!.id);
+        res.json(saved);
+      } catch(error) {res.status(400).json({message:error instanceof Error ? error.message : 'Stock could not be saved'});}
+    });
+  }
+
   // Inventory Items
   app.get('/api/inventory', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
@@ -277,13 +291,13 @@ export function registerInventoryRoutes(app: Express): void {
 
   app.post('/api/inventory', isAuthenticated, async (req, res) => {
     try {
-      const itemData = insertInventoryItemSchema.parse(req.body);
+      const itemData = insertInventoryItemSchema.parse(normalizePackaging(req.body));
       if (!itemData.locationId || !await assertLocationAccess(req, res, itemData.locationId)) return;
       if (!itemData.name.trim()) return res.status(400).json({ message: 'Item name is required' });
       for (const field of ['quantity', 'costPerUnit', 'reorderLevel', 'costPerPurchaseUnit'] as const) {
         const value = itemData[field];
-        if (value !== undefined && value !== null && !/^(?:\d{1,8}(?:\.\d{1,2})?|\.\d{1,2})$/.test(value)) {
-          return res.status(400).json({ message: `${field} must be zero or more, with at most two decimal places` });
+        if (value !== undefined && value !== null && !/^(?:\d{1,8}(?:\.\d{1,8})?|\.\d{1,8})$/.test(value)) {
+          return res.status(400).json({ message: `${field} must be zero or more, with at most eight decimal places` });
         }
       }
       if (itemData.categoryId) {
@@ -303,7 +317,7 @@ export function registerInventoryRoutes(app: Express): void {
       res.status(201).json(item);
     } catch (error) {
       console.error('Error creating inventory item:', error);
-      res.status(400).json({ message: 'Failed to create inventory item' });
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to create inventory item' });
     }
   });
 
@@ -322,7 +336,7 @@ export function registerInventoryRoutes(app: Express): void {
       res.json(item);
     } catch (error) {
       console.error('Error updating inventory item:', error);
-      res.status(400).json({ message: 'Failed to update inventory item' });
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to update inventory item' });
     }
   });
 

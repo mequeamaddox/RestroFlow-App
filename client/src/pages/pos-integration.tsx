@@ -433,6 +433,11 @@ export function PosIntegrationTab() {
   });
 
   // Sync sales data mutation
+  const processStockMutation = useMutation({
+    mutationFn: async (saleId:string)=>apiRequest('POST',`/api/pos/sales/${saleId}/process-inventory`),
+    onSuccess:()=>{queryClient.invalidateQueries({queryKey:['/api/pos/sales']});queryClient.invalidateQueries({queryKey:['/api/inventory']});toast({title:'Stock processed',description:'Mapped ingredients deducted once.'});},
+    onError:(error:Error)=>toast({title:'Stock needs review',description:error.message,variant:'destructive'}),
+  });
   const syncSalesMutation = useMutation({
     mutationFn: async (integrationId: string) => {
       const response = await fetch(`/api/pos/integrations/${integrationId}/sync-sales`, {
@@ -1448,6 +1453,7 @@ export function PosIntegrationTab() {
                                 </p>
                               </div>
                               <div className="flex items-center gap-2">
+                                {!sale.inventoryProcessed && <Button size="sm" variant="outline" disabled={processStockMutation.isPending} onClick={()=>processStockMutation.mutate(sale.id)}>Process Stock</Button>}
                                 <Badge variant={sale.inventoryProcessed ? "default" : "secondary"}>
                                   {sale.inventoryProcessed ? "Processed" : "Pending"}
                                 </Badge>

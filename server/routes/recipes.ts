@@ -1,3 +1,6 @@
+import { saveRecipe } from '../recipeSetup';
+import { produceBatch } from '../ingredientStock';
+import { positive, toPurchaseQuantity } from '@shared/inventoryUnits';
 import { assertPermission, Permission } from '../permissions';
 import type { Express } from 'express';
 import { storage } from '../storage';
@@ -40,19 +43,11 @@ export function registerRecipeRoutes(app: Express): void {
       if (parsedRecipeData.locationId && !await assertLocationAccess(req, res, parsedRecipeData.locationId)) return;
       if (!assertPermission(req, res, Permission.MANAGE_RECIPES)) return;
       if (ingredients !== undefined && !await validateIngredients(res, parsedRecipeData.locationId, ingredients)) return;
-      if (ingredients && ingredients.length > 0) {
-        const recipe = await storage.createRecipeWithIngredients({
-          ...parsedRecipeData,
-          ingredients: ingredients.map((ing: any) => ({ inventoryItemId: ing.inventoryItemId, quantity: ing.quantity, unit: ing.unit })),
-        });
-        res.status(201).json(recipe);
-      } else {
-        const recipe = await storage.createRecipe(parsedRecipeData);
-        res.status(201).json(recipe);
-      }
+      const recipe = await saveRecipe(db, undefined, parsedRecipeData, ingredients);
+      res.status(201).json(recipe);
     } catch (error) {
       console.error('Error creating recipe:', error);
-      res.status(400).json({ message: 'Failed to create recipe' });
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to create recipe' });
     }
   });
 
@@ -66,17 +61,11 @@ export function registerRecipeRoutes(app: Express): void {
       if (!assertSameLocation(res, existing.locationId, req.body.locationId)) return;
       if (!assertPermission(req, res, Permission.MANAGE_RECIPES)) return;
       if (ingredients !== undefined && !await validateIngredients(res, existing.locationId, ingredients)) return;
-      const recipe = await storage.updateRecipe(id, insertRecipeSchema.partial().parse(recipeData));
-      if (ingredients !== undefined) {
-        await storage.deleteRecipeIngredients(id);
-        if (ingredients.length > 0) {
-          await storage.addRecipeIngredients(ingredients.map((ing: any) => ({ recipeId: id, inventoryItemId: ing.inventoryItemId, quantity: ing.quantity, unit: ing.unit })));
-        }
-      }
+      const recipe = await saveRecipe(db, id, insertRecipeSchema.partial().parse(recipeData), ingredients);
       res.json(recipe);
     } catch (error) {
       console.error('Error updating recipe:', error);
-      res.status(400).json({ message: 'Failed to update recipe' });
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to update recipe' });
     }
   });
 
@@ -211,14 +200,11 @@ export function registerRecipeRoutes(app: Express): void {
 
   app.post('/api/variance/production', isAuthenticated, requireLocationAccess(), async (req, res) => {
     try {
-      const { recipeId, locationId, quantityProduced, batchNumber } = req.body;
-      if (!recipeId || !locationId || !quantityProduced) return res.status(400).json({ message: 'Recipe ID, location ID, and quantity produced are required' });
-      const productionId = await varianceService.recordRecipeProduction(recipeId, locationId, parseFloat(quantityProduced), req.user!.id, batchNumber);
-      if (!productionId) return res.status(500).json({ message: 'Failed to record production' });
-      res.json({ id: productionId, message: 'Production recorded successfully' });
+      if (!assertPermission(req, res, Permission.MANAGE_RECIPES)) return;
+      const production = await produceBatch(db, req.body, req.user!.id);
+      res.status(201).json(production);
     } catch (error) {
-      console.error('Error recording production:', error);
-      res.status(500).json({ message: 'Failed to record production' });
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to record batch' });
     }
   });
 
@@ -256,6 +242,8 @@ async function validateIngredients(res: any, locationId: string | null, ingredie
   for (const ingredient of ingredients) {
     const item = ingredient.inventoryItemId ? await storage.getInventoryItem(ingredient.inventoryItemId) : undefined;
     if (!item || item.locationId !== locationId) { res.status(400).json({ message: 'Recipe ingredients must belong to this restaurant' }); return false; }
+    try { toPurchaseQuantity(item, positive(ingredient.quantity, 'Ingredient quantity'), ingredient.unit); }
+    catch (error) { res.status(400).json({ message: error instanceof Error ? error.message : 'Invalid ingredient unit' }); return false; }
   }
   return true;
 }

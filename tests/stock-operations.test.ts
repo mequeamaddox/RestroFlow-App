@@ -79,7 +79,7 @@ test('waste cannot use another restaurant item or exceed available stock', async
 });
 test('invoice approval adds stock, updates supplier price, and records persistent receipt', async () => {
   const db = database(false, true); await receiveInvoice(db.client, 'invoice', {}, 'user');
-  assert.equal(db.read().item.quantity, '12.00'); assert.equal(db.read().item.costPerUnit, '4.00');
+  assert.equal(db.read().item.quantity, '12.00'); assert.equal(db.read().item.costPerUnit, '4.000000');
   assert.equal(db.read().catalog[0].inventoryItemId, 'item'); assert.equal(db.read().catalog[0].costPerUnit, '4.00');
   assert.equal(db.read().invoice.status, 'approved'); assert.ok(db.read().invoice.inventoryReceivedAt);
 });
@@ -99,15 +99,16 @@ test('invoice linked item cannot belong to another restaurant', async () => {
 test('quantities and conversions reject malformed or incompatible input', () => {
   for (const value of ['-1', '0', 'NaN', '1x', '1.234']) assert.throws(() => amount(value, 'Quantity', true));
   const item = { unit: 'case', purchaseUnit: 'case', recipeUnit: 'lb', conversionFactor: '40' };
-  assert.equal(stockQuantity(item, '20', 'lbs'), '0.50');
-  assert.throws(() => stockQuantity(item, '1', 'oz'), /Unit/);
-  assert.throws(() => stockQuantity(item, '1', 'lb'), /hundredth/);
+  assert.equal(stockQuantity(item, '20', 'lbs'), '0.50000000');
+  assert.equal(stockQuantity(item, '1', 'oz'), '0.00156250');
+  assert.throws(() => stockQuantity(item, '1', 'fl oz'), /Weight, volume/);
+  assert.equal(stockQuantity(item, '1', 'lb'), '0.02500000');
 });
 
 test('a new invoice product is created and received once with consistent units and costs', async () => {
   const db = database(); await receiveInvoice(db.client, 'invoice', { lineItems: [{ description: 'New product', quantity: 3, unitPrice: 2, unitType: 'bottle' }] }, 'user');
   assert.equal(db.read().newItems.length, 1); assert.equal(db.read().newItems[0].quantity, '3.00');
-  assert.equal(db.read().newItems[0].unit, 'bottle'); assert.equal(db.read().newItems[0].costPerUnit, '2.00');
+  assert.equal(db.read().newItems[0].unit, 'bottle'); assert.equal(db.read().newItems[0].costPerUnit, '2.000000');
   await receiveInvoice(db.client, 'invoice', {}, 'user'); assert.equal(db.read().newItems.length, 1);
 });
 

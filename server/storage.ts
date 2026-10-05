@@ -1,3 +1,4 @@
+import { normalizePackaging, rebasePackaging, precise, ingredientCost } from '@shared/inventoryUnits';
 import { StockError, amount, recordWaste, receiveInvoice } from './stockOperations';
 import { calculateWorkedLabor } from "./laborAnalytics";
 import { updateOrderAndReceive, type ReceiptConfirmation } from './purchaseOrderReceiving';
@@ -1396,7 +1397,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createInventoryItem(item: InsertInventoryItem, actor?: string): Promise<InventoryItem> {
-    for (const field of ['quantity', 'costPerUnit', 'costPerPurchaseUnit', 'reorderLevel'] as const) if (item[field] !== undefined && item[field] !== null) amount(item[field], field);
+    item = normalizePackaging({...item,purchaseUnit:item.purchaseUnit || item.unit,recipeUnit:item.recipeUnit || item.unit,conversionFactor:item.conversionFactor || "1"});
+    for (const field of ['quantity', 'costPerUnit', 'costPerPurchaseUnit', 'reorderLevel'] as const) if (item[field] !== undefined && item[field] !== null && !/^\d{1,10}(\.\d{1,8})?$/.test(String(item[field]))) throw new Error(`${field} must be zero or more, with at most eight decimal places.`);
     if (!actor) return (await db.insert(inventoryItems).values(item).returning())[0];
     return db.transaction(async tx => {
       const [saved] = await tx.insert(inventoryItems).values(item).returning();
@@ -1406,13 +1408,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateInventoryItem(id: string, item: Partial<InsertInventoryItem>, actor?: string): Promise<InventoryItem> {
-    for (const field of ['quantity', 'costPerUnit', 'costPerPurchaseUnit', 'reorderLevel'] as const) if (item[field] !== undefined && item[field] !== null) amount(item[field], field);
-    if (!actor) return (await db.update(inventoryItems).set({ ...item, updatedAt: new Date() }).where(eq(inventoryItems.id, id)).returning())[0];
+    for (const field of ['quantity', 'costPerUnit', 'costPerPurchaseUnit', 'reorderLevel'] as const) if (item[field] !== undefined && item[field] !== null && !/^\d{1,10}(\.\d{1,8})?$/.test(String(item[field]))) throw new Error(`${field} must be zero or more, with at most eight decimal places.`);
     return db.transaction(async tx => {
       const [current] = await tx.select().from(inventoryItems).where(eq(inventoryItems.id, id)).for('update');
       if (!current || (item.locationId !== undefined && item.locationId !== current.locationId)) throw new Error('Inventory item cannot be moved to another restaurant.');
+      const combined = normalizePackaging({...current,...item});
+      if (combined.containersPerPurchase != null) item = {...item,containersPerPurchase:combined.containersPerPurchase,containerUnit:combined.containerUnit,amountPerContainer:combined.amountPerContainer,contentUnit:combined.contentUnit,conversionFactor:combined.conversionFactor,purchaseUnit:combined.purchaseUnit,recipeUnit:combined.recipeUnit,unit:combined.unit,costPerUnit:combined.costPerUnit,costPerPurchaseUnit:combined.costPerUnit};
+      item = rebasePackaging(current, item);
       const [saved] = await tx.update(inventoryItems).set({ ...item, updatedAt: new Date() }).where(eq(inventoryItems.id, id)).returning();
-      if (Number(saved.quantity) !== Number(current.quantity)) await tx.insert(inventoryTransactions).values({ inventoryItemId: id, locationId: current.locationId, type: 'adjustment', quantity: (Number(saved.quantity) - Number(current.quantity)).toFixed(2), reference: 'Manual inventory count', notes: `Count changed from ${current.quantity} to ${saved.quantity}`, createdBy: actor });
+      if (Number(saved.quantity) !== Number(current.quantity)) await tx.insert(inventoryTransactions).values({ inventoryItemId: id, locationId: current.locationId, type: 'adjustment', quantity: precise(Number(saved.quantity) - Number(current.quantity)), reference: 'Manual inventory count', notes: `Count changed from ${current.quantity} to ${saved.quantity}`, stockUnit: current.purchaseUnit, conversionSnapshot: current, createdBy: actor });
       return saved;
     });
   }
@@ -1469,7 +1473,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Recipe operations
-  async getRecipes(locationId?: string): Promise<(Recipe & { ingredientCount: number; estimatedCost: number })[]> {
+  async getRecipes(locationId?: string): Promise<(Recipe & { ingredientCount: number; estimatedCost: number | null; costingError?: string | null })[]> {
     let query = db.select().from(recipes).orderBy(recipes.name).$dynamic();
     
     if (locationId) {
@@ -1479,26 +1483,12 @@ export class DatabaseStorage implements IStorage {
     const allRecipes = await query;
     if (allRecipes.length === 0) return [];
 
-    const statsRows = await db
-      .select({
-        recipeId: recipeIngredients.recipeId,
-        count: sql<number>`COUNT(*)`,
-        totalCost: sql<number>`COALESCE(SUM(${recipeIngredients.quantity} * ${inventoryItems.costPerUnit}), 0)`
-      })
-      .from(recipeIngredients)
-      .leftJoin(inventoryItems, eq(recipeIngredients.inventoryItemId, inventoryItems.id))
-      .where(inArray(recipeIngredients.recipeId, allRecipes.map(r => r.id)))
-      .groupBy(recipeIngredients.recipeId);
-
-    const statsMap = new Map(statsRows.map(r => [r.recipeId, r]));
-
-    return allRecipes.map(recipe => {
-      const stats = statsMap.get(recipe.id);
-      return {
-        ...recipe,
-        ingredientCount: Number(stats?.count ?? 0),
-        estimatedCost: Number(stats?.totalCost ?? 0),
-      };
+    const lines = await db.select().from(recipeIngredients).innerJoin(inventoryItems,eq(recipeIngredients.inventoryItemId,inventoryItems.id)).where(inArray(recipeIngredients.recipeId,allRecipes.map(r=>r.id)));
+    return allRecipes.map(recipe=>{
+      const ingredients=lines.filter(row=>row.recipe_ingredients.recipeId===recipe.id);
+      let estimatedCost=0; let costingError: string | null=null;
+      for(const row of ingredients) { try { estimatedCost+=ingredientCost(row.inventory_items,Number(row.recipe_ingredients.quantity),row.recipe_ingredients.unit); } catch(error) { costingError=error instanceof Error ? error.message : 'Confirm ingredient units'; } }
+      return {...recipe,ingredientCount:ingredients.length,estimatedCost:costingError ? null : estimatedCost,costingError};
     });
   }
 
@@ -1697,7 +1687,8 @@ export class DatabaseStorage implements IStorage {
       if (!order || ['delivered', 'cancelled'].includes(order.status || '')) throw new Error('This order is closed.');
       const [inventory] = await tx.select().from(inventoryItems).where(and(eq(inventoryItems.id, item.inventoryItemId!), eq(inventoryItems.locationId, order.locationId)));
       if (!inventory) throw new Error('Order item belongs to another restaurant.');
-      return (await tx.insert(purchaseOrderItems).values(item).returning())[0];
+      const packaging = item.packaging || {purchaseUnit:inventory.purchaseUnit,containersPerPurchase:inventory.containersPerPurchase,containerUnit:inventory.containerUnit,amountPerContainer:inventory.amountPerContainer,contentUnit:inventory.contentUnit};
+      return (await tx.insert(purchaseOrderItems).values({...item,packaging}).returning())[0];
     });
   }
 

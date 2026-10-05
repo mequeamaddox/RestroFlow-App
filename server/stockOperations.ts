@@ -1,5 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { inventoryItems, inventoryTransactions, invoiceProcessing, vendorPriceCatalog, vendors, wasteEntries, type InsertWasteEntry } from '@shared/schema';
+import { toPurchaseQuantity, positive, precise, hasPackaging, type UnitItem, type Packaging } from '@shared/inventoryUnits';
 import type { db } from './db';
 
 export class StockError extends Error {}
@@ -8,22 +9,16 @@ export function amount(value: unknown, label: string, positive = false): string 
   if (!/^\d{1,8}(\.\d{1,2})?$/.test(text) || (positive && Number(text) <= 0)) throw new StockError(`${label} must be ${positive ? 'greater than zero' : 'zero or more'}, with at most two decimal places.`);
   return Number(text).toFixed(2);
 }
-export function unitKey(value: string): string {
-  const unit = value.trim().toLowerCase();
-  const aliases: Record<string, string> = { lbs: 'lb', pounds: 'lb', cases: 'case', boxes: 'box', bottles: 'bottle', gallons: 'gallon', liters: 'liter', pieces: 'each', ea: 'each', cans: 'can', packs: 'pack' };
-  return aliases[unit] || unit;
-}
-export function stockQuantity(item: { unit: string; purchaseUnit: string; recipeUnit: string; conversionFactor: string }, quantity: string, unit: string): string {
-  let value = Number(quantity);
-  if (unitKey(unit) !== unitKey(item.purchaseUnit)) {
-    if (unitKey(unit) === unitKey(item.recipeUnit) && Number(item.conversionFactor) > 0) value /= Number(item.conversionFactor);
-    else if (!(unitKey(unit) === unitKey(item.unit) && Number(item.conversionFactor) === 1)) throw new StockError('Unit does not match this inventory item. Confirm the unit or conversion before receiving.');
-  }
-  if (Math.abs(value * 100 - Math.round(value * 100)) > 0.000001) throw new StockError('This conversion produces less than a hundredth of an inventory unit. Use the inventory unit instead.');
-  return amount(value.toFixed(2), 'Converted quantity', true);
+export { unitKey } from '@shared/inventoryUnits';
+export function stockQuantity(item: UnitItem, quantity: string, unit: string, receiptPack?: Packaging): string {
+  let value: number;
+  try { value = toPurchaseQuantity(item, positive(quantity, 'Quantity'), unit, receiptPack); }
+  catch(error) { throw new StockError(error instanceof Error ? error.message : 'Invalid conversion'); }
+  if (value < 0.00000001) throw new StockError('Quantity is too small to track.');
+  return precise(value);
 }
 export async function recordWaste(database: Pick<typeof db, 'transaction'>, entry: InsertWasteEntry) {
-  amount(entry.quantity, 'Waste quantity', true);
+  positive(entry.quantity, 'Waste quantity');
   return database.transaction(async tx => {
     if (!entry.inventoryItemId || !entry.reportedBy) throw new StockError('An inventory item and signed-in user are required.');
     const [item] = await tx.select().from(inventoryItems).where(and(eq(inventoryItems.id, entry.inventoryItemId), eq(inventoryItems.locationId, entry.locationId))).for('update');
@@ -33,11 +28,11 @@ export async function recordWaste(database: Pick<typeof db, 'transaction'>, entr
     const cost = (Number(quantity) * Number(item.costPerUnit)).toFixed(2);
     await tx.update(inventoryItems).set({ quantity: sql`${inventoryItems.quantity} - ${quantity}::numeric`, updatedAt: new Date() }).where(eq(inventoryItems.id, item.id));
     const [saved] = await tx.insert(wasteEntries).values({ ...entry, cost }).returning();
-    await tx.insert(inventoryTransactions).values({ inventoryItemId: item.id, locationId: entry.locationId, type: 'out', quantity, reference: `Waste-${saved.id}`, notes: entry.notes, createdBy: entry.reportedBy });
+    await tx.insert(inventoryTransactions).values({ inventoryItemId: item.id, locationId: entry.locationId, type: 'out', quantity, stockUnit: item.purchaseUnit, conversionSnapshot: item, reference: `Waste-${saved.id}`, notes: entry.notes, createdBy: entry.reportedBy });
     return saved;
   });
 }
-export interface InvoiceLine { description: string; quantity: number | string; unitType?: string; unitPrice: number | string; inventoryItemId?: string; }
+export interface InvoiceLine { description: string; quantity: number | string; unitType?: string; unitPrice: number | string; inventoryItemId?: string; packaging?: Packaging; }
 export async function receiveInvoice(database: Pick<typeof db, 'transaction'>, id: string, data: any, actor: string) {
   return database.transaction(async tx => {
     const [invoice] = await tx.select().from(invoiceProcessing).where(eq(invoiceProcessing.id, id)).for('update');
@@ -73,10 +68,11 @@ export async function receiveInvoice(database: Pick<typeof db, 'transaction'>, i
       if (line.inventoryItemId && !item) throw new StockError('Selected inventory item does not belong to this restaurant.');
       if (!line.inventoryItemId && matches.length > 1) throw new StockError(`More than one inventory item matches ${name}. Select the item in invoice review.`);
       if (!item) [item] = await tx.insert(inventoryItems).values({ name, locationId: invoice.locationId, vendorId: invoice.vendorId, quantity: '0', unit, purchaseUnit: unit, recipeUnit: unit, conversionFactor: '1', costPerUnit: price, costPerPurchaseUnit: price }).returning();
-      const received = stockQuantity(item, quantity, unit);
-      const stockPrice = (Number(price) * Number(quantity) / Number(received)).toFixed(2);
+      if (item.itemKind === 'prepared') throw new StockError('Prepared items are received through batch production, not vendor invoices.');
+      const received = stockQuantity(item, quantity, unit, line.packaging);
+      const stockPrice = (Number(price) * Number(quantity) / Number(received)).toFixed(6);
       await tx.update(inventoryItems).set({ quantity: sql`${inventoryItems.quantity} + ${received}::numeric`, costPerUnit: stockPrice, costPerPurchaseUnit: stockPrice, updatedAt: new Date() }).where(and(eq(inventoryItems.id, item.id), eq(inventoryItems.locationId, invoice.locationId)));
-      await tx.insert(inventoryTransactions).values({ inventoryItemId: item.id, locationId: invoice.locationId, type: 'in', quantity: received, unitCost: stockPrice, reference: `Invoice-${id}`, createdBy: actor });
+      await tx.insert(inventoryTransactions).values({ inventoryItemId: item.id, locationId: invoice.locationId, type: 'in', quantity: received, unitCost: stockPrice, stockUnit: item.purchaseUnit, conversionSnapshot: line.packaging || item, reference: `Invoice-${id}`, createdBy: actor });
       if (invoice.vendorId) {
         const [catalog] = await tx.select().from(vendorPriceCatalog).where(and(eq(vendorPriceCatalog.vendorId, invoice.vendorId), eq(vendorPriceCatalog.inventoryItemId, item.id)));
         const values = { costPerUnit: price, unit, updatedAt: new Date() };

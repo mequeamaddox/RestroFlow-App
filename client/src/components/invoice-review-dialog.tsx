@@ -1,3 +1,5 @@
+import { PackagingFields } from './inventory/packaging-fields';
+import type { Packaging } from '@shared/inventoryUnits';
 import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -19,6 +21,7 @@ interface LineItem {
   unitPrice: number;
   totalPrice: number;
   inventoryItemId?: string;
+  packaging?: Packaging;
 }
 
 interface Fee {
@@ -51,7 +54,7 @@ export function InvoiceReviewDialog({ isOpen, onClose, invoiceData }: InvoiceRev
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const inventory = useQuery<Array<{ id: string; name: string; unit: string }>>({
+  const inventory = useQuery<Array<{ id: string; name: string; unit: string; recipeUnit: string }>>({
     queryKey: ['/api/inventory', { locationId: invoiceData?.locationId }],
     queryFn: () => apiRequest('GET', `/api/inventory?locationId=${invoiceData?.locationId}`).then(response => response.json()),
     enabled: isOpen && !!invoiceData?.locationId,
@@ -341,6 +344,7 @@ export function InvoiceReviewDialog({ isOpen, onClose, invoiceData }: InvoiceRev
                       </Button>
                     </div>
                     
+                    {item.inventoryItemId && <details className="mb-3"><summary className="text-sm cursor-pointer">Different supplier case size?</summary><PackagingFields value={item.packaging || {}} recipeUnit={(inventory.data ?? []).find(stock=>stock.id===item.inventoryItemId)?.recipeUnit || 'each'} onChange={pack=>handleLineItemEdit(index,'packaging',pack)}/><p className="text-xs text-slate-400">Only enter this when this delivery has different case contents. The item's standard packaging stays unchanged.</p></details>}
                     <div className="grid grid-cols-5 gap-3">
                       <div className="col-span-2">
                         <Label>Description</Label>
@@ -376,7 +380,7 @@ export function InvoiceReviewDialog({ isOpen, onClose, invoiceData }: InvoiceRev
                           <option value="lbs">Lbs</option>
                           <option value="cases">Cases</option>
                           <option value="gallons">Gallons</option>
-                          <option value="oz">Oz</option>
+                          <option value="oz">Oz (weight)</option><option value="fl oz">Fl oz (volume)</option><option value="jar">Jar</option><option value="bottle">Bottle</option><option value="bag">Bag</option>
                           <option value="kg">Kg</option>
                           <option value="liters">Liters</option>
                           <option value="boxes">Boxes</option>

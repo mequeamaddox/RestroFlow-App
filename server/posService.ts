@@ -1,3 +1,5 @@
+import { consumePosSale } from './ingredientStock';
+import { db } from './db';
 import { storage } from "./storage";
 import { safeFetch } from "./lib/safeFetch";
 
@@ -1087,104 +1089,9 @@ export class PosService {
   }
 
   public async processInventoryDeductions(saleId: string): Promise<void> {
-    try {
-      const sale = await storage.getPosSaleById(saleId);
-      if (!sale) return;
-
-      // Fetch sale items separately
-      const allSales = await storage.getPosSales();
-      const saleWithItems = allSales.find(s => s.id === saleId);
-      if (!saleWithItems || !saleWithItems.items || saleWithItems.items.length === 0) {
-        console.log(`No items found for sale ${saleId}`);
-        return;
-      }
-
-      console.log(`Processing inventory deductions for sale ${saleId} with ${saleWithItems.items.length} items`);
-
-      const menuItems = await storage.getPosMenuItems(sale.posIntegrationId);
-      const failures: string[] = [];
-
-      for (const saleItem of saleWithItems.items) {
-        try {
-          const menuItem = menuItems.find(mi => 
-            mi.name.toLowerCase() === saleItem.itemName.toLowerCase()
-          );
-
-          if (!menuItem) {
-            console.warn(`No menu item found for sale item: ${saleItem.itemName}`);
-            failures.push(`No menu item found: ${saleItem.itemName}`);
-            continue;
-          }
-
-          // Check if this is a direct inventory item (beer, bottled drinks)
-          if (menuItem.inventoryItemId) {
-            console.log(`Deducting direct inventory item for "${menuItem.name}" (quantity: ${saleItem.quantity})`);
-            
-            await storage.createInventoryTransaction({
-              inventoryItemId: menuItem.inventoryItemId,
-              locationId: sale.locationId,
-              type: "out",
-              quantity: saleItem.quantity.toString(),
-              reference: `POS Sale ${sale.posOrderId}`,
-              createdBy: "system",
-            });
-          }
-          // Check if this is a recipe-based item (cocktails, prepared food)
-          else if (menuItem.recipeId) {
-            const recipe = await storage.getRecipe(menuItem.recipeId);
-            if (!recipe || !recipe.ingredients) {
-              console.warn(`Recipe not found or has no ingredients for menu item: ${menuItem.name}`);
-              failures.push(`Recipe missing or incomplete: ${menuItem.name}`);
-              continue;
-            }
-
-            console.log(`Deducting recipe ingredients for "${menuItem.name}" (quantity: ${saleItem.quantity})`);
-
-            for (const ingredient of recipe.ingredients) {
-              const deductionAmount = Number(ingredient.quantity) * saleItem.quantity;
-              
-              await storage.createInventoryTransaction({
-                inventoryItemId: ingredient.inventoryItemId,
-                locationId: sale.locationId,
-                type: "out",
-                quantity: (-deductionAmount).toString(),
-                reference: `POS-${sale.posOrderId}`,
-                notes: `POS sale deduction: ${saleItem.quantity}x ${menuItem.name} (Recipe: ${recipe.name})`,
-                createdBy: "system",
-              });
-
-              console.log(`  - Deducted ${deductionAmount} ${ingredient.unit} of ${ingredient.inventoryItem.name}`);
-            }
-          }
-          // Neither recipe nor direct inventory item linked
-          else {
-            console.warn(`Menu item "${menuItem.name}" has no recipe or inventory item linked`);
-            failures.push(`Not mapped: ${menuItem.name}`);
-            continue;
-          }
-        } catch (itemError) {
-          const errorMsg = `Failed to process ${saleItem.itemName}: ${itemError instanceof Error ? itemError.message : String(itemError)}`;
-          console.error(errorMsg);
-          failures.push(errorMsg);
-        }
-      }
-
-      if (failures.length > 0) {
-        console.error(`Inventory deduction incomplete for sale ${saleId}: ${failures.length} items could not be processed:`, failures);
-        return;
-      }
-
-      await storage.updatePosSale(saleId, {
-        inventoryProcessed: true,
-        processedAt: new Date().toISOString() as any,
-      });
-
-      console.log(`Successfully processed inventory deductions for sale ${saleId}`);
-    } catch (error) {
-      console.error("Failed to process inventory deductions:", error);
-      throw error;
-    }
+    await consumePosSale(db, saleId);
   }
+
 }
 
 function toRFC3339Z(d: Date): string {

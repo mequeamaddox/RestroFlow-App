@@ -184,6 +184,16 @@ export function registerPosRoutes(app: Express): void {
     }
   });
 
+  app.post('/api/pos/sales/:id/process-inventory', isAuthenticated, async (req,res)=>{
+    try {
+      const sale=await storage.getPosSaleById(req.params.id);
+      if(!sale) return res.status(404).json({message:'Sale not found'});
+      if(!await assertLocationAccess(req,res,sale.locationId) || !assertPermission(req,res,Permission.MANAGE_INVENTORY)) return;
+      await posService.processInventoryDeductions(sale.id);
+      res.json({message:'Sale stock processed'});
+    } catch(error) {res.status(400).json({message:error instanceof Error ? error.message : 'Stock could not be processed'});}
+  });
+
   // Webhooks
   app.post('/api/pos/webhook', (req, res, next) => {
     // If WEBHOOK_SECRET is configured, validate the shared secret header.

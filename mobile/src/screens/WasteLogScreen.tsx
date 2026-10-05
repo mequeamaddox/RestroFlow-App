@@ -1,3 +1,4 @@
+import { ingredientCost, type UnitItem } from '../../../shared/inventoryUnits';
 import React, { useState } from 'react';
 import {
   View,
@@ -21,12 +22,13 @@ import { useSelectedLocation } from '../contexts/LocationContext';
 import { colors } from '../lib/colors';
 import { QueryNotice } from '../components/QueryNotice';
 
-interface InventoryItem {
+interface InventoryItem extends UnitItem {
   id: string;
   name: string;
   displayName?: string;
   unit: string;
-  costPerUnit?: string | null;
+  recipeUnit: string;
+  costPerUnit?: string;
 }
 
 interface WasteEntry {
@@ -91,9 +93,9 @@ export function WasteLogScreen() {
         body: JSON.stringify({
           inventoryItemId: selectedItem!.id,
           quantity: String(parseFloat(quantity)),
-          unit: selectedItem!.unit,
+          unit: selectedItem!.recipeUnit || selectedItem!.unit,
           reason,
-          cost: (parseFloat(quantity) * parseFloat(selectedItem!.costPerUnit || '0')).toFixed(2),
+          cost: ingredientCost(selectedItem!,parseFloat(quantity),selectedItem!.recipeUnit || selectedItem!.unit).toFixed(2),
           locationId,
           notes: notes.trim() || undefined,
         }),

@@ -91,7 +91,7 @@ try {
     const response = await request('/api/inventory', 'POST', payload);
     assert.equal(response.status, 201); assert.equal((await response.json()).barcode, payload.barcode);
     const before = items.length;
-    for (const quantity of ['-1', 'NaN', '2abc', '1.234']) assert.equal((await request('/api/inventory', 'POST', { ...payload, quantity })).status, 400);
+    for (const quantity of ['-1', 'NaN', '2abc', '1.123456789']) assert.equal((await request('/api/inventory', 'POST', { ...payload, quantity })).status, 400);
     assert.equal(items.length, before);
   });
   await test('a single item cannot link another restaurant category or vendor', async () => {

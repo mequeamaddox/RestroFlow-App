@@ -154,22 +154,28 @@ export const inventoryItems = pgTable("inventory_items", {
   description: text("description"),
   categoryId: uuid("category_id").references(() => categories.id),
   locationId: uuid("location_id").references(() => locations.id).notNull(),
-  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull().default("0"),
+  quantity: decimal("quantity", { precision: 18, scale: 8 }).notNull().default("0"),
   
   // Multi-unit inventory tracking
   purchaseUnit: varchar("purchase_unit", { length: 20 }).notNull().default("case"), // Unit for ordering/inventory (case, box, bag)
   recipeUnit: varchar("recipe_unit", { length: 20 }).notNull().default("lbs"), // Unit for recipes (lbs, oz, cups)
-  conversionFactor: decimal("conversion_factor", { precision: 10, scale: 4 }).notNull().default("1"), // Recipe units per purchase unit (40 lbs per case)
+  conversionFactor: decimal("conversion_factor", { precision: 18, scale: 8 }).notNull().default("1"), // Recipe units per purchase unit (40 lbs per case)
   
+  containersPerPurchase: decimal("containers_per_purchase", { precision: 18, scale: 8 }),
+  containerUnit: varchar("container_unit", { length: 20 }),
+  amountPerContainer: decimal("amount_per_container", { precision: 18, scale: 8 }),
+  contentUnit: varchar("content_unit", { length: 20 }),
+  itemKind: varchar("item_kind", { length: 20 }).notNull().default("ingredient"),
+
   // Cost calculations
-  costPerPurchaseUnit: decimal("cost_per_purchase_unit", { precision: 10, scale: 2 }).notNull().default("0"), // Cost per case
+  costPerPurchaseUnit: decimal("cost_per_purchase_unit", { precision: 18, scale: 6 }).notNull().default("0"), // Cost per case
   servingsPerPurchaseUnit: integer("servings_per_purchase_unit"), // How many servings per case (optional)
   
   // Legacy fields (backward compatibility)
   unit: varchar("unit", { length: 20 }).notNull().default("each"), // lbs, kg, L, pieces, bottles, cases, etc.
-  costPerUnit: decimal("cost_per_unit", { precision: 10, scale: 2 }).notNull().default("0"),
+  costPerUnit: decimal("cost_per_unit", { precision: 18, scale: 6 }).notNull().default("0"),
   
-  reorderLevel: decimal("reorder_level", { precision: 10, scale: 2 }).notNull().default("0"),
+  reorderLevel: decimal("reorder_level", { precision: 18, scale: 8 }).notNull().default("0"),
   vendorId: uuid("vendor_id").references(() => vendors.id),
   barcode: varchar("barcode"),
   // Bar-specific fields
@@ -217,6 +223,11 @@ export const recipes = pgTable("recipes", {
   sellingPrice: decimal("selling_price", { precision: 10, scale: 2 }),
   imageUrl: varchar("image_url", { length: 500 }), // Path to recipe photo
 
+  recipeKind: varchar("recipe_kind", { length: 20 }).notNull().default("dish"),
+  outputInventoryItemId: uuid("output_inventory_item_id").references(() => inventoryItems.id),
+  expectedYield: decimal("expected_yield", { precision: 18, scale: 8 }),
+  yieldUnit: varchar("yield_unit", { length: 20 }),
+
   // Cost analysis fields
   totalCost: decimal("total_cost", { precision: 10, scale: 2 }), // Total ingredient cost for recipe
   costPerServing: decimal("cost_per_serving", { precision: 10, scale: 4 }), // Cost per single serving
@@ -233,7 +244,7 @@ export const recipeIngredients = pgTable("recipe_ingredients", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   recipeId: uuid("recipe_id").references(() => recipes.id, { onDelete: "cascade" }),
   inventoryItemId: uuid("inventory_item_id").references(() => inventoryItems.id),
-  quantity: decimal("quantity", { precision: 10, scale: 4 }).notNull(), // Quantity in recipe units (lbs, oz)
+  quantity: decimal("quantity", { precision: 18, scale: 8 }).notNull(), // Quantity in recipe units (lbs, oz)
   unit: varchar("unit", { length: 20 }).notNull(), // Recipe unit (lbs, oz, cups, etc.)
   portionCost: decimal("portion_cost", { precision: 10, scale: 4 }), // Calculated cost for this ingredient portion
 });
@@ -288,6 +299,7 @@ export const purchaseOrderItems = pgTable("purchase_order_items", {
   quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
   unitCost: decimal("unit_cost", { precision: 10, scale: 2 }).notNull(),
   totalCost: decimal("total_cost", { precision: 10, scale: 2 }).notNull(),
+  packaging: jsonb("packaging"),
 });
 
 // Waste tracking
@@ -346,9 +358,11 @@ export const inventoryTransactions = pgTable("inventory_transactions", {
   inventoryItemId: uuid("inventory_item_id").references(() => inventoryItems.id),
   locationId: uuid("location_id").references(() => locations.id).notNull(),
   type: transactionTypeEnum("type").notNull(),
-  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
-  unitCost: decimal("unit_cost", { precision: 10, scale: 2 }),
+  quantity: decimal("quantity", { precision: 18, scale: 8 }).notNull(),
+  unitCost: decimal("unit_cost", { precision: 18, scale: 6 }),
   totalCost: decimal("total_cost", { precision: 10, scale: 2 }),
+  stockUnit: varchar("stock_unit", { length: 20 }),
+  conversionSnapshot: jsonb("conversion_snapshot"),
   reference: varchar("reference"), // PO number, recipe name, production batch, etc.
   notes: text("notes"),
   createdBy: varchar("created_by").references(() => users.id),
@@ -362,11 +376,15 @@ export const recipeProductions = pgTable("recipe_productions", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   recipeId: uuid("recipe_id").references(() => recipes.id).notNull(),
   locationId: uuid("location_id").references(() => locations.id).notNull(),
-  quantityProduced: decimal("quantity_produced", { precision: 10, scale: 2 }).notNull(),
+  quantityProduced: decimal("quantity_produced", { precision: 18, scale: 8 }).notNull(),
   actualCost: decimal("actual_cost", { precision: 10, scale: 4 }), // Cost when produced
   theoreticalCost: decimal("theoretical_cost", { precision: 10, scale: 4 }), // Cost based on recipe
   variance: decimal("variance", { precision: 10, scale: 4 }), // Actual vs theoretical
   variancePercentage: decimal("variance_percentage", { precision: 5, scale: 2 }),
+  requestKey: varchar("request_key", { length: 100 }),
+  batchMultiplier: decimal("batch_multiplier", { precision: 18, scale: 8 }),
+  yieldUnit: varchar("yield_unit", { length: 20 }),
+  ingredientSnapshot: jsonb("ingredient_snapshot"),
   batchNumber: varchar("batch_number"),
   producedBy: varchar("produced_by").references(() => users.id),
   productionDate: timestamp("production_date").defaultNow(),

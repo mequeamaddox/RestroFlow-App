@@ -1,6 +1,9 @@
+import { ingredientCost } from '@shared/inventoryUnits';
 export type InventoryItem = {
   id: string;
   name: string;
+  unit?: string; purchaseUnit?: string; recipeUnit?: string; conversionFactor?: string;
+  containersPerPurchase?: string | null; containerUnit?: string | null; amountPerContainer?: string | null; contentUnit?: string | null;
   innerUnit?: string | null;
   pricePerInnerUnit?: number | string | null;
   pricePerOz?: number | string | null;
@@ -47,6 +50,10 @@ export function computeLineCost(
   quantity: number,
   unit: string
 ): number {
+  if(item.purchaseUnit && item.recipeUnit && item.conversionFactor) {
+    try { return ingredientCost({...item,unit:item.unit || item.purchaseUnit,purchaseUnit:item.purchaseUnit,recipeUnit:item.recipeUnit,conversionFactor:item.conversionFactor,costPerUnit:String(item.costPerUnit || 0)},quantity,unit); }
+    catch { return NaN; } // Never show a guessed zero cost for incompatible units.
+  }
   const u = (unit || "").toLowerCase();
   
   // Parse conversion values (handle both string and number types from database)

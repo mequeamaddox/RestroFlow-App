@@ -1,3 +1,7 @@
+import { packagingSummary, stockSummary, type UnitItem } from '../../../shared/inventoryUnits';
+import { StockActions } from '../components/StockActions';
+import { PackagingEdit } from '../components/PackagingEdit';
+import { RecipesScreen } from './RecipesScreen';
 import React, { useState, useRef } from 'react';
 import {
   View,
@@ -12,6 +16,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -28,7 +33,7 @@ import { barcodeKey } from '../lib/inventoryDraft';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface InventoryItem {
+export interface InventoryItem extends UnitItem {
   id: string;
   name: string;
   displayName?: string;
@@ -42,6 +47,7 @@ export interface InventoryItem {
 }
 
 export type InventoryStackParamList = {
+  Recipes: undefined;
   InventoryList: undefined;
   InventoryDetail: { itemId: string };
   BarcodeScanner: undefined;
@@ -55,6 +61,7 @@ const Stack = createNativeStackNavigator<InventoryStackParamList>();
 export function InventoryNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Recipes" component={RecipesScreen} />
       <Stack.Screen name="InventoryList" component={InventoryListScreen} />
       <Stack.Screen name="InventoryDetail" component={InventoryDetailScreen} />
       <Stack.Screen name="BarcodeScanner" component={BarcodeScannerScreen} />
@@ -128,6 +135,7 @@ function InventoryListScreen() {
         </TouchableOpacity>
       </View>
 
+      <TouchableOpacity accessibilityRole="button" style={{padding:12}} onPress={()=>navigation.navigate('Recipes')}><Text style={{color:colors.accent,fontWeight:'600'}}>Recipes & Prepared Batches →</Text></TouchableOpacity>
       <View style={styles.searchRow}>
         <TextInput
           style={styles.searchInput}
@@ -182,7 +190,7 @@ function InventoryListScreen() {
                   <Text style={[styles.itemQty, { color: qtyColor(item) }]}>
                     {parseFloat(item.quantity).toFixed(2)}
                   </Text>
-                  <Text style={styles.itemUnit}>{item.unit}</Text>
+                  <Text style={styles.itemUnit}>{item.purchaseUnit}</Text><Text style={styles.itemSub}>{stockSummary(item)}</Text>
                 </View>
               </TouchableOpacity>
             );
@@ -258,7 +266,7 @@ function InventoryDetailScreen() {
         <View style={{ width: 70 }} />
       </View>
 
-      <View style={styles.detailScroll}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{padding:16,paddingBottom:insets.bottom+24}}>
         {error && (
           <QueryNotice
             message={`Could not refresh this item. Showing saved data: ${error.message}`}
@@ -289,7 +297,7 @@ function InventoryDetailScreen() {
               <Text style={styles.qtyBtnText}>+</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.qtyUnit}>{item.unit}</Text>
+          <Text style={styles.qtyUnit}>{item.purchaseUnit}</Text><Text selectable style={styles.itemSub}>{stockSummary(item)}</Text>
 
           {editQty !== null && editQty !== item.quantity && (
             <TouchableOpacity
@@ -306,12 +314,16 @@ function InventoryDetailScreen() {
           )}
         </View>
 
+        <StockActions key={item.id} item={item}/>
+        <PackagingEdit key={item.id} item={item}/>
         {/* Item info */}
         <View style={styles.infoCard}>
           {[
             ['Name', item.name],
             ['Category', item.category?.name ?? '—'],
-            ['Unit', item.unit],
+            ['Unit', item.purchaseUnit],
+            ['Packaging', packagingSummary(item)],
+            ['Ingredient cost', `$${(Number(item.costPerUnit)/Number(item.conversionFactor)).toFixed(6)}/${item.recipeUnit}`],
             ['Cost / Unit', item.costPerUnit ? `$${parseFloat(item.costPerUnit).toFixed(2)}` : '—'],
             ['Reorder At', minQty > 0 ? `${minQty} ${item.unit}` : '—'],
             ['Vendor', item.vendor?.name ?? '—'],
@@ -323,7 +335,7 @@ function InventoryDetailScreen() {
             </View>
           ))}
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }

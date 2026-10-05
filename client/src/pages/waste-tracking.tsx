@@ -1,3 +1,4 @@
+import { ingredientCost } from '@shared/inventoryUnits';
 import type { WasteEntry, InventoryItem } from "@shared/schema";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -117,10 +118,10 @@ export default function WasteTracking() {
   const onSubmit = (data: InsertWasteEntry) => {
     const selectedItem = inventoryItems?.find(item => item.id === data.inventoryItemId);
     if (selectedItem) {
-      const calculatedCost = parseFloat(data.quantity) * parseFloat(selectedItem.costPerUnit);
+      const calculatedCost = ingredientCost(selectedItem,parseFloat(data.quantity),selectedItem.recipeUnit || selectedItem.unit);
       createWasteMutation.mutate({
         ...data,
-        unit: selectedItem.unit,
+        unit: selectedItem.recipeUnit || selectedItem.unit,
         cost: calculatedCost.toString(),
       });
     }
@@ -182,7 +183,7 @@ export default function WasteTracking() {
                         <SelectContent>
                           {inventoryItems?.map((item) => (
                             <SelectItem key={item.id} value={item.id}>
-                              {item.name} ({item.quantity} {item.unit})
+                              {item.name} ({Number(item.quantity)*Number(item.conversionFactor)} {item.recipeUnit})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -197,7 +198,7 @@ export default function WasteTracking() {
                     name="quantity"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Quantity Wasted *</FormLabel>
+                        <FormLabel>Quantity Wasted ({inventoryItems?.find(i=>i.id===form.watch("inventoryItemId"))?.recipeUnit || "select an item"}) *</FormLabel>
                         <FormControl>
                           <Input 
                             type="number" 

@@ -23,8 +23,8 @@ function database(failOnSecondItem = false) {
       await previous;
       const draft = structuredClone(state);
       const tx = {
-        select: () => ({ from: (table: unknown) => ({ where: () => ({
-          for: (lock: string) => { assert.equal(lock, 'update'); return Promise.resolve(table === purchaseOrders ? [draft.order] : draft.lines); },
+        select: () => ({ from: (table: unknown) => ({ where: (condition: any) => ({
+          for: (lock: string) => { assert.equal(lock, 'update'); return Promise.resolve(table === purchaseOrders ? [draft.order] : table === inventoryItems ? [{id:dialect.sqlToQuery(condition).params[0],locationId:'restaurant',quantity:'10',purchaseUnit:'case',recipeUnit:'each',unit:'case',conversionFactor:'1'}] : draft.lines); },
         }) }) }),
         update: (table: unknown) => ({ set: (changes: any) => ({ where: (condition: any) => ({
           returning: async () => {

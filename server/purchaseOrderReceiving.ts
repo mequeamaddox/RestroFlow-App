@@ -1,3 +1,5 @@
+import { stockQuantity } from './stockOperations';
+import { precise, type Packaging } from '@shared/inventoryUnits';
 import { and, eq, sql } from 'drizzle-orm';
 import { inventoryItems, inventoryTransactions, purchaseOrderItems, purchaseOrders, type InsertPurchaseOrder } from '@shared/schema';
 import type { db } from './db';
@@ -36,17 +38,19 @@ export async function updateOrderAndReceive(database: Pick<typeof db, 'transacti
       if (confirmedItems && (confirmedItems.length !== lines.length || new Set(confirmedItems.map(item => item.id)).size !== lines.length || lines.some(line => !confirmedItems.some(item => item.id === line.id && item.quantity === line.quantity)))) {
         throw new ReceivingError('This order changed after you checked its quantities. Refresh and confirm the items again.');
       }
-      for (const receipt of planReceipts(lines)) {
-        const [updated] = await tx.update(inventoryItems).set({
-          quantity: sql`${inventoryItems.quantity} + ${receipt.quantity}::numeric`,
-          updatedAt: new Date(),
-        }).where(and(eq(inventoryItems.id, receipt.id), eq(inventoryItems.locationId, current.locationId))).returning({ id: inventoryItems.id });
-        if (!updated) throw new ReceivingError('An order item is missing or belongs to a different restaurant. Inventory was not changed.');
-        await tx.insert(inventoryTransactions).values({
-          inventoryItemId: receipt.id, locationId: current.locationId,
-          type: 'in', quantity: receipt.quantity, reference: `PO-${current.orderNumber || id}`,
-          notes: 'Received from purchase order', createdBy: receivedBy,
-        });
+      planReceipts(lines); // Validate every line before any stock write.
+      const ids=[...new Set(lines.map(l=>l.inventoryItemId!))].sort();
+      for (const itemId of ids) {
+        const [item]=await tx.select().from(inventoryItems).where(and(eq(inventoryItems.id,itemId),eq(inventoryItems.locationId,current.locationId))).for('update');
+        if(!item) throw new ReceivingError('An order item is missing or belongs to a different restaurant. Inventory was not changed.');
+        let total=0;
+        for(const line of lines.filter(l=>l.inventoryItemId===itemId)) {
+          const snapshot=line.packaging as (Packaging & {purchaseUnit?:string}) | null;
+          total+=Number(stockQuantity(item,line.quantity,snapshot?.purchaseUnit || item.purchaseUnit,snapshot || undefined));
+        }
+        const quantity=precise(total);
+        await tx.update(inventoryItems).set({quantity:sql`${inventoryItems.quantity} + ${quantity}::numeric`,updatedAt:new Date()}).where(and(eq(inventoryItems.id,itemId),eq(inventoryItems.locationId,current.locationId))).returning({id:inventoryItems.id});
+        await tx.insert(inventoryTransactions).values({inventoryItemId:itemId,locationId:current.locationId,type:'in',quantity,reference:`PO-${current.orderNumber || id}`,stockUnit:item.purchaseUnit,conversionSnapshot:lines.filter(l=>l.inventoryItemId===itemId).map(l=>l.packaging || item),notes:'Received from purchase order',createdBy:receivedBy});
       }
     }
     const [result] = await tx.update(purchaseOrders).set({ ...changes, updatedAt: new Date() }).where(eq(purchaseOrders.id, id)).returning();

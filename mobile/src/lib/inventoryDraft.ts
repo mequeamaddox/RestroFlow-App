@@ -1,4 +1,6 @@
-export interface InventoryDraft {
+import { normalizePackaging, type Packaging } from '../../../shared/inventoryUnits';
+export interface InventoryDraft extends Packaging {
+  recipeUnit?: string;
   name: string;
   unit: string;
   quantity: string;
@@ -29,13 +31,13 @@ export function inventoryDraftPayload(draft: InventoryDraft, locationId: string 
     }
     amounts[field] = Number(value).toFixed(2);
   }
-  return {
-    name, unit, locationId, quantity: amounts.quantity, costPerUnit: amounts.costPerUnit, reorderLevel: amounts.reorderLevel,
+  return normalizePackaging({
+    ...draft, name, unit, locationId, quantity: amounts.quantity, costPerUnit: amounts.costPerUnit, reorderLevel: amounts.reorderLevel,
     // A single-unit item starts with consistent purchase and recipe units.
-    purchaseUnit: unit, recipeUnit: unit, conversionFactor: '1',
+    purchaseUnit: unit, recipeUnit: draft.recipeUnit?.trim() || unit, conversionFactor: '1',
     costPerPurchaseUnit: amounts.costPerUnit,
     barcode: draft.barcode.trim() || null,
     categoryId: draft.categoryId || null,
     vendorId: draft.vendorId || null,
-  };
+  });
 }

@@ -1,3 +1,5 @@
+import { BatchProduction } from '@/components/inventory/batch-production';
+import { MEASURE_UNITS } from '@shared/inventoryUnits';
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -23,6 +25,10 @@ import { z } from "zod";
 import { Document, Page, Text, View, StyleSheet, pdf, Image } from '@react-pdf/renderer';
 
 const recipeFormSchema = z.object({
+  recipeKind: z.enum(['dish','batch']).default('dish'),
+  expectedYield: z.string().optional(),
+  yieldUnit: z.string().optional(),
+  outputInventoryItemId: z.string().nullable().optional(),
   name: z.string().min(1, "Recipe name is required"),
   description: z.string().optional(),
   category: z.string().min(1, "Category is required"),
@@ -78,6 +84,7 @@ export default function Recipes() {
   const form = useForm<RecipeFormData>({
     resolver: zodResolver(recipeFormSchema),
     defaultValues: {
+      recipeKind: "dish", expectedYield: "", yieldUnit: "fl oz",
       name: "",
       description: "",
       category: "",
@@ -99,16 +106,16 @@ export default function Recipes() {
       if (editingRecipeId) {
         // Update existing recipe
         await apiRequest('PUT', `/api/recipes/${editingRecipeId}`, {
-          ...data,
+          ...data, sellingPrice:data.sellingPrice===undefined?undefined:String(data.sellingPrice), expectedYield:data.recipeKind==='batch'?data.expectedYield:null, yieldUnit:data.recipeKind==='batch'?data.yieldUnit:null,
           locationId: currentLocation?.id,
-          ingredients: validIngredients
+          ingredients: validIngredients.map(i=>({...i,quantity:String(i.quantity)}))
         });
       } else {
         // Create new recipe
         await apiRequest('POST', '/api/recipes', {
-          ...data,
+          ...data, sellingPrice:data.sellingPrice===undefined?undefined:String(data.sellingPrice), expectedYield:data.recipeKind==='batch'?data.expectedYield:null, yieldUnit:data.recipeKind==='batch'?data.yieldUnit:null,
           locationId: currentLocation?.id,
-          ingredients: validIngredients
+          ingredients: validIngredients.map(i=>({...i,quantity:String(i.quantity)}))
         });
       }
     },
@@ -492,7 +499,7 @@ export default function Recipes() {
       ...data,
       // Convert sellingPrice to string as backend expects decimal as string
       sellingPrice: data.sellingPrice ? data.sellingPrice.toString() : undefined,
-      ingredients: validIngredients
+      ingredients: validIngredients.map(i=>({...i,quantity:String(i.quantity)}))
     } as any; // Type assertion to allow string sellingPrice
     
     console.log("Submitting:", submissionData);
@@ -565,6 +572,8 @@ export default function Recipes() {
     
     // Populate the form with recipe data
     form.reset({
+      recipeKind: fullRecipe.recipeKind || "dish",
+      expectedYield: fullRecipe.expectedYield || "", yieldUnit: fullRecipe.yieldUnit || "fl oz", outputInventoryItemId:fullRecipe.outputInventoryItemId,
       name: fullRecipe.name,
       description: fullRecipe.description || '',
       category: fullRecipe.category,
@@ -633,6 +642,8 @@ export default function Recipes() {
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col max-h-[75vh]">
                 <div className="flex-1 overflow-y-auto space-y-4 px-1 pr-3" style={{ maxHeight: 'calc(75vh - 80px)' }}>
+                <FormField control={form.control} name="recipeKind" render={({field})=><FormItem><FormLabel>Recipe type</FormLabel><Select value={field.value} onValueChange={field.onChange}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="dish">Dish / menu recipe</SelectItem><SelectItem value="batch">Prepared batch</SelectItem></SelectContent></Select><p className="text-xs text-slate-400">A batch creates prepared stock. A dish can use that stock as an ingredient.</p></FormItem>}/>
+                {form.watch('recipeKind')==='batch' && <div className="grid grid-cols-2 gap-3"><FormField control={form.control} name="expectedYield" render={({field})=><FormItem><FormLabel>Expected yield per batch</FormLabel><FormControl><Input type="number" min="0" step="any" {...field}/></FormControl><FormMessage/></FormItem>}/><FormField control={form.control} name="yieldUnit" render={({field})=><FormItem><FormLabel>Yield unit</FormLabel><Select value={field.value} onValueChange={field.onChange}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent>{MEASURE_UNITS.map(u=><SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select></FormItem>}/></div>}
                 <FormField
                   control={form.control}
                   name="name"
@@ -927,7 +938,11 @@ export default function Recipes() {
                             <SelectValue placeholder="Unit" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="oz">oz</SelectItem>
+                            <SelectItem value="fl oz">fl oz (volume)</SelectItem>
+                            <SelectItem value="ml">ml</SelectItem>
+                            <SelectItem value="gallon">gallon</SelectItem>
+                            <SelectItem value="each">each</SelectItem>
+                            <SelectItem value="oz">oz (weight)</SelectItem>
                             <SelectItem value="lb">lb</SelectItem>
                             <SelectItem value="g">g</SelectItem>
                             <SelectItem value="kg">kg</SelectItem>
@@ -1047,7 +1062,7 @@ export default function Recipes() {
                     <div className="flex items-center space-x-1">
                       <DollarSign className="h-4 w-4 text-green-500" />
                       <span className="font-medium text-white">
-                        {recipe.estimatedCost ? `$${recipe.estimatedCost.toFixed(2)}` : '$0.00'}
+                        {recipe.costingError ? 'Check ingredient units' : recipe.estimatedCost ? `$${recipe.estimatedCost.toFixed(2)}` : '$0.00'}
                       </span>
                     </div>
                   </div>
@@ -1308,6 +1323,7 @@ export default function Recipes() {
             </div>
           )}
           
+          {selectedRecipe?.recipeKind==='batch' && currentLocation && <BatchProduction key={selectedRecipe.id} recipe={selectedRecipe} locationId={currentLocation.id}/>}
           {/* Fixed Actions at Bottom */}
           {selectedRecipe && (
             <div className="flex justify-between pt-4 border-t border-slate-700 flex-shrink-0">

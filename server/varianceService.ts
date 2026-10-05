@@ -1,3 +1,6 @@
+import { produceBatch } from './ingredientStock';
+import { ingredientCost, toPurchaseQuantity, convertMeasure } from '@shared/inventoryUnits';
+import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { 
   recipes, recipeIngredients, inventoryItems, recipeProductions, 
@@ -67,8 +70,13 @@ export class VarianceService {
           ingredientId: inventoryItems.id,
           ingredientName: inventoryItems.name,
           quantity: recipeIngredients.quantity, // Recipe quantity in recipe units (lbs, oz)
-          unit: recipeIngredients.unit,
           // Multi-unit inventory fields
+          unit: recipeIngredients.unit,
+          stockUnit: inventoryItems.unit,
+          containersPerPurchase: inventoryItems.containersPerPurchase,
+          containerUnit: inventoryItems.containerUnit,
+          amountPerContainer: inventoryItems.amountPerContainer,
+          contentUnit: inventoryItems.contentUnit,
           purchaseUnit: inventoryItems.purchaseUnit,
           recipeUnit: inventoryItems.recipeUnit,
           conversionFactor: inventoryItems.conversionFactor,
@@ -93,19 +101,11 @@ export class VarianceService {
         .map(r => {
           const quantity = parseFloat(r.quantity || '0'); // Recipe quantity in recipe units
           
-          // Calculate cost per recipe unit using multi-unit system
-          const costPerPurchaseUnit = parseFloat(r.costPerPurchaseUnit || '0');
-          const conversionFactor = parseFloat(r.conversionFactor || '1');
-          
-          let costPerRecipeUnit = costPerPurchaseUnit / conversionFactor;
-          
-          // Fallback to legacy cost if multi-unit cost is not available
-          if (costPerRecipeUnit === 0 && parseFloat(r.costPerUnit || '0') > 0) {
-            costPerRecipeUnit = parseFloat(r.costPerUnit || '0');
-          }
-          
-          const totalCost = quantity * costPerRecipeUnit;
-          
+          const costPerPurchaseUnit = Number(r.costPerUnit || r.costPerPurchaseUnit || 0);
+          const conversionFactor = Number(r.conversionFactor || 1);
+          const totalCost = ingredientCost({...r,unit:r.stockUnit!,purchaseUnit:r.purchaseUnit!,recipeUnit:r.recipeUnit!,conversionFactor:r.conversionFactor!,costPerUnit:String(costPerPurchaseUnit)},quantity,r.unit!);
+          const costPerRecipeUnit = quantity ? totalCost/quantity : 0;
+
           return {
             itemId: r.ingredientId!,
             name: r.ingredientName!,
@@ -148,54 +148,10 @@ export class VarianceService {
     producedBy: string,
     batchNumber?: string
   ): Promise<string | null> {
-    try {
-      // Calculate theoretical cost
-      const recipeCost = await this.calculateRecipeCost(recipeId, locationId);
-      if (!recipeCost) throw new Error('Unable to calculate recipe cost');
-
-      const theoreticalCost = recipeCost.totalCost * quantityProduced;
-
-      // For now, use theoretical cost as actual cost
-      // In a real system, this would track actual ingredient usage
-      const actualCost = theoreticalCost;
-      const variance = actualCost - theoreticalCost;
-      const variancePercentage = theoreticalCost > 0 ? (variance / theoreticalCost) * 100 : 0;
-
-      const productionData: InsertRecipeProduction = {
-        recipeId,
-        locationId,
-        quantityProduced: quantityProduced.toString(),
-        theoreticalCost: theoreticalCost.toString(),
-        actualCost: actualCost.toString(),
-        variance: variance.toString(),
-        variancePercentage: variancePercentage.toString(),
-        batchNumber,
-        producedBy,
-        productionDate: new Date()
-      };
-
-      const [production] = await db.insert(recipeProductions).values(productionData).returning();
-
-      // Record ingredient consumption transactions
-      for (const ingredient of recipeCost.ingredients) {
-        const consumedQuantity = ingredient.quantity * quantityProduced;
-        await db.insert(inventoryTransactions).values({
-          inventoryItemId: ingredient.itemId,
-          locationId,
-          type: 'recipe_consumption',
-          quantity: (-consumedQuantity).toString(), // Negative for consumption
-          unitCost: ingredient.unitCost.toString(),
-          totalCost: (-ingredient.totalCost * quantityProduced).toString(),
-          reference: `Recipe Production: ${production.id}`,
-          createdBy: producedBy
-        });
-      }
-
-      return production.id;
-    } catch (error) {
-      console.error('Error recording recipe production:', error);
-      return null;
-    }
+    const [recipe] = await db.select().from(recipes).where(and(eq(recipes.id,recipeId),eq(recipes.locationId,locationId)));
+    if (!recipe?.expectedYield) throw new Error('Configure a batch recipe before recording production.');
+    const result = await produceBatch(db, {recipeId,locationId,batchMultiplier:String(quantityProduced),actualYield:String(quantityProduced*Number(recipe.expectedYield)),requestKey:randomUUID(),batchNumber},producedBy);
+    return result.id;
   }
 
   /**
@@ -207,39 +163,52 @@ export class VarianceService {
     endDate: Date
   ): Promise<VarianceReport[]> {
     try {
-      // Get theoretical usage from recipe productions
-      const theoreticalUsage = await db
-        .select({
-          itemId: inventoryItems.id,
-          itemName: inventoryItems.name,
-          theoreticalUsage: sum(sql`${recipeIngredients.quantity}::decimal * ${recipeProductions.quantityProduced}::decimal`),
-          unitCost: inventoryItems.costPerUnit
-        })
-        .from(recipeProductions)
-        .leftJoin(recipeIngredients, eq(recipeProductions.recipeId, recipeIngredients.recipeId))
-        .leftJoin(inventoryItems, eq(recipeIngredients.inventoryItemId, inventoryItems.id))
-        .where(and(
-          eq(recipeProductions.locationId, locationId),
-          gte(recipeProductions.productionDate, startDate),
-          lte(recipeProductions.productionDate, endDate)
-        ))
-        .groupBy(inventoryItems.id, inventoryItems.name, inventoryItems.costPerUnit);
-
-      // Get actual usage from inventory transactions
-      const actualUsage = await db
-        .select({
-          itemId: inventoryItems.id,
-          actualUsage: sum(sql`ABS(${inventoryTransactions.quantity}::decimal)`)
-        })
-        .from(inventoryTransactions)
-        .leftJoin(inventoryItems, eq(inventoryTransactions.inventoryItemId, inventoryItems.id))
-        .where(and(
-          eq(inventoryTransactions.locationId, locationId),
-          eq(inventoryTransactions.type, 'recipe_consumption'),
-          gte(inventoryTransactions.createdAt, startDate),
-          lte(inventoryTransactions.createdAt, endDate)
-        ))
-        .groupBy(inventoryItems.id);
+      // Saved snapshots retain the quantities and units used when each batch was made.
+      const stock = await db.select().from(inventoryItems).where(eq(inventoryItems.locationId, locationId));
+      const productions = await db.select().from(recipeProductions).where(and(
+        eq(recipeProductions.locationId, locationId), gte(recipeProductions.productionDate, startDate), lte(recipeProductions.productionDate, endDate)
+      ));
+      const totals = new Map<string, number>();
+      for (const production of productions) {
+        const snapshot = production.ingredientSnapshot as Array<{id:string;ingredientQuantity:number;ingredientUnit:string}> | null;
+        if (snapshot) {
+          for (const line of snapshot) {
+            const item = stock.find(i=>i.id===line.id);
+            if (!item) continue;
+            const quantity = toPurchaseQuantity(item, line.ingredientQuantity, line.ingredientUnit);
+            totals.set(item.id, (totals.get(item.id)||0)+quantity);
+          }
+        } else {
+          // Earlier production rows stored a multiplier rather than an actual yield.
+          const lines = await db.select().from(recipeIngredients).where(eq(recipeIngredients.recipeId, production.recipeId));
+          for (const line of lines) {
+            const item=stock.find(i=>i.id===line.inventoryItemId);
+            if (!item) continue;
+            const quantity=toPurchaseQuantity(item, Number(line.quantity)*Number(production.batchMultiplier || production.quantityProduced), line.unit);
+            totals.set(item.id,(totals.get(item.id)||0)+quantity);
+          }
+        }
+      }
+      const theoreticalUsage = [...totals].map(([id, quantity])=>{
+        const item=stock.find(i=>i.id===id)!;
+        return {itemId:id,itemName:item.name,theoreticalUsage:quantity,unitCost:item.costPerUnit};
+      });
+      // Batch usage is compared with batch inputs; POS portions are separate stock movements.
+      const transactions=await db.select().from(inventoryTransactions).where(and(
+        eq(inventoryTransactions.locationId,locationId), eq(inventoryTransactions.type,'production_usage'),
+        gte(inventoryTransactions.createdAt,startDate), lte(inventoryTransactions.createdAt,endDate)
+      ));
+      const actualTotals=new Map<string,number>();
+      for (const transaction of transactions) {
+        const item=stock.find(i=>i.id===transaction.inventoryItemId);
+        if(!item) continue;
+        const snapshot=transaction.conversionSnapshot as {conversionFactor?:string;recipeUnit?:string} | null;
+        const quantity=snapshot?.conversionFactor && snapshot.recipeUnit
+          ? convertMeasure(Math.abs(Number(transaction.quantity))*Number(snapshot.conversionFactor),snapshot.recipeUnit,item.recipeUnit)/Number(item.conversionFactor)
+          : Math.abs(Number(transaction.quantity));
+        actualTotals.set(item.id,(actualTotals.get(item.id)||0)+quantity);
+      }
+      const actualUsage=[...actualTotals].map(([itemId,actualUsage])=>({itemId,actualUsage}));
 
       // Combine theoretical and actual usage
       const varianceReport: VarianceReport[] = [];

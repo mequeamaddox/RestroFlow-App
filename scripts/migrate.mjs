@@ -120,6 +120,32 @@ const migrations = [
     SELECT DISTINCT ON (u.id, i.location_id) u.id, i.location_id, i.role, '[]'::jsonb, true, i.invited_by FROM invitation_tokens i JOIN users u ON lower(u.email) = lower(i.email)
     WHERE i.status = 'accepted' AND i.employee_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_permissions p WHERE p.user_id = u.id AND p.location_id = i.location_id) ORDER BY u.id, i.location_id, i.accepted_at DESC` },
 
+  {"name": "inventory_items.containers_per_purchase", "sql": "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS containers_per_purchase numeric(18,8)"},
+  {"name": "inventory_items.container_unit", "sql": "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS container_unit varchar(20)"},
+  {"name": "inventory_items.amount_per_container", "sql": "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS amount_per_container numeric(18,8)"},
+  {"name": "inventory_items.content_unit", "sql": "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS content_unit varchar(20)"},
+  {"name": "inventory_items.item_kind", "sql": "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS item_kind varchar(20) NOT NULL DEFAULT 'ingredient'"},
+  {"name": "recipes.recipe_kind", "sql": "ALTER TABLE recipes ADD COLUMN IF NOT EXISTS recipe_kind varchar(20) NOT NULL DEFAULT 'dish'"},
+  {"name": "recipes.output_inventory_item_id", "sql": "ALTER TABLE recipes ADD COLUMN IF NOT EXISTS output_inventory_item_id uuid REFERENCES inventory_items(id)"},
+  {"name": "recipes.expected_yield", "sql": "ALTER TABLE recipes ADD COLUMN IF NOT EXISTS expected_yield numeric(18,8)"},
+  {"name": "recipes.yield_unit", "sql": "ALTER TABLE recipes ADD COLUMN IF NOT EXISTS yield_unit varchar(20)"},
+  {"name": "recipe_productions.request_key", "sql": "ALTER TABLE recipe_productions ADD COLUMN IF NOT EXISTS request_key varchar(100)"},
+  {"name": "recipe_productions.batch_multiplier", "sql": "ALTER TABLE recipe_productions ADD COLUMN IF NOT EXISTS batch_multiplier numeric(18,8)"},
+  {"name": "recipe_productions.yield_unit", "sql": "ALTER TABLE recipe_productions ADD COLUMN IF NOT EXISTS yield_unit varchar(20)"},
+  {"name": "recipe_productions.ingredient_snapshot", "sql": "ALTER TABLE recipe_productions ADD COLUMN IF NOT EXISTS ingredient_snapshot jsonb"},
+  {"name": "inventory_transactions.stock_unit", "sql": "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS stock_unit varchar(20)"},
+  {"name": "inventory_transactions.conversion_snapshot", "sql": "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS conversion_snapshot jsonb"},
+  {"name": "purchase_order_items.packaging", "sql": "ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS packaging jsonb"},
+  {"name": "inventory_items.quantity precision", "sql": "ALTER TABLE inventory_items ALTER COLUMN quantity TYPE numeric(18,8)"},
+  {"name": "inventory_items.reorder_level precision", "sql": "ALTER TABLE inventory_items ALTER COLUMN reorder_level TYPE numeric(18,8)"},
+  {"name": "inventory_items.conversion_factor precision", "sql": "ALTER TABLE inventory_items ALTER COLUMN conversion_factor TYPE numeric(18,8)"},
+  {"name": "inventory_items.cost_per_unit precision", "sql": "ALTER TABLE inventory_items ALTER COLUMN cost_per_unit TYPE numeric(18,6)"},
+  {"name": "inventory_items.cost_per_purchase_unit precision", "sql": "ALTER TABLE inventory_items ALTER COLUMN cost_per_purchase_unit TYPE numeric(18,6)"},
+  {"name": "inventory_transactions.unit_cost precision", "sql": "ALTER TABLE inventory_transactions ALTER COLUMN unit_cost TYPE numeric(18,6)"},
+  {"name": "inventory_transactions.quantity precision", "sql": "ALTER TABLE inventory_transactions ALTER COLUMN quantity TYPE numeric(18,8)"},
+  {"name": "recipe_ingredients.quantity precision", "sql": "ALTER TABLE recipe_ingredients ALTER COLUMN quantity TYPE numeric(18,8)"},
+  {"name": "recipe_productions.quantity_produced precision", "sql": "ALTER TABLE recipe_productions ALTER COLUMN quantity_produced TYPE numeric(18,8)"},
+  {"name": "recipe production request idempotency", "sql": "CREATE UNIQUE INDEX IF NOT EXISTS recipe_productions_request_uq ON recipe_productions(location_id, request_key) WHERE request_key IS NOT NULL"},
 ];
 
 async function run() {

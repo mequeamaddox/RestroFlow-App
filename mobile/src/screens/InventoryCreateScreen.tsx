@@ -1,3 +1,4 @@
+import { PackagingFields } from '../components/PackagingFields';
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Modal, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, StyleSheet } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -59,9 +60,9 @@ export function InventoryCreateScreen() {
         <Text style={styles.hint}>Enter the product details. A barcode identifies the item; it does not supply its name or price.</Text>
         {([
           ['name', 'Item name', 'e.g., Whole milk'],
-          ['unit', 'Unit', 'each, lb, bottle, case…'],
+          ['unit', 'Purchase unit', 'each, lb, bottle, case…'],
           ['quantity', 'Starting quantity', '0'],
-          ['costPerUnit', 'Cost per unit ($)', '0.00'],
+          ['costPerUnit', 'Cost per purchase unit ($)', '0.00'],
           ['reorderLevel', 'Reorder level', '0'],
           ['barcode', 'Barcode (optional)', 'Scanned or typed barcode'],
         ] as const).map(([field, label, placeholder]) => (
@@ -72,6 +73,8 @@ export function InventoryCreateScreen() {
               autoCapitalize={field === 'name' ? 'words' : 'none'} placeholder={placeholder} placeholderTextColor={colors.muted} />
           </View>
         ))}
+        <View style={styles.field}><Text style={styles.label}>Ingredient tracking unit</Text><TextInput style={styles.input} value={draft.recipeUnit || ''} editable={!mutation.isPending} placeholder="each, lb, oz (weight), fl oz (volume)…" placeholderTextColor={colors.muted} autoCapitalize="none" onChangeText={value=>set('recipeUnit',value)}/></View>
+        <PackagingFields value={draft} recipeUnit={draft.recipeUnit || draft.unit} disabled={mutation.isPending} onChange={pack=>{setDraft(old=>({...old,...pack}));mutation.reset();setFormError(null);}}/>
         {(['categoryId', 'vendorId'] as const).map(field => {
           const query = field === 'categoryId' ? categories : vendors;
           return <View key={field} style={styles.field}>

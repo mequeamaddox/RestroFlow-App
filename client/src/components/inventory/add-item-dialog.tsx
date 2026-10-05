@@ -1,3 +1,6 @@
+import { PackagingFields } from './packaging-fields';
+import { normalizePackaging } from '@shared/inventoryUnits';
+import { StockActions } from './stock-actions';
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -61,6 +64,10 @@ export default function AddItemDialog({ isOpen, onClose, onSuccess, categories, 
   useEffect(() => {
     if (editingItem) {
       form.reset({
+        containersPerPurchase: editingItem.containersPerPurchase ?? undefined,
+        containerUnit: editingItem.containerUnit ?? undefined,
+        amountPerContainer: editingItem.amountPerContainer ?? undefined,
+        contentUnit: editingItem.contentUnit ?? undefined,
         name: editingItem.name || "",
         displayName: editingItem.displayName ?? undefined,
         description: editingItem.description ?? undefined,
@@ -189,14 +196,15 @@ export default function AddItemDialog({ isOpen, onClose, onSuccess, categories, 
       }
       toast({
         title: "Error",
-        description: "Failed to create inventory item",
+        description: error.message || "Failed to save inventory item",
         variant: "destructive",
       });
     },
   });
 
   const onSubmit = (data: InsertInventoryItem) => {
-    createItemMutation.mutate(data);
+    try { createItemMutation.mutate(normalizePackaging(data)); }
+    catch(error) {toast({title:'Check packaging',description:error instanceof Error ? error.message : 'Check the case contents',variant:'destructive'});}
   };
 
   const handleClose = () => {
@@ -292,7 +300,7 @@ export default function AddItemDialog({ isOpen, onClose, onSuccess, categories, 
                 name="quantity"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Quantity *</FormLabel>
+                    <FormLabel>Quantity in purchase units *</FormLabel>
                     <FormControl>
                       <Input type="number" step="0.01" placeholder="25.5" {...field} />
                     </FormControl>
@@ -332,7 +340,7 @@ export default function AddItemDialog({ isOpen, onClose, onSuccess, categories, 
                 name="costPerUnit"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Cost per Unit *</FormLabel>
+                    <FormLabel>Cost per Purchase Unit *</FormLabel>
                     <FormControl>
                       <Input type="number" step="0.01" placeholder="8.50" {...field} />
                     </FormControl>
@@ -404,7 +412,7 @@ export default function AddItemDialog({ isOpen, onClose, onSuccess, categories, 
             )}
 
             {/* Multi-Unit Inventory Tracking Section - Food Items Only */}
-            {itemType === 'food' && (
+            {(
             <div className="space-y-4">
               <div className="flex items-center gap-2 pt-4 border-t border-slate-700">
                 <Calculator className="h-4 w-4 text-slate-400" />
@@ -447,7 +455,7 @@ export default function AddItemDialog({ isOpen, onClose, onSuccess, categories, 
                     <FormItem>
                       <FormLabel>Cost per Purchase Unit</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="45.00" {...field} />
+                        <Input type="number" step="0.01" placeholder="45.00" {...field} onChange={e=>{field.onChange(e);form.setValue("costPerUnit",e.target.value);}} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -473,6 +481,11 @@ export default function AddItemDialog({ isOpen, onClose, onSuccess, categories, 
                           <SelectItem value="oz">oz</SelectItem>
                           <SelectItem value="kg">kg</SelectItem>
                           <SelectItem value="g">g</SelectItem>
+                          <SelectItem value="fl oz">fl oz (volume)</SelectItem>
+                          <SelectItem value="ml">ml</SelectItem>
+                          <SelectItem value="L">L</SelectItem>
+                          <SelectItem value="gallon">gallon</SelectItem>
+                          <SelectItem value="each">each</SelectItem>
                           <SelectItem value="cups">cups</SelectItem>
                           <SelectItem value="tbsp">tbsp</SelectItem>
                           <SelectItem value="tsp">tsp</SelectItem>
@@ -515,6 +528,11 @@ export default function AddItemDialog({ isOpen, onClose, onSuccess, categories, 
             </div>
             )}
 
+            <PackagingFields value={form.watch()} recipeUnit={form.watch('recipeUnit') || form.watch('unit') || 'each'} onChange={pack=>{
+              for(const key of ['containersPerPurchase','containerUnit','amountPerContainer','contentUnit'] as const) form.setValue(key,pack[key]?.toString() || null,{shouldDirty:true});
+            }}/>
+            <p className="text-xs text-slate-400">Packaging edits preserve ingredient stock and inventory value once packaging is configured. Save packaging separately from a new physical count. Existing stock is never automatically converted from an unconfirmed case size.</p>
+            {editingItem && <StockActions item={editingItem} onSuccess={onSuccess}/>}
             {/* Recipe Costing Conversions Section - Food Items Only */}
             {itemType === 'food' && (
             <div className="space-y-4">

@@ -1,3 +1,4 @@
+import { packagingSummary, stockSummary } from '@shared/inventoryUnits';
 import { useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -252,7 +253,7 @@ export default function InventoryTable({ items, isLoading, showPagination = fals
                       </TableCell>
                       <TableCell className="text-slate-300">
                         <div>
-                          <div className="font-medium">{item.quantity} {item.purchaseUnit || item.unit}</div>
+                          <div className="font-medium">{Number(item.quantity)} {item.purchaseUnit || item.unit}</div>
                           {item.costPerPurchaseUnit && (
                             <div className="text-xs text-slate-400">
                               ${parseFloat(item.costPerPurchaseUnit).toFixed(2)}/{item.purchaseUnit}
@@ -268,7 +269,7 @@ export default function InventoryTable({ items, isLoading, showPagination = fals
                                 {(parseFloat(item.quantity) * parseFloat(item.conversionFactor)).toFixed(1)} {item.recipeUnit}
                               </div>
                               <div className="text-xs text-slate-400">
-                                1 {item.purchaseUnit} = {parseFloat(item.conversionFactor).toFixed(1)} {item.recipeUnit}
+                                {packagingSummary(item)}
                               </div>
                             </>
                           ) : (
@@ -374,7 +375,9 @@ export default function InventoryTable({ items, isLoading, showPagination = fals
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="text-slate-400">Quantity:</span>
-                    <div className="font-medium text-white">{item.quantity} {item.unit}</div>
+                    <div className="font-medium text-white">{Number(item.quantity)} {item.purchaseUnit || item.unit}</div>
+                    <div className="text-xs text-slate-400">{packagingSummary(item)}</div>
+                    <div className="text-xs text-slate-400">{stockSummary(item)}</div>
                   </div>
                   <div>
                     <span className="text-slate-400">Unit Cost:</span>
