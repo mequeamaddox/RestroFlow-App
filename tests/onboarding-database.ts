@@ -3,7 +3,7 @@ import { getTableName, getTableColumns } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import * as schema from '../shared/schema';
 export function onboardingDatabase() {
-  let state:any = Object.fromEntries(['users','locations','departments','positions','invitation_tokens','owner_onboarding','owner_onboarding_steps','employees','user_permissions','onboarding_tokens','employee_onboarding_data'].map(t=>[t,[]]));
+  let state:any = Object.fromEntries(['users','locations','departments','positions','invitation_tokens','owner_onboarding','owner_onboarding_steps','employees','user_permissions','onboarding_tokens','employee_onboarding_data','employee_tax_forms'].map(t=>[t,[]]));
   state.users.push({id:'owner',email:'owner@example.com',role:'owner',accountState:'active',subscriptionPlan:'core'});
   state.owner_onboarding.push({id:randomUUID(),userId:'owner',data:{},skippedSteps:[],currentStep:'restaurant_info',completedSteps:0,isCompleted:false});
   const dialect = new PgDialect();

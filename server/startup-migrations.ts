@@ -283,6 +283,31 @@ const migrations: { name: string; sql: string }[] = [
   {"name": "recipe_ingredients.quantity precision", "sql": "ALTER TABLE recipe_ingredients ALTER COLUMN quantity TYPE numeric(18,8)"},
   {"name": "recipe_productions.quantity_produced precision", "sql": "ALTER TABLE recipe_productions ALTER COLUMN quantity_produced TYPE numeric(18,8)"},
   {"name": "recipe production request idempotency", "sql": "CREATE UNIQUE INDEX IF NOT EXISTS recipe_productions_request_uq ON recipe_productions(location_id, request_key) WHERE request_key IS NOT NULL"},
+  {
+    name: "employee_tax_forms table",
+    sql: `CREATE TABLE IF NOT EXISTS employee_tax_forms (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      employee_id uuid NOT NULL REFERENCES employees(id),
+      form_type varchar(10) NOT NULL,
+      form_version varchar(40) NOT NULL,
+      status varchar(30) NOT NULL DEFAULT 'employee_signed',
+      employee_data text NOT NULL,
+      employee_signed_name varchar(120) NOT NULL,
+      employee_signed_at timestamp NOT NULL DEFAULT now(),
+      employee_ip varchar(45),
+      employee_user_agent text,
+      employer_data text,
+      employer_signed_by varchar REFERENCES users(id),
+      employer_signed_name varchar(120),
+      employer_signed_at timestamp,
+      created_at timestamp DEFAULT now(),
+      updated_at timestamp DEFAULT now()
+    )`,
+  },
+  {
+    name: "employee_tax_forms.employee_idx",
+    sql: `CREATE INDEX IF NOT EXISTS employee_tax_forms_employee_idx ON employee_tax_forms (employee_id, form_type)`,
+  }
 ];
 
 export async function runStartupMigrations(): Promise<void> {

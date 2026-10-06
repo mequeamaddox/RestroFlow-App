@@ -7,10 +7,12 @@ import type { Express } from 'express';
 import { storage } from '../storage';
 import { ObjectStorageService } from '../objectStorage';
 import { isAuthenticated, clerkClient, mapPositionToRole, requireHRAccess } from './helpers';
-import { requireLocationAccess, assertLocationAccess, assertSameLocation, strictLimiter } from '../securityMiddleware';
+import { requireLocationAccess, assertLocationAccess, assertSameLocation, strictLimiter, logSecurityEvent } from '../securityMiddleware';
+import { encryptField, decryptField } from '../encryption';
+import { i9Section2Schema, i9Section2DueDate, maskTail } from '@shared/taxForms';
 import { canManageUser, requirePermission, requireAnyPermission, Permission } from '../permissions';
 import { isOwnerLevel, isManagerLevel } from '@shared/roles';
-import { teamResources, insertTeamResourceSchema, timeEntries, timeOffRequests, employeeDocuments, employeeOnboarding, employeeOnboardingSteps, recipeAssignments, departments, onboardingTemplates, onboardingTokens } from '@shared/schema';
+import { teamResources, insertTeamResourceSchema, timeEntries, timeOffRequests, employeeDocuments, employeeOnboarding, employeeOnboardingSteps, recipeAssignments, departments, onboardingTemplates, onboardingTokens, employeeTaxForms } from '@shared/schema';
 import { db } from '../db';
 import { eq, desc, sql, or, isNull } from 'drizzle-orm';
 
@@ -907,8 +909,10 @@ export function registerHRRoutes(app: Express): void {
       const location = await storage.getLocationById(employee.locationId);
       if (!location?.hrAddonEnabled) return res.json({ needed: false });
       const tokens = await db.select().from(onboardingTokens).where(eq(onboardingTokens.employeeId, employee.id)).orderBy(desc(onboardingTokens.createdAt));
-      if (tokens.some(t => t.isUsed)) return res.json({ needed: false });
-      const live = tokens.find(t => new Date(t.expiresAt) > new Date());
+      const forms = await db.select({ formType: employeeTaxForms.formType }).from(employeeTaxForms).where(eq(employeeTaxForms.employeeId, employee.id));
+      const hasForms = ['w4', 'i9'].every(type => forms.some(f => f.formType === type));
+      if (tokens.some(t => t.isUsed) && hasForms) return res.json({ needed: false });
+      const live = tokens.find(t => !t.isUsed && new Date(t.expiresAt) > new Date());
       const token = live ?? await storage.createOnboardingToken(employee.id, 72);
       res.json({ needed: true, url: `/onboarding/${token.token}` });
     } catch (error) {
@@ -941,6 +945,65 @@ export function registerHRRoutes(app: Express): void {
   });
 
   // Employee profile & password (self-service)
+  // Latest signed W-4 and I-9 for an employee. Identifying numbers are masked to the last four.
+  app.get('/api/employees/:id/tax-forms', isAuthenticated, async (req, res) => {
+    try {
+      const employee = await storage.getEmployee(req.params.id);
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertEmployeeRecordAccess(req, res, employee)) return;
+      const rows = await db.select().from(employeeTaxForms).where(eq(employeeTaxForms.employeeId, employee.id)).orderBy(desc(employeeTaxForms.createdAt));
+      const latest = (type: string) => rows.find(r => r.formType === type);
+      const read = (value?: string | null) => (value ? JSON.parse(decryptField(value)) : undefined);
+      const w4 = latest('w4');
+      const i9 = latest('i9');
+      const section1 = read(i9?.employeeData);
+      const section2 = read(i9?.employerData);
+      if (i9) await logSecurityEvent(req, 'i9_viewed', 'low', { employeeId: employee.id });
+      const maskDoc = (d: any) => d && { ...d, number: maskTail(d.number) };
+      res.json({
+        w4: w4 && { ...read(w4.employeeData), formVersion: w4.formVersion, signedName: w4.employeeSignedName, signedAt: w4.employeeSignedAt },
+        i9: i9 && {
+          formVersion: i9.formVersion,
+          status: i9.status,
+          section1: { ...section1, ssn: maskTail(section1?.ssn), uscisNumber: maskTail(section1?.uscisNumber), i94Number: maskTail(section1?.i94Number), foreignPassportNumber: maskTail(section1?.foreignPassportNumber), signedName: i9.employeeSignedName, signedAt: i9.employeeSignedAt },
+          section2: section2 && { ...section2, listA: section2.listA?.map(maskDoc), listB: maskDoc(section2.listB), listC: maskDoc(section2.listC), signedAt: i9.employerSignedAt },
+          section2DueDate: employee.hireDate ? i9Section2DueDate(String(employee.hireDate).slice(0, 10)) : undefined,
+        },
+      });
+    } catch (error) {
+      console.error('Error fetching tax forms:', error);
+      res.status(500).json({ message: 'Failed to load tax forms' });
+    }
+  });
+
+  // Employer review of identity and work-authorization documents (Form I-9 Section 2).
+  app.post('/api/employees/:id/i9-section2', isAuthenticated, async (req, res) => {
+    try {
+      const employee = await storage.getEmployee(req.params.id);
+      if (!employee) return res.status(404).json({ message: 'Employee not found' });
+      if (!await assertEmployeeRecordAccess(req, res, employee, { managerOnly: true })) return;
+      const section2 = i9Section2Schema.parse(req.body);
+      const [i9] = await db.select().from(employeeTaxForms).where(eq(employeeTaxForms.employeeId, employee.id)).orderBy(desc(employeeTaxForms.createdAt)).then(rows => rows.filter(r => r.formType === 'i9'));
+      if (!i9) return res.status(409).json({ message: 'The employee has not signed Form I-9 Section 1 yet.' });
+      if (i9.status === 'complete') return res.status(409).json({ message: 'Section 2 is already complete for this Form I-9.' });
+      const { attest, ...record } = section2;
+      const [updated] = await db.update(employeeTaxForms).set({
+        employerData: encryptField(JSON.stringify(record)),
+        employerSignedBy: req.user!.id,
+        employerSignedName: section2.employerName,
+        employerSignedAt: new Date(),
+        status: 'complete',
+        updatedAt: new Date(),
+      }).where(eq(employeeTaxForms.id, i9.id)).returning({ id: employeeTaxForms.id, status: employeeTaxForms.status });
+      await logSecurityEvent(req, 'i9_section2_completed', 'medium', { employeeId: employee.id });
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ message: error.issues[0]?.message });
+      console.error('Error completing I-9 Section 2:', error);
+      res.status(500).json({ message: 'Failed to save Section 2' });
+    }
+  });
+
   app.get('/api/employees/:id/profile', isAuthenticated, async (req, res) => {
     try {
       const { employee, onboardingData } = await storage.getEmployeeWithOnboardingData(req.params.id);

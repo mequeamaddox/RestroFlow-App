@@ -31,6 +31,8 @@ import {
   Upload
 } from "lucide-react";
 import { Link } from "wouter";
+import { TaxFormsCard } from "@/components/hr/TaxFormsCard";
+import { usePermissions, Permission } from "@/contexts/PermissionContext";
 
 interface EmployeeDocument {
   id: string;
@@ -115,6 +117,7 @@ export default function EmployeePage() {
   const [selectedDocumentTemplate, setSelectedDocumentTemplate] = useState<string>('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { hasPermission } = usePermissions();
 
   const { data: profileData, isLoading, error } = useQuery<EmployeeProfile>({
     queryKey: [`/api/employees/${employeeId}/profile`],
@@ -498,6 +501,12 @@ export default function EmployeePage() {
             </CardContent>
           </Card>
         )}
+
+        <TaxFormsCard
+          employeeId={employeeId!}
+          canManage={hasPermission(Permission.MANAGE_EMPLOYEES)}
+          hireDate={(employee as any).hireDate}
+        />
 
         {/* Onboarding Completion Info */}
         {onboardingData?.completedAt && (
