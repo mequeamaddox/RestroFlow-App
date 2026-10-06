@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { FeatureNotIncluded, useIsPayer } from "@/components/subscription/feature-not-included";
 import { Users, Clock, MessageSquare, DollarSign, ArrowRight, Star, Zap } from "lucide-react";
 
 interface HRUpgradePromptProps {
@@ -8,6 +9,8 @@ interface HRUpgradePromptProps {
 }
 
 export function HRUpgradePrompt({ locationName }: HRUpgradePromptProps) {
+  const isPayer = useIsPayer();
+  if (!isPayer) return <FeatureNotIncluded feature="HR" locationName={locationName} />;
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <Card className="border-orange-800/50 bg-gradient-to-br from-orange-900/20 to-amber-900/20">
