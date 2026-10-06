@@ -149,7 +149,7 @@ export async function requireAuth(
       const [pendingInvite] = await db
         .select()
         .from(invitationTokens)
-        .where(and(eq(invitationTokens.email, email), eq(invitationTokens.status, 'pending'), gt(invitationTokens.expiresAt, new Date())))
+        .where(and(eq(invitationTokens.email, email.toLowerCase()), eq(invitationTokens.status, 'pending'), gt(invitationTokens.expiresAt, new Date())))
         .limit(1);
 
       user = await storage.upsertUser({

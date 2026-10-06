@@ -1,5 +1,20 @@
 import { storage } from './storage';
 import { assertLocationAccess } from './securityMiddleware';
+import { hasPermission, Permission } from './permissions';
+
+/**
+ * Personal paperwork (documents, signatures, uploads, profile PII) is visible only to the
+ * employee themselves or to someone who can manage employees at that restaurant.
+ * assertLocationAccess resolves req.user.role to the caller's role at that location.
+ */
+export async function assertEmployeeRecordAccess(req:any,res:any,employee:{email?:string|null;locationId:string},opts:{managerOnly?:boolean}={}):Promise<'self'|'manager'|undefined> {
+  if (!await assertLocationAccess(req,res,employee.locationId)) return;
+  const user = await storage.getUser(req.user.id);
+  const isSelf = !!user?.email && !!employee.email && employee.email.toLowerCase() === user.email.toLowerCase();
+  if (isSelf && !opts.managerOnly) return 'self';
+  if (hasPermission(req.user.role, Permission.MANAGE_EMPLOYEES)) return 'manager';
+  res.status(403).json({ message: opts.managerOnly ? 'Only managers can do this.' : 'You can only access your own paperwork.' });
+}
 export async function selectedEmployee(req:any,res:any) {
   const locationId = req.query.locationId || req.body?.locationId;
   if (typeof locationId !== 'string') {res.status(400).json({message:'Select a restaurant.'});return;}

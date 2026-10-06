@@ -1,4 +1,3 @@
-import { HRUpgradePrompt } from "@/components/hr/hr-upgrade-prompt";
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -54,6 +53,7 @@ import {
   Briefcase,
   Calendar,
   Send,
+  Copy,
 } from 'lucide-react';
 import InviteEmployeeDialog from '@/components/hr/InviteEmployeeDialog';
 import type { InvitationToken, Location, Department } from '@shared/schema';
@@ -73,7 +73,8 @@ export default function HRInvitations() {
     error,
     refetch 
   } = useQuery<InvitationToken[]>({
-    queryKey: ['/api/invitations'],
+    queryKey: ['/api/invitations', currentLocation?.id],
+    enabled: !!currentLocation,
   });
 
   // Fetch locations for display
@@ -91,7 +92,7 @@ export default function HRInvitations() {
       if (!response.ok) throw new Error('Failed to fetch departments');
       return response.json();
     },
-    enabled: !!currentLocation,
+    enabled: !!currentLocation && hasHRAccess,
   });
 
   // Cancel invitation mutation
@@ -119,24 +120,25 @@ export default function HRInvitations() {
   const resendInvitationMutation = useMutation({
     mutationFn: async (invitation: InvitationToken) => {
       // For now, we'll use the existing invitation data to create a new one
+      // Stored blanks/nulls must be omitted: the API only accepts real values for optional fields.
+      const optional = (v: unknown) => (v === null || v === '' ? undefined : v);
       const invitationData = {
-        firstName: invitation.firstName,
-        lastName: invitation.lastName,
+        firstName: optional(invitation.firstName),
+        lastName: optional(invitation.lastName),
         email: invitation.email,
         role: invitation.role,
         locationId: invitation.locationId,
-        departmentId: invitation.departmentId,
-        positionId: invitation.positionId,
-        startDate: invitation.startDate,
-        hourlyRate: invitation.hourlyRate,
-        salary: invitation.salary,
+        departmentId: optional(invitation.departmentId),
+        positionId: optional(invitation.positionId),
+        startDate: optional(invitation.startDate),
+        hourlyRate: optional(invitation.hourlyRate),
+        salary: optional(invitation.salary),
       };
-      
-      // Cancel the old invitation first
+
+      // Create the replacement first so a failure never leaves the person without an invite.
+      const created = await apiRequest('POST', '/api/invitations', invitationData);
       await apiRequest('DELETE', `/api/invitations/${invitation.id}`);
-      
-      // Create a new invitation
-      return await apiRequest('POST', '/api/invitations', invitationData);
+      return created;
     },
     onSuccess: () => {
       toast({
@@ -216,27 +218,6 @@ export default function HRInvitations() {
     );
   }
 
-  if (error) {
-    return (
-      <div className="max-w-7xl mx-auto p-6">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Failed to Load Invitations</h3>
-              <p className="text-muted-foreground mb-4">There was an error loading the invitation data.</p>
-              <Button onClick={() => refetch()}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Try Again
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (!hasHRAccess) return <HRUpgradePrompt locationName={currentLocation?.name || "this location"} />;
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       {/* Header */}
@@ -257,6 +238,21 @@ export default function HRInvitations() {
           Invite Employee
         </Button>
       </div>
+
+      {error && (
+        <Card>
+          <CardContent className="pt-6 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              <span>Couldn't load invitations{error instanceof Error ? `: ${error.message}` : ''}</span>
+            </div>
+            <Button variant="outline" onClick={() => refetch()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Try Again
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -454,6 +450,26 @@ export default function HRInvitations() {
                             </Button>
                           )}
                           
+                          {invitation.status === 'pending' && !isExpired(invitation.expiresAt) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                const url = `${window.location.origin}/invitation/accept/${invitation.token}`;
+                                try {
+                                  await navigator.clipboard.writeText(url);
+                                  toast({ title: 'Link copied', description: `Send it to ${invitation.email}.` });
+                                } catch {
+                                  toast({ title: 'Invitation link', description: url });
+                                }
+                              }}
+                              data-testid={`button-copy-${invitation.id}`}
+                            >
+                              <Copy className="h-3 w-3 mr-1" />
+                              Copy link
+                            </Button>
+                          )}
+
                           {invitation.status === 'pending' && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>

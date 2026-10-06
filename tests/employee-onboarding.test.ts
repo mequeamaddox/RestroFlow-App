@@ -56,3 +56,20 @@ test('invitation acceptance updates a pre-created employee profile without dupli
   const result=await acceptStaffInvitation(db.client,'invite-token',{id:'staff',email:'employee@example.com'});
   assert.equal(result.employeeId,employeeId);assert.equal(db.read().employees.length,1);assert.equal(db.read().employees[0].hourlyRate,'20.00');assert.equal(db.read().employees[0].status,'active');assert.equal(db.read().employees[0].hireDate,'2026-09-01');
 });
+
+test('paperwork accepts numbers typed with spaces or dashes and explains bad ones',async()=>{
+  const db=staff();const result=await acceptStaffInvitation(db.client,'invite-token',{id:'staff',email:'employee@example.com'});
+  await assert.rejects(completeEmployeeProfile(db.client,result.onboardingToken!,{bankingInfo:{routingNumber:'1234'}}),/Routing number must be 9 digits/);
+  await completeEmployeeProfile(db.client,result.onboardingToken!,{personalInfo:{ssn:'123 45 6789'},bankingInfo:{routingNumber:'1234-5678-9',accountNumber:'0001 2345'}});
+  assert.equal(db.read().onboarding_tokens[0].isUsed,true);assert.match(db.read().employee_onboarding_data[0].routingNumber,/^enc:v1:/);
+});
+
+test('a later paperwork submission with blank fields keeps details saved earlier',async()=>{
+  const db=staff();const result=await acceptStaffInvitation(db.client,'invite-token',{id:'staff',email:'employee@example.com'});
+  await completeEmployeeProfile(db.client,result.onboardingToken!,{personalInfo:{phone:'5551234567'},bankingInfo:{bankName:'First Bank',accountNumber:'12345678',routingNumber:'123456789'}});
+  const saved={...db.read().employee_onboarding_data[0]};
+  db.read().onboarding_tokens.push({id:randomUUID(),employeeId:result.employeeId,token:'second-link',isUsed:false,expiresAt:new Date(Date.now()+3600000)});
+  await completeEmployeeProfile(db.client,'second-link',{personalInfo:{phone:'5559999999'},bankingInfo:{bankName:'',accountNumber:'',routingNumber:''}});
+  const row=db.read().employee_onboarding_data[0];
+  assert.equal(row.phone,'5559999999');assert.equal(row.bankName,'First Bank');assert.equal(row.accountNumber,saved.accountNumber);assert.equal(row.routingNumber,saved.routingNumber);
+});

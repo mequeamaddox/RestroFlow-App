@@ -67,7 +67,8 @@ export function DocumentAssignmentWizard({ isOpen, onClose }: DocumentAssignment
 
   // Fetch document templates
   const { data: documentTemplates = [] } = useQuery<DocumentTemplate[]>({
-    queryKey: ['/api/document-templates'],
+    queryKey: [`/api/document-templates?locationId=${currentLocation?.id}`],
+    enabled: !!currentLocation,
   });
 
   // Fetch departments for filtering

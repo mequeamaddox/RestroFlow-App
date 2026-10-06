@@ -1,4 +1,4 @@
-  import { useUser, SignInButton } from '@clerk/clerk-react';
+  import { useUser, useClerk, SignInButton } from '@clerk/clerk-react';
   import { useState } from 'react';
   import { useParams, useLocation } from 'wouter';
   import { useForm } from 'react-hook-form';
@@ -41,7 +41,9 @@
   }
 
   export default function InvitationAccept() {
-    const { isSignedIn } = useUser();
+    const { isSignedIn, user: clerkUser } = useUser();
+    const { signOut } = useClerk();
+    const [signingOut, setSigningOut] = useState(false);
     const { token } = useParams<{ token: string }>();
     const [, setLocation] = useLocation();
     const [accountError, setAccountError] = useState('');
@@ -103,6 +105,9 @@
     };
 
     const isExpired = invitation && new Date(invitation.expiresAt) < new Date();
+    const signedInEmail = clerkUser?.primaryEmailAddress?.emailAddress?.toLowerCase();
+    // Signed in as someone else (e.g. the manager testing the link): acceptance would be refused.
+    const wrongAccount = !!(isSignedIn && invitation && signedInEmail && signedInEmail !== invitation.email.toLowerCase());
 
     if (validatingToken) {
       return (
@@ -227,7 +232,22 @@
               <h3 className="text-lg font-semibold">Join {invitation.location?.name || "Your Restaurant"}</h3>
               <p className="text-sm text-muted-foreground">Your employee profile and restaurant access belong to this location. If this email already has a RestroFlow login, sign in to accept this location’s invitation.</p>
               {accountError && <p role="alert" className="text-sm text-red-400">{accountError}</p>}
-              {isSignedIn ? <Button className="w-full" disabled={acceptInvitationMutation.isPending} onClick={() => acceptInvitationMutation.mutate({})}>{acceptInvitationMutation.isPending ? 'Joining…' : 'Join Team'}</Button> : <>
+              {wrongAccount ? (
+                <div className="space-y-3 rounded-md border border-orange-500/50 bg-orange-900/20 p-4">
+                  <p className="text-sm">You're signed in as <strong>{signedInEmail}</strong>, but this invitation is for <strong>{invitation.email}</strong>.</p>
+                  <Button
+                    className="w-full"
+                    disabled={signingOut}
+                    onClick={async () => {
+                      setSigningOut(true);
+                      setAccountError('');
+                      await signOut({ redirectUrl: window.location.pathname });
+                    }}
+                  >
+                    {signingOut ? 'Signing out…' : `Sign out and continue as ${invitation.email}`}
+                  </Button>
+                </div>
+              ) : isSignedIn ? <Button className="w-full" disabled={acceptInvitationMutation.isPending} onClick={() => acceptInvitationMutation.mutate({})}>{acceptInvitationMutation.isPending ? 'Joining…' : 'Join Team'}</Button> : <>
               <SignInButton mode="modal"><Button variant="outline" className="w-full">Already have an account? Sign in</Button></SignInButton>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">

@@ -40,7 +40,7 @@ interface SubscriptionInfo {
   barAddonLocations: number;
   locationCount: number;
   createdAt: string;
-  stripeCustomerId?: string;
+  hasBillingAccount?: boolean;
   stripeSubscriptionId?: string;
 }
 
@@ -83,18 +83,33 @@ export default function SubscriptionPage() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
 
+  const [activation, setActivation] = useState<'idle' | 'waiting' | 'timeout'>('idle');
+
+  // Stripe's webhook can land after the browser returns, so wait for the account to
+  // become active, then reload into onboarding so every cached gate sees the new plan.
+  const waitForActivation = async () => {
+    setActivation('waiting');
+    for (let attempt = 0; attempt < 20; attempt++) {
+      try {
+        const res = await apiRequest('GET', '/api/auth/me');
+        const data = await res.json();
+        if (['active', 'past_due'].includes(data?.user?.subscriptionStatus)) {
+          window.location.assign('/onboarding');
+          return;
+        }
+      } catch {}
+      await new Promise(r => setTimeout(r, 2000));
+    }
+    setActivation('timeout');
+  };
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('success') === 'true' && user) {
-      toast({
-        title: "🎉 Subscription Activated!",
-        description: "Welcome to RestroFlow Core. Let's set up your account.",
-      });
       window.history.replaceState({}, document.title, '/subscription');
-      queryClient.invalidateQueries({ queryKey: ['/api/subscriptions/current'] });
-      setTimeout(() => setLocation('/settings'), 2000);
+      waitForActivation();
     }
-  }, [user, toast, setLocation]);
+  }, [user]);
 
   const { data: subscription, isLoading: subscriptionLoading, error: subscriptionError } = useQuery<SubscriptionInfo>({
     queryKey: ['/api/subscriptions/current'],
@@ -144,7 +159,7 @@ export default function SubscriptionPage() {
   };
 
   const handleManageBilling = async () => {
-    if (!subscription?.stripeCustomerId) {
+    if (!subscription?.hasBillingAccount) {
       toast({ title: "No Billing Account", description: "Subscribe first to manage billing.", variant: "destructive" });
       return;
     }
@@ -165,6 +180,8 @@ export default function SubscriptionPage() {
   };
 
   const currentPlan = (subscription?.plan || 'free') as keyof typeof PLAN_FEATURES;
+  // A paid plan whose payment never completed still needs the purchase options.
+  const needsPayment = currentPlan === 'free' || !['active', 'past_due'].includes(subscription?.status || '');
   const planInfo = PLAN_FEATURES[currentPlan] || PLAN_FEATURES.free;
   const ocrUsed = userSubscription?.ocrCreditsUsed || 0;
   const ocrLimit = userSubscription?.ocrCreditsLimit || 5;
@@ -197,7 +214,7 @@ export default function SubscriptionPage() {
           <p className="text-slate-400 text-sm mt-1">Manage your plan and payment method</p>
         </div>
         <div className="flex gap-2">
-          {subscription?.stripeCustomerId && (
+          {subscription?.hasBillingAccount && (
             <Button
               onClick={handleManageBilling}
               disabled={portalLoading}
@@ -210,6 +227,22 @@ export default function SubscriptionPage() {
           )}
         </div>
       </div>
+
+      {activation !== 'idle' && (
+        <Alert className="bg-orange-900/20 border-orange-500/50">
+          {activation === 'waiting' ? <Loader2 className="h-4 w-4 animate-spin text-orange-400" /> : <AlertCircle className="h-4 w-4 text-orange-400" />}
+          <AlertDescription className="text-orange-200 flex items-center justify-between gap-4">
+            <span>
+              {activation === 'waiting'
+                ? 'Payment received. Activating your subscription…'
+                : "Your payment went through, but activation is taking longer than usual. Give it a minute, then check again."}
+            </span>
+            {activation === 'timeout' && (
+              <Button size="sm" onClick={waitForActivation} className="bg-orange-500 hover:bg-orange-600">Check again</Button>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {subscriptionError && (
         <Alert className="bg-red-900/20 border-red-500/50">
@@ -419,7 +452,7 @@ export default function SubscriptionPage() {
             </Card>
 
             {/* Upgrade CTA */}
-            {currentPlan === 'free' && (
+            {needsPayment && (
               <Card className="bg-gradient-to-br from-orange-900/30 to-red-900/30 border-orange-500/30">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-white text-base flex items-center gap-2">
@@ -501,7 +534,7 @@ export default function SubscriptionPage() {
       )}
 
       {/* Plan Comparison */}
-      {currentPlan === 'free' && !subscriptionLoading && (
+      {needsPayment && !subscriptionLoading && (
         <div>
           <h2 className="text-lg font-semibold text-white mb-4">Available Plans</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

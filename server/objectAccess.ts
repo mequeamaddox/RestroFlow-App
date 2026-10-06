@@ -27,3 +27,16 @@ export async function getObjectLocationIds(objectPath: string): Promise<(string 
   ]);
   return Array.from(new Set(groups.flat().map(record => record.locationId)));
 }
+
+// Employees whose personal paperwork is stored at this path (uploads and completed documents).
+export async function getEmployeeFileOwners(objectPath: string) {
+  const [docs, assignments] = await Promise.all([
+    db.select({ email: employees.email, locationId: employees.locationId }).from(employeeDocuments)
+      .innerJoin(employees, eq(employeeDocuments.employeeId, employees.id))
+      .where(eq(employeeDocuments.filePath, objectPath)),
+    db.select({ email: employees.email, locationId: employees.locationId }).from(employeeDocumentAssignments)
+      .innerJoin(employees, eq(employeeDocumentAssignments.employeeId, employees.id))
+      .where(eq(employeeDocumentAssignments.completedFilePath, objectPath)),
+  ]);
+  return [...docs, ...assignments];
+}
