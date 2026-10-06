@@ -72,8 +72,9 @@ export default function HRDocumentsPage() {
   });
 
   const { data: documents } = useQuery<EmployeeDocument[]>({
-    queryKey: ['/api/hr/documents', selectedEmployee],
-    enabled: !!selectedEmployee,
+    queryKey: ['/api/hr/documents', currentLocation?.id, selectedEmployee],
+    queryFn: async () => (await apiRequest('GET', `/api/hr/documents?employeeId=${selectedEmployee}&locationId=${currentLocation?.id}`)).json(),
+    enabled: !!selectedEmployee && !!currentLocation,
   });
 
   const { data: onboardingTemplates } = useQuery<OnboardingTemplate[]>({
@@ -82,8 +83,9 @@ export default function HRDocumentsPage() {
   });
 
   const { data: employeeOnboarding } = useQuery<EmployeeOnboarding[]>({
-    queryKey: ['/api/hr/onboarding', selectedEmployee],
-    enabled: !!selectedEmployee,
+    queryKey: ['/api/hr/onboarding', currentLocation?.id, selectedEmployee],
+    queryFn: async () => (await apiRequest('GET', `/api/hr/onboarding?employeeId=${selectedEmployee}&locationId=${currentLocation?.id}`)).json(),
+    enabled: !!selectedEmployee && !!currentLocation,
   });
 
   const { data: onboardingAnalytics } = useQuery<{

@@ -2,6 +2,9 @@ import type { Express } from 'express';
 import { storage } from '../storage';
 import { isAuthenticated } from './helpers';
 import { assertLocationAccess } from '../securityMiddleware';
+import { assertEmployeeRecordAccess } from '../employeeIdentity';
+import { hasPermission, Permission } from '../permissions';
+import { ObjectStorageService } from '../objectStorage';
 
 export function registerDocumentRoutes(app: Express): void {
   app.get('/api/employees/:employeeId/time-off-requests', isAuthenticated, async (req, res) => {
@@ -36,6 +39,7 @@ export function registerDocumentRoutes(app: Express): void {
       const { locationId } = req.body;
       if (!locationId) return res.status(400).json({ message: 'locationId required' });
       if (!await assertLocationAccess(req, res, locationId)) return;
+      if (!hasPermission(req.user!.role, Permission.MANAGE_EMPLOYEES)) return res.status(403).json({ message: 'Only managers can create document templates.' });
       const template = await storage.createDocumentTemplate({ ...req.body, createdBy: req.user!.id });
       res.status(201).json(template);
     } catch (error) {
@@ -64,23 +68,7 @@ export function registerDocumentRoutes(app: Express): void {
 
       if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
-      // Access control: employee can view their own docs; managers need location access
-      const isSelf = requesterId === paramId ||
-        (req.user!.role === 'employee' && employee.email === req.user!.email);
-      if (!isSelf && employee.locationId) {
-        const userId = requesterId;
-        const userRole = req.user!.role;
-        let hasAccess = false;
-        if (userRole === 'owner') {
-          const loc = await storage.getLocationById(employee.locationId);
-          hasAccess = !!(loc && loc.ownerId === userId);
-        } else {
-          const perms = await storage.getUserPermissions(userId);
-          hasAccess = perms.some((p: any) => p.locationId === employee!.locationId && p.isActive);
-        }
-        if (!hasAccess) return res.status(404).json({ message: 'Employee not found' });
-      }
-      if (!await assertLocationAccess(req,res,employee.locationId)) return;
+      if (!await assertEmployeeRecordAccess(req, res, employee)) return;
       const documents = await storage.getEmployeeDocumentAssignments(employee.id);
       const transformedDocuments = documents.map((doc: any) => ({
         id: doc.id, templateId: doc.templateId || null, status: doc.status, deadline: doc.expiresAt || null,
@@ -98,14 +86,14 @@ export function registerDocumentRoutes(app: Express): void {
     try {
       const employee = await storage.getEmployee(req.body.employeeId);
       if (!employee) return res.status(404).json({ message: 'Employee not found' });
-      if (!await assertLocationAccess(req, res, employee.locationId)) return;
+      if (!await assertEmployeeRecordAccess(req, res, employee, { managerOnly: true })) return;
       const assignmentData = { ...req.body, sentBy: req.user!.id, sentAt: new Date(), status: 'sent' };
       const assignment = await storage.createDocumentAssignment(assignmentData);
       const employeeId = assignmentData.employeeId;
       const existingOnboarding = await storage.getEmployeeOnboarding(employeeId);
       const hasActive = existingOnboarding && existingOnboarding.some((ob: any) => ob.status === 'in-progress' || ob.status === 'not-started');
       if (!hasActive) {
-        const templates = await storage.getOnboardingTemplates();
+        const templates = await storage.getOnboardingTemplates(employee.locationId);
         if (templates.length > 0) {
           const targetDate = new Date();
           targetDate.setDate(targetDate.getDate() + 14);
@@ -125,8 +113,10 @@ export function registerDocumentRoutes(app: Express): void {
       if (!doc) return res.status(404).json({ message: 'Document assignment not found' });
       const employee = await storage.getEmployee(doc.employeeId);
       if (!employee) return res.status(404).json({ message: 'Employee not found' });
-      if (!await assertLocationAccess(req, res, employee.locationId)) return;
+      const access = await assertEmployeeRecordAccess(req, res, employee);
+      if (!access) return;
       const { status } = req.body;
+      if (access === 'self' && !['viewed', 'in_progress', 'completed'].includes(status)) return res.status(403).json({ message: 'Only a manager can set this status.' });
       const updateData: any = { status };
       if (status === 'viewed') updateData.viewedAt = new Date();
       if (status === 'completed') updateData.completedAt = new Date();
@@ -145,8 +135,12 @@ export function registerDocumentRoutes(app: Express): void {
       if (!doc) return res.status(404).json({ message: 'Document assignment not found' });
       const employee = await storage.getEmployee(doc.employeeId);
       if (!employee) return res.status(404).json({ message: 'Employee not found' });
-      if (!await assertLocationAccess(req, res, employee.locationId)) return;
-      const { signatureData, signedName, employeeId } = req.body;
+      const access = await assertEmployeeRecordAccess(req, res, employee);
+      if (!access) return;
+      if (access !== 'self') return res.status(403).json({ message: 'Only the employee can sign their own documents.' });
+      const { signatureData, signedName } = req.body;
+      if (!signatureData || !signedName) return res.status(400).json({ message: 'Signature and typed name are required.' });
+      const employeeId = doc.employeeId;
       const signature = await storage.createEmployeeSignature({ documentAssignmentId: req.params.id, employeeId, signatureData, signedName, ipAddress: req.ip, userAgent: req.get('User-Agent') });
       await storage.updateDocumentAssignment(req.params.id, { status: 'signed', signedAt: new Date(), signaturePath: `/signatures/${signature.id}` });
       const allDocuments = await storage.getEmployeeDocumentAssignments(employeeId);
@@ -172,7 +166,7 @@ export function registerDocumentRoutes(app: Express): void {
       if (!doc) return res.status(404).json({ message: 'Document assignment not found' });
       const employee = await storage.getEmployee(doc.employeeId);
       if (!employee) return res.status(404).json({ message: 'Employee not found' });
-      if (!await assertLocationAccess(req, res, employee.locationId)) return;
+      if (!await assertEmployeeRecordAccess(req, res, employee)) return;
       const assignment = await storage.updateDocumentAssignment(req.params.id, { status: 'viewed' });
       res.json(assignment);
     } catch (error) {
@@ -187,8 +181,9 @@ export function registerDocumentRoutes(app: Express): void {
       if (!doc) return res.status(404).json({ message: 'Document assignment not found' });
       const employee = await storage.getEmployee(doc.employeeId);
       if (!employee) return res.status(404).json({ message: 'Employee not found' });
-      if (!await assertLocationAccess(req, res, employee.locationId)) return;
-      const assignment = await storage.updateDocumentAssignment(req.params.id, { status: 'completed', notes: 'Paper copy uploaded by manager' });
+      if (!await assertEmployeeRecordAccess(req, res, employee, { managerOnly: true })) return;
+      const completedFilePath = typeof req.body?.filePath === 'string' && req.body.filePath ? new ObjectStorageService().normalizeObjectEntityPath(req.body.filePath) : undefined;
+      const assignment = await storage.updateDocumentAssignment(req.params.id, { status: 'completed', notes: 'Paper copy uploaded by manager', completedAt: new Date(), ...(completedFilePath ? { completedFilePath } : {}) });
       res.json(assignment);
     } catch (error) {
       console.error('Error uploading paper copy:', error);
@@ -202,8 +197,9 @@ export function registerDocumentRoutes(app: Express): void {
       if (!doc) return res.status(404).json({ message: 'Document assignment not found' });
       const employee = await storage.getEmployee(doc.employeeId);
       if (!employee) return res.status(404).json({ message: 'Employee not found' });
-      if (!await assertLocationAccess(req, res, employee.locationId)) return;
-      const assignment = await storage.updateDocumentAssignment(req.params.id, { status: 'completed', completedAt: new Date() });
+      if (!await assertEmployeeRecordAccess(req, res, employee)) return;
+      const completedFilePath = typeof req.body?.filePath === 'string' && req.body.filePath ? new ObjectStorageService().normalizeObjectEntityPath(req.body.filePath) : undefined;
+      const assignment = await storage.updateDocumentAssignment(req.params.id, { status: 'completed', completedAt: new Date(), ...(completedFilePath ? { completedFilePath } : {}) });
       res.json(assignment);
     } catch (error) {
       console.error('Error uploading document:', error);
@@ -230,7 +226,7 @@ export function registerDocumentRoutes(app: Express): void {
       if (!doc) return res.status(404).json({ message: 'Document assignment not found' });
       const employee = await storage.getEmployee(doc.employeeId);
       if (!employee) return res.status(404).json({ message: 'Employee not found' });
-      if (!await assertLocationAccess(req, res, employee.locationId)) return;
+      if (!await assertEmployeeRecordAccess(req, res, employee)) return;
       const responses = await storage.getDocumentFormResponses(req.params.id);
       res.json(responses);
     } catch (error) {
@@ -245,7 +241,9 @@ export function registerDocumentRoutes(app: Express): void {
       if (!doc) return res.status(404).json({ message: 'Document assignment not found' });
       const employee = await storage.getEmployee(doc.employeeId);
       if (!employee) return res.status(404).json({ message: 'Employee not found' });
-      if (!await assertLocationAccess(req, res, employee.locationId)) return;
+      const access = await assertEmployeeRecordAccess(req, res, employee);
+      if (!access) return;
+      if (access !== 'self') return res.status(403).json({ message: 'Only the employee can fill in their own document.' });
       const { fieldId, fieldValue } = req.body;
       const response = await storage.saveDocumentFormResponse({ assignmentId: req.params.id, fieldId, fieldValue });
       res.json(response);
@@ -261,7 +259,7 @@ export function registerDocumentRoutes(app: Express): void {
       if (!doc) return res.status(404).json({ message: 'Document assignment not found' });
       const employee = await storage.getEmployee(doc.employeeId);
       if (!employee) return res.status(404).json({ message: 'Employee not found' });
-      if (!await assertLocationAccess(req, res, employee.locationId)) return;
+      if (!await assertEmployeeRecordAccess(req, res, employee)) return;
       const assignment = await storage.updateDocumentAssignment(req.params.id, { status: 'completed', completedAt: new Date() });
       res.json(assignment);
     } catch (error) {

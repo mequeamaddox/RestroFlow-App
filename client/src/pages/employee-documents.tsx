@@ -57,11 +57,8 @@ export default function EmployeeDocuments() {
   const signatureMutation = useMutation({
     mutationFn: async (data: { documentId: string; signatureData: string; signedName: string }) => {
       return await apiRequest('POST', `/api/employee-documents/${data.documentId}/signature`, {
-        body: {
-          signatureData: data.signatureData,
-          signedName: data.signedName,
-          employeeId: user?.id,
-        }
+        signatureData: data.signatureData,
+        signedName: data.signedName,
       });
     },
     onSuccess: () => {

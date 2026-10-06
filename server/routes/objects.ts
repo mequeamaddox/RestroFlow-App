@@ -2,7 +2,8 @@ import type { Express } from 'express';
 import { isAuthenticated } from './helpers';
 import { ObjectStorageService, ObjectNotFoundError } from '../objectStorage';
 import { assertLocationAccess } from '../securityMiddleware';
-import { getObjectLocationIds } from '../objectAccess';
+import { getObjectLocationIds, getEmployeeFileOwners } from '../objectAccess';
+import { assertEmployeeRecordAccess } from '../employeeIdentity';
 import { requireObjectAccess } from '../objectAccessMiddleware';
 
 export function registerObjectRoutes(app: Express): void {
@@ -22,6 +23,10 @@ export function registerObjectRoutes(app: Express): void {
     assertAccess: assertLocationAccess,
   }), async (req, res) => {
     try {
+      // Personal paperwork: only the employee or a manager, not every coworker at the restaurant.
+      for (const owner of await getEmployeeFileOwners(req.path)) {
+        if (!await assertEmployeeRecordAccess(req, res, owner)) return;
+      }
       const objectStorageService = new ObjectStorageService();
       const objectFile = await objectStorageService.getObjectEntityFile(req.path);
       await objectStorageService.downloadObject(objectFile, res);

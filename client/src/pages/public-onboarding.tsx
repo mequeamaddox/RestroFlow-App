@@ -48,8 +48,37 @@ export default function PublicOnboardingPage() {
   const [bankingInfo, setBankingInfo] = useState({
     accountNumber: '',
     routingNumber: '',
-    bankName: ''
+    bankName: '',
+    accountType: 'checking' as 'checking' | 'savings'
   });
+
+  // Each step's fields unmount when you move on, so browser "required" checks never run; check here.
+  const digitsOnly = (v: string) => v.replace(/[\s-]/g, '');
+  const stepProblem = (step: number): string | null => {
+    if (step === 1) {
+      const missing = [['phone', 'phone'], ['dateOfBirth', 'date of birth'], ['address', 'address'], ['city', 'city'], ['state', 'state'], ['zipCode', 'ZIP code'], ['ssn', 'Social Security number']]
+        .filter(([k]) => !String((personalInfo as any)[k]).trim()).map(([, label]) => label);
+      if (missing.length) return `Please enter your ${missing.join(', ')}.`;
+      if (!/^\d{9}$/.test(digitsOnly(personalInfo.ssn))) return 'Social Security number must be 9 digits.';
+    }
+    if (step === 2) {
+      if (!emergencyContact.name.trim() || !emergencyContact.phone.trim() || !emergencyContact.relationship) return 'Please complete your emergency contact.';
+    }
+    if (step === 3) {
+      if (!bankingInfo.bankName.trim()) return 'Please enter your bank name.';
+      if (!/^\d{9}$/.test(digitsOnly(bankingInfo.routingNumber))) return 'Routing number must be 9 digits.';
+      if (!/^\d{4,17}$/.test(digitsOnly(bankingInfo.accountNumber))) return 'Account number must be 4 to 17 digits.';
+    }
+    return null;
+  };
+  const goNext = () => {
+    const problem = stepProblem(currentStep);
+    if (problem) {
+      toast({ title: 'Check this step', description: problem, variant: 'destructive' });
+      return;
+    }
+    setCurrentStep(currentStep + 1);
+  };
 
   // Extract token from URL
   useEffect(() => {
@@ -87,6 +116,14 @@ export default function PublicOnboardingPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    for (const step of [1, 2, 3]) {
+      const problem = stepProblem(step);
+      if (problem) {
+        setCurrentStep(step);
+        toast({ title: 'Check this step', description: problem, variant: 'destructive' });
+        return;
+      }
+    }
     setIsSubmitting(true);
 
     try {
@@ -193,9 +230,9 @@ export default function PublicOnboardingPage() {
           <p className="text-muted-foreground">
             Welcome {employee?.firstName} {employee?.lastName}! Please complete your onboarding information.
           </p>
-          {employee?.position && (
+          {(employee?.position || employee?.department) && (
             <p className="text-sm text-muted-foreground mt-1">
-              Position: {employee.position} • Department: {employee.department}
+              {[employee.position && `Position: ${employee.position}`, employee.department && `Department: ${employee.department}`].filter(Boolean).join(' • ')}
             </p>
           )}
         </div>
@@ -426,6 +463,18 @@ export default function PublicOnboardingPage() {
                       required
                     />
                   </div>
+                  <div>
+                    <Label htmlFor="accountType">Account Type</Label>
+                    <Select value={bankingInfo.accountType} onValueChange={(value: 'checking' | 'savings') => setBankingInfo({...bankingInfo, accountType: value})}>
+                      <SelectTrigger id="accountType">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="checking">Checking</SelectItem>
+                        <SelectItem value="savings">Savings</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </CardContent>
             )}
@@ -479,7 +528,7 @@ export default function PublicOnboardingPage() {
               {currentStep < 4 ? (
                 <Button
                   type="button"
-                  onClick={() => setCurrentStep(currentStep + 1)}
+                  onClick={goNext}
                 >
                   Next
                 </Button>

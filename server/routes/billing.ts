@@ -132,6 +132,7 @@ export function registerBillingRoutes(app: Express): void {
         barAddonLocations,
         locationCount: ownedLocations.length,
         createdAt: user.createdAt?.toISOString(),
+        hasBillingAccount: !!user.stripeCustomerId,
       });
     } catch (error: any) {
       console.error('Error fetching current subscription:', error);
@@ -220,7 +221,7 @@ export function registerBillingRoutes(app: Express): void {
         const owner = await storage.getUser(ownerId);
         const location = await storage.getLocationById(invitations[0].locationId);
         const inviter = `${owner?.firstName || ''} ${owner?.lastName || ''}`.trim() || 'Your manager';
-        const origin = (process.env.APP_URL || 'https://www.restroflowsolutions.com').replace(/\/$/,'');
+        const origin = (process.env.APP_URL || 'https://restroflowsolutions.com').replace(/\/$/,'');
         for (const invitation of invitations) {
           let emailSent = false;
           try { emailSent = await InvitationEmailService.sendInvitationEmail(invitation,inviter,location?.name || 'RestroFlow',location?.name); }

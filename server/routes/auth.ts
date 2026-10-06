@@ -66,7 +66,7 @@ export function registerAuthRoutes(app: Express): void {
             const [pendingInvite] = await db
               .select()
               .from(invitationTokens)
-              .where(and(eq(invitationTokens.email, email), eq(invitationTokens.status, 'pending'), gt(invitationTokens.expiresAt, new Date())))
+              .where(and(eq(invitationTokens.email, email.toLowerCase()), eq(invitationTokens.status, 'pending'), gt(invitationTokens.expiresAt, new Date())))
               .limit(1);
             const role = (pendingInvite?.role as any) || 'owner';
             user = await storage.upsertUser({ id: userId, email, firstName, lastName, role });

@@ -121,9 +121,34 @@ export default function EmployeePage() {
     enabled: !!employeeId,
   });
 
-  // Fetch document templates for assignment
+  const employeeLocationId = (profileData?.employee as any)?.locationId as string | undefined;
+
+  // Fetch document templates for assignment (templates belong to the employee's restaurant)
   const { data: documentTemplates } = useQuery<DocumentTemplate[]>({
-    queryKey: ['/api/document-templates'],
+    queryKey: [`/api/document-templates?locationId=${employeeLocationId}`],
+    enabled: !!employeeLocationId,
+  });
+
+  const sendProfileLinkMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest('POST', '/api/hr/onboarding/invite', {
+        employeeId,
+        email: profileData?.employee.email,
+        locationId: employeeLocationId,
+      });
+      return res.json() as Promise<{ inviteUrl: string }>;
+    },
+    onSuccess: async ({ inviteUrl }) => {
+      let copied = false;
+      try { await navigator.clipboard.writeText(inviteUrl); copied = true; } catch {}
+      toast({
+        title: 'Profile link sent',
+        description: copied ? `Emailed to the employee and copied to your clipboard.` : `Emailed to the employee. Link: ${inviteUrl}`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Could not send link', description: error.message, variant: 'destructive' });
+    },
   });
 
   // Mutation for assigning documents
@@ -214,6 +239,17 @@ export default function EmployeePage() {
               Back to Employees
             </Button>
           </Link>
+          {!onboardingData?.completedAt && employee.email && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => sendProfileLinkMutation.mutate()}
+              disabled={sendProfileLinkMutation.isPending}
+              data-testid="button-send-profile-link"
+            >
+              {sendProfileLinkMutation.isPending ? 'Sending…' : 'Send profile link'}
+            </Button>
+          )}
           <div>
             <div className="flex items-center gap-3 mb-1">
               <h1 className="text-2xl font-bold text-foreground">

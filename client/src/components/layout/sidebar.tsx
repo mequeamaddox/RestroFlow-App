@@ -56,6 +56,7 @@ const navigation = [
   { name: 'Invoice Processing', href: '/invoice-processing', icon: FileText, badge: 'OCR' },
   { name: 'Analytics & Reports', href: '/analytics', icon: BarChart3, badge: 'LIVE' },
   { name: 'Waste Tracking', href: '/waste-tracking', icon: Trash2 },
+  { name: 'Team Invitations', href: '/hr/invitations', icon: Users, requiresManageEmployees: true },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
@@ -231,7 +232,7 @@ export default function Sidebar({ isMobileMenuOpen = false, setIsMobileMenuOpen 
                 Core Platform
               </div>
               <ul className="space-y-1">
-                {navigation.map((item) => {
+                {navigation.filter(item => !(item as any).requiresManageEmployees || hasPermission(Permission.MANAGE_EMPLOYEES)).map((item) => {
                   const isActive = currentPath === item.href;
                   const Icon = item.icon;
                   

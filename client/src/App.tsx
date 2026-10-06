@@ -211,7 +211,7 @@ function Router() {
                 <Route path="/hr/departments">{() => <HRGuard component={HRDepartments} />}</Route>
                 <Route path="/hr/positions">{() => <HRGuard component={HRPositions} />}</Route>
                 <Route path="/hr/documents">{() => <HRGuard component={HRDocuments} />}</Route>
-                <Route path="/hr/invitations">{() => <HRGuard component={HRInvitations} />}</Route>
+                <Route path="/hr/invitations" component={HRInvitations} />
                 {/* Employee Self-Service Portal Routes — require HR addon */}
                 <Route path="/employee/dashboard">{() => <HRGuard component={EmployeeDashboard} />}</Route>
                 <Route path="/employee/documents">{() => <HRGuard component={EmployeeDocuments} />}</Route>

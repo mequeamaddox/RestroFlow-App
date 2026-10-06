@@ -81,6 +81,11 @@ export default function EmployeeDashboard() {
     enabled: !!userId,
   });
 
+  const { data: profileLink } = useQuery<{ needed: boolean; url?: string }>({
+    queryKey: ['/api/employees/me/profile-link', locationId],
+    enabled: !!userId,
+  });
+
   const { data: myTasks = [] } = useQuery<Task[]>({
     queryKey: [`/api/employees/${userId}/tasks`],
     enabled: !!userId,
@@ -238,6 +243,20 @@ export default function EmployeeDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {profileLink?.needed && profileLink.url && (
+        <Card className="border-orange-500/60 bg-orange-900/20">
+          <CardContent className="pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <p className="font-semibold">Finish your employee profile</p>
+              <p className="text-sm text-muted-foreground">Add your personal details, emergency contact, and direct deposit so your manager can complete your setup.</p>
+            </div>
+            <Link href={profileLink.url}>
+              <Button className="bg-orange-500 hover:bg-orange-600">Complete profile</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Onboarding Progress */}
       {onboardingProgress && onboardingProgress.status !== 'completed' && (

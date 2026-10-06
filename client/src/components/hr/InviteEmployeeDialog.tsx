@@ -33,7 +33,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { apiRequest } from '@/lib/queryClient';
-import { UserPlus, Mail, Clock, MapPin, Users, Briefcase } from 'lucide-react';
+import { UserPlus, Mail, Clock, MapPin, Users, Briefcase, Copy, Check } from 'lucide-react';
 import type { Location, Department, Position } from '@shared/schema';
 
 // Invitation form schema
@@ -67,6 +67,8 @@ export default function InviteEmployeeDialog({
   onOpenChange 
 }: InviteEmployeeDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [sent, setSent] = useState<{ url: string; emailSent: boolean; email: string } | null>(null);
+  const [copied, setCopied] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
   const authority: Record<string,number> = {employee:1,team_lead:2,foh_manager:3,boh_manager:3,gm:4,owner:5,platform_admin:10};
@@ -74,7 +76,11 @@ export default function InviteEmployeeDialog({
 
   // Control dialog state
   const dialogOpen = open !== undefined ? open : isOpen;
-  const setDialogOpen = onOpenChange || setIsOpen;
+  const setOpenState = onOpenChange || setIsOpen;
+  const setDialogOpen = (next: boolean) => {
+    if (!next) { setSent(null); setCopied(false); }
+    setOpenState(next);
+  };
 
   // Fetch required data
   const { data: locations = [] } = useQuery<Location[]>({
@@ -113,23 +119,11 @@ export default function InviteEmployeeDialog({
       const res = await apiRequest('POST', '/api/invitations', payload);
       return res.json();
     },
-    onSuccess: (data: any) => {
-      if (data?.emailSent) {
-        toast({
-          title: 'Invitation Sent!',
-          description: 'Employee invitation has been sent via email.',
-        });
-      } else {
-        toast({
-          title: 'Invitation Created',
-          description: data?.invitationUrl
-            ? `Email not configured. Share this link: ${data.invitationUrl}`
-            : 'Invitation created. Configure RESEND_API_KEY to send emails.',
-        });
-      }
+    onSuccess: (data: any, variables) => {
       queryClient.invalidateQueries({ queryKey: ['/api/invitations'] });
       form.reset();
-      setDialogOpen(false);
+      // Keep the link on screen so it can always be shared, even when email isn't delivered.
+      setSent({ url: data?.invitationUrl || '', emailSent: !!data?.emailSent, email: variables.email });
     },
     onError: (error: any) => {
       toast({
@@ -146,6 +140,8 @@ export default function InviteEmployeeDialog({
 
   // Watch selected location to fetch departments and positions
   const selectedLocationId = form.watch('locationId');
+  // Departments and positions are HR add-on features; inviting itself is not.
+  const hrOn = (user as any)?.role === 'platform_admin' || !!(locations.find(l => l.id === selectedLocationId) as any)?.hrAddonEnabled;
 
   const { data: departments = [] } = useQuery<Department[]>({
     queryKey: ['/api/hr/departments', selectedLocationId],
@@ -156,7 +152,7 @@ export default function InviteEmployeeDialog({
       if (!response.ok) throw new Error('Failed to fetch departments');
       return response.json();
     },
-    enabled: !!selectedLocationId,
+    enabled: !!selectedLocationId && hrOn,
   });
 
   const { data: positions = [] } = useQuery<Position[]>({
@@ -168,7 +164,7 @@ export default function InviteEmployeeDialog({
       if (!response.ok) throw new Error('Failed to fetch positions');
       return response.json();
     },
-    enabled: !!selectedLocationId,
+    enabled: !!selectedLocationId && hrOn,
   });
 
   const roleDescriptions = {
@@ -198,6 +194,33 @@ export default function InviteEmployeeDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {sent ? (
+          <div className="space-y-4">
+            <p className="text-sm">
+              {sent.emailSent
+                ? <>Invitation emailed to <strong>{sent.email}</strong>. You can also share this link directly:</>
+                : <>The email couldn't be sent to <strong>{sent.email}</strong>. Share this link with them directly:</>}
+            </p>
+            <div className="flex gap-2">
+              <Input readOnly value={sent.url} onFocus={e => e.currentTarget.select()} data-testid="input-invitation-link" />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={async () => {
+                  try { await navigator.clipboard.writeText(sent.url); setCopied(true); } catch { setCopied(false); }
+                }}
+                data-testid="button-copy-invitation-link"
+              >
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">The link expires in 7 days and works once. The person should open it while signed out, or signed in with this email.</p>
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button type="button" variant="outline" onClick={() => { setSent(null); setCopied(false); }}>Invite another</Button>
+              <Button type="button" onClick={() => setDialogOpen(false)}>Done</Button>
+            </div>
+          </div>
+        ) : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             {/* Personal Information */}
@@ -336,7 +359,7 @@ export default function InviteEmployeeDialog({
                 )}
               />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {hrOn && <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="departmentId"
@@ -386,7 +409,7 @@ export default function InviteEmployeeDialog({
                     </FormItem>
                   )}
                 />
-              </div>
+              </div>}
             </div>
 
             {/* Employment Details */}
@@ -516,6 +539,7 @@ export default function InviteEmployeeDialog({
             </div>
           </form>
         </Form>
+        )}
       </DialogContent>
     </Dialog>
   );

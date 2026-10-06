@@ -1,4 +1,4 @@
-import { selectedEmployee, ownEmployee, registerEmployeeIdentityRoute } from '../employeeIdentity';
+import { selectedEmployee, ownEmployee, registerEmployeeIdentityRoute, assertEmployeeRecordAccess } from '../employeeIdentity';
 import { registerHROrganizationRoutes } from './hrOrganization';
 import { completeEmployeeProfile, EmployeeSetupError } from '../employeeOnboarding';
 import { z } from 'zod';
@@ -10,7 +10,7 @@ import { isAuthenticated, clerkClient, mapPositionToRole, requireHRAccess } from
 import { requireLocationAccess, assertLocationAccess, assertSameLocation, strictLimiter } from '../securityMiddleware';
 import { canManageUser, requirePermission, requireAnyPermission, Permission } from '../permissions';
 import { isOwnerLevel, isManagerLevel } from '@shared/roles';
-import { teamResources, insertTeamResourceSchema, timeEntries, timeOffRequests, employeeDocuments, employeeOnboarding, employeeOnboardingSteps, recipeAssignments, departments, onboardingTemplates } from '@shared/schema';
+import { teamResources, insertTeamResourceSchema, timeEntries, timeOffRequests, employeeDocuments, employeeOnboarding, employeeOnboardingSteps, recipeAssignments, departments, onboardingTemplates, onboardingTokens } from '@shared/schema';
 import { db } from '../db';
 import { eq, desc, sql, or, isNull } from 'drizzle-orm';
 
@@ -597,7 +597,7 @@ export function registerHRRoutes(app: Express): void {
       if (employeeId) {
         const employee = await storage.getEmployee(employeeId as string);
         if (!employee) return res.status(404).json({ message: 'Employee not found' });
-        if (!await assertLocationAccess(req, res, employee.locationId)) return;
+        if (!await assertEmployeeRecordAccess(req, res, employee)) return;
       }
       const documents = await storage.getEmployeeDocuments(employeeId as string);
       res.json(documents);
@@ -738,7 +738,7 @@ export function registerHRRoutes(app: Express): void {
       if (!employeeId) return res.status(400).json({ message: 'employeeId is required' });
       const employee = await storage.getEmployee(employeeId as string);
       if (!employee) return res.status(404).json({ message: 'Employee not found' });
-      if (!await assertLocationAccess(req, res, employee.locationId)) return;
+      if (!await assertEmployeeRecordAccess(req, res, employee)) return;
       const onboarding = await storage.getEmployeeOnboarding(employeeId as string);
       res.json(onboarding);
     } catch (error) {
@@ -834,7 +834,7 @@ export function registerHRRoutes(app: Express): void {
       if (!inviteTarget) return res.status(404).json({ message: 'Employee not found' });
       if (!await assertLocationAccess(req, res, inviteTarget.locationId)) return;
       const token = await storage.createOnboardingToken(employeeId, 72);
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const baseUrl = process.env.APP_URL || 'https://restroflowsolutions.com';
       const inviteUrl = `${baseUrl}/onboarding/${token.token}`;
 
       if (email) {
@@ -857,7 +857,12 @@ export function registerHRRoutes(app: Express): void {
     try {
       const validation = await storage.validateOnboardingToken(req.params.token);
       if (!validation.isValid) return res.status(404).json({ error: 'Invalid or expired invitation link', message: 'This invitation link is no longer valid. Please contact your manager for a new link.' });
-      res.json({ isValid: true, employee: { firstName: validation.employee?.firstName, lastName: validation.employee?.lastName, email: validation.employee?.email, positionId: validation.employee?.positionId, departmentId: validation.employee?.departmentId } });
+      const emp = validation.employee;
+      const [position, department] = await Promise.all([
+        emp?.positionId ? storage.getPosition(emp.positionId) : undefined,
+        emp?.departmentId ? storage.getDepartment(emp.departmentId) : undefined,
+      ]);
+      res.json({ isValid: true, employee: { firstName: emp?.firstName, lastName: emp?.lastName, email: emp?.email, position: position?.title, department: department?.name } });
     } catch (error) {
       console.error('Error validating onboarding token:', error);
       res.status(500).json({ message: 'Failed to validate invitation' });
@@ -894,6 +899,24 @@ export function registerHRRoutes(app: Express): void {
     }
   });
 
+  // Lets a new hire get back to their profile paperwork after the one-time redirect at acceptance.
+  app.get('/api/employees/me/profile-link', isAuthenticated, async (req, res) => {
+    try {
+      const employee = await selectedEmployee(req, res);
+      if (!employee) return;
+      const location = await storage.getLocationById(employee.locationId);
+      if (!location?.hrAddonEnabled) return res.json({ needed: false });
+      const tokens = await db.select().from(onboardingTokens).where(eq(onboardingTokens.employeeId, employee.id)).orderBy(desc(onboardingTokens.createdAt));
+      if (tokens.some(t => t.isUsed)) return res.json({ needed: false });
+      const live = tokens.find(t => new Date(t.expiresAt) > new Date());
+      const token = live ?? await storage.createOnboardingToken(employee.id, 72);
+      res.json({ needed: true, url: `/onboarding/${token.token}` });
+    } catch (error) {
+      console.error('Error fetching profile link:', error);
+      res.status(500).json({ message: 'Could not load your profile link' });
+    }
+  });
+
   app.put('/api/employees/me/onboarding-steps/:stepId', isAuthenticated, async (req, res) => {
     try {
       const userId = req.user!.id;
@@ -922,9 +945,7 @@ export function registerHRRoutes(app: Express): void {
     try {
       const { employee, onboardingData } = await storage.getEmployeeWithOnboardingData(req.params.id);
       if (!employee) return res.status(404).json({ error: 'Employee not found' });
-      if (req.params.id !== req.user!.id) {
-        if (!await assertLocationAccess(req, res, employee.locationId)) return;
-      }
+      if (!await assertEmployeeRecordAccess(req, res, employee)) return;
       res.json({
         employee,
         onboardingData: onboardingData ? {
