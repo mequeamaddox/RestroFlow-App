@@ -73,3 +73,46 @@ test('a later paperwork submission with blank fields keeps details saved earlier
   const row=db.read().employee_onboarding_data[0];
   assert.equal(row.phone,'5559999999');assert.equal(row.bankName,'First Bank');assert.equal(row.accountNumber,saved.accountNumber);assert.equal(row.routingNumber,saved.routingNumber);
 });
+
+const signedW4={filingStatus:'single',multipleJobs:false,qualifyingChildren:1,dependentsAmount:2200,extraWithholding:25,signedName:'Test Employee',attest:true};
+const signedI9={citizenship:'citizen',noPreparer:true,signedName:'Test Employee',attest:true};
+const profile={personalInfo:{phone:'5551234567',address:'1 Main St',city:'Tampa',state:'FL',zipCode:'33601',dateOfBirth:'1990-01-01',ssn:'123-45-6789'}};
+
+test('signed W-4 and I-9 Section 1 are saved encrypted with the profile, with signer details',async()=>{
+  const {decryptField}=await import('../server/encryption');
+  const db=staff();const result=await acceptStaffInvitation(db.client,'invite-token',{id:'staff',email:'employee@example.com'});
+  await completeEmployeeProfile(db.client,result.onboardingToken!,{...profile,w4:signedW4,i9:signedI9},{ipAddress:'203.0.113.9',userAgent:'test'});
+  const forms=db.read().employee_tax_forms;assert.equal(forms.length,2);
+  const w4=forms.find((f:any)=>f.formType==='w4');const i9=forms.find((f:any)=>f.formType==='i9');
+  assert.match(w4.employeeData,/^enc:v1:/);assert.match(i9.employeeData,/^enc:v1:/);
+  assert.equal(w4.status,'complete');assert.equal(i9.status,'employee_signed');assert.equal(i9.employeeSignedName,'Test Employee');assert.equal(i9.employeeIp,'203.0.113.9');
+  const section1=JSON.parse(decryptField(i9.employeeData));
+  assert.equal(section1.address,'1 Main St');assert.equal(section1.ssn,'123456789');assert.equal(section1.citizenship,'citizen');assert.equal(section1.attest,undefined);
+  assert.equal(JSON.parse(decryptField(w4.employeeData)).extraWithholding,25);
+});
+
+test('W-4 exemption clears withholding adjustments and I-9 status rules are enforced',async()=>{
+  const {w4Schema,i9Section1Schema}=await import('../shared/taxForms');
+  const exempt=w4Schema.parse({...signedW4,exempt:true});assert.equal(exempt.dependentsAmount,0);assert.equal(exempt.extraWithholding,0);
+  assert.throws(()=>w4Schema.parse({...signedW4,attest:false}),/confirm the statement/);
+  assert.throws(()=>i9Section1Schema.parse({...signedI9,citizenship:'permanent_resident'}),/USCIS \/ A-Number/);
+  assert.equal(i9Section1Schema.parse({...signedI9,citizenship:'permanent_resident',uscisNumber:'A-123 456 789'}).uscisNumber,'123456789');
+  assert.throws(()=>i9Section1Schema.parse({...signedI9,citizenship:'authorized_alien',workAuthExpiration:'N/A'}),/Enter one of/);
+  assert.ok(i9Section1Schema.parse({...signedI9,citizenship:'authorized_alien',workAuthExpiration:'2027-06-30',foreignPassportNumber:'X1234567',passportCountry:'Canada'}));
+  assert.throws(()=>i9Section1Schema.parse({...signedI9,noPreparer:false}),/Supplement A/);
+});
+
+test('an I-9 without an address is rejected and nothing from the submission is saved',async()=>{
+  const db=staff();const result=await acceptStaffInvitation(db.client,'invite-token',{id:'staff',email:'employee@example.com'});
+  await assert.rejects(completeEmployeeProfile(db.client,result.onboardingToken!,{personalInfo:{phone:'5551234567'},w4:signedW4,i9:signedI9}),/full address and date of birth/);
+  assert.equal(db.read().employee_tax_forms.length,0);assert.equal(db.read().employee_onboarding_data.length,0);assert.equal(db.read().onboarding_tokens[0].isUsed,false);
+});
+
+test('I-9 Section 2 is due three business days after the first day of work',async()=>{
+  const {i9Section2DueDate,i9Section2Schema}=await import('../shared/taxForms');
+  assert.equal(i9Section2DueDate('2026-10-08'),'2026-10-13');assert.equal(i9Section2DueDate('2026-10-05'),'2026-10-08');
+  const base={firstDayOfEmployment:'2026-10-05',employerName:'Pat Manager',employerTitle:'General Manager',businessName:'Fish Camp',businessAddress:'1 Main St, Tampa, FL',attest:true};
+  const doc={title:'U.S. Passport',issuingAuthority:'U.S. Department of State',number:'123456789'};
+  assert.ok(i9Section2Schema.parse({...base,documentChoice:'list_a',listA:[doc]}));
+  assert.throws(()=>i9Section2Schema.parse({...base,documentChoice:'list_b_c',listB:doc}),/one List B and one List C/);
+});

@@ -1577,6 +1577,30 @@ export const employeeOnboardingData = pgTable("employee_onboarding_data", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Signed W-4 and I-9 forms. Form contents are stored as encrypted JSON (PII); each submission
+// adds a row so earlier signed versions are kept for the record.
+export const employeeTaxForms = pgTable("employee_tax_forms", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+  formType: varchar("form_type", { length: 10 }).notNull(), // w4 | i9
+  formVersion: varchar("form_version", { length: 40 }).notNull(),
+  status: varchar("status", { length: 30 }).notNull().default("employee_signed"), // employee_signed | complete
+  employeeData: text("employee_data").notNull(),
+  employeeSignedName: varchar("employee_signed_name", { length: 120 }).notNull(),
+  employeeSignedAt: timestamp("employee_signed_at").notNull().defaultNow(),
+  employeeIp: varchar("employee_ip", { length: 45 }),
+  employeeUserAgent: text("employee_user_agent"),
+  employerData: text("employer_data"),
+  employerSignedBy: varchar("employer_signed_by").references(() => users.id),
+  employerSignedName: varchar("employer_signed_name", { length: 120 }),
+  employerSignedAt: timestamp("employer_signed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index('employee_tax_forms_employee_idx').on(table.employeeId, table.formType),
+]);
+export type EmployeeTaxForm = typeof employeeTaxForms.$inferSelect;
+
 export type SecurityLog = typeof securityLogs.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type CostAlert = typeof costAlerts.$inferSelect;
