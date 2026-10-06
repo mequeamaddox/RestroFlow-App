@@ -251,8 +251,8 @@ const migrations: { name: string; sql: string }[] = [
   },
   { name: "invoice_processing.inventory_received_at", sql: `ALTER TABLE invoice_processing ADD COLUMN IF NOT EXISTS inventory_received_at timestamp` },
   { name: "accepted invitation restaurant memberships", sql: `INSERT INTO user_permissions (user_id, location_id, role, permissions, is_active, granted_by)
-    SELECT DISTINCT ON (u.id, i.location_id) u.id, i.location_id, i.role, '[]'::jsonb, true, i.invited_by FROM invitation_tokens i JOIN users u ON lower(u.email) = lower(i.email)
-    WHERE i.status = 'accepted' AND i.employee_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_permissions p WHERE p.user_id = u.id AND p.location_id = i.location_id) ORDER BY u.id, i.location_id, i.accepted_at DESC` },
+    SELECT DISTINCT ON (u.id, i.location_id) u.id, i.location_id::text, i.role, '[]'::jsonb, true, i.invited_by FROM invitation_tokens i JOIN users u ON lower(u.email) = lower(i.email)
+    WHERE i.status = 'accepted' AND i.employee_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_permissions p WHERE p.user_id = u.id AND p.location_id = i.location_id::text) ORDER BY u.id, i.location_id, i.accepted_at DESC` },
 
   {"name": "users.account_state", "sql": "ALTER TABLE users ADD COLUMN IF NOT EXISTS account_state varchar(20) NOT NULL DEFAULT 'active'"},
   {"name": "locations.deleted_at", "sql": "ALTER TABLE locations ADD COLUMN IF NOT EXISTS deleted_at timestamp"},
