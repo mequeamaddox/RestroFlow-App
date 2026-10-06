@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { storage } from './storage';
+import { isOwnerLevel } from '@shared/roles';
 
 const PLAN_ORDER = ['free', 'core'] as const;
 type Plan = (typeof PLAN_ORDER)[number];
@@ -59,9 +60,16 @@ export function requirePlan(minPlan: Plan) {
       }
       if (billingUser?.accountState && billingUser.accountState !== 'active') return res.status(403).json({message:'The restaurant owner account is disabled.'});
       const plan = (billingUser?.subscriptionPlan as Plan) || 'free';
+      // Only owners pay, so only owners are pointed at billing. Staff just learn the feature isn't included.
+      const notIncluded = () => res.status(403).json({
+        error: 'Feature not included',
+        message: "This feature isn't included in your restaurant's plan. Ask the restaurant owner if you need access.",
+      });
+      const isPayer = isOwnerLevel(user?.role);
 
       // Step 1 — plan tier check
       if (PLAN_ORDER.indexOf(plan) < PLAN_ORDER.indexOf(minPlan)) {
+        if (!isPayer) return notIncluded();
         return res.status(403).json({
           error: 'Upgrade required',
           upgrade_url: '/subscription',
@@ -75,6 +83,7 @@ export function requirePlan(minPlan: Plan) {
       if (minPlan !== 'free') {
         const status = billingUser?.subscriptionStatus || 'inactive';
         if (!ACTIVE_STATUSES.has(status)) {
+          if (!isPayer) return notIncluded();
           return res.status(403).json({
             error: 'Subscription inactive',
             upgrade_url: '/subscription',

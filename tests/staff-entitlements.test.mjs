@@ -36,6 +36,15 @@ try {
     memberships.pop();
     people.ownerA.subscriptionStatus = 'cancelled'; res = response(); await requirePlan('core')(request({ locationId: 'A' }), res, () => assert.fail()); assert.equal(res.code, 403); people.ownerA.subscriptionStatus = 'active';
   });
+  await test('only owners are pointed at billing when the plan does not cover a feature', async () => {
+    people.ownerA.subscriptionStatus = 'cancelled';
+    const staffRes = response(); await requirePlan('core')(request({ locationId: 'A' }), staffRes, () => assert.fail());
+    assert.equal(staffRes.code, 403); assert.equal(staffRes.body.upgrade_url, undefined); assert.match(staffRes.body.message, /owner/i);
+    const ownerReq = request({ locationId: 'A' }); ownerReq.user = { id: 'ownerA', role: 'owner' };
+    const ownerRes = response(); await requirePlan('core')(ownerReq, ownerRes, () => assert.fail());
+    assert.equal(ownerRes.code, 403); assert.equal(ownerRes.body.upgrade_url, '/subscription');
+    people.ownerA.subscriptionStatus = 'active';
+  });
   await test('ID routes bill the resource restaurant rather than an unrelated paid location', async () => {
     const res = response(); await requirePlan('core')(request({ locationId: 'A' }, '/api/inventory/item-B?locationId=A'), res, () => assert.fail()); assert.equal(res.code, 403);
   });

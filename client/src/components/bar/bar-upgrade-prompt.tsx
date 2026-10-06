@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { FeatureNotIncluded, useIsPayer } from "@/components/subscription/feature-not-included";
 import { Martini, Calculator, Package, Percent, ArrowRight, Star, Zap } from "lucide-react";
 import { Link } from "wouter";
 
@@ -9,6 +10,8 @@ interface BarUpgradePromptProps {
 }
 
 export function BarUpgradePrompt({ locationName }: BarUpgradePromptProps) {
+  const isPayer = useIsPayer();
+  if (!isPayer) return <FeatureNotIncluded feature="Bar & Beverage" locationName={locationName} />;
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <Card className="border-purple-800/50 bg-gradient-to-br from-purple-900/20 to-violet-900/20">

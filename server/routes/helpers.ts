@@ -1,3 +1,4 @@
+import { isOwnerLevel } from '@shared/roles';
 import { createClerkClient } from '@clerk/express';
 import { requireAuth } from '../clerkAuth';
 import { storage } from '../storage';
@@ -116,9 +117,11 @@ export const requireHRAccess = async (req: any, res: any, next: any) => {
     }
     if (!location.hrAddonEnabled) {
       return res.status(403).json({
-        message: 'HR add-on not enabled for this location',
+        message: isOwnerLevel(user?.role)
+          ? 'HR add-on not enabled for this location'
+          : "HR isn't included in your restaurant's plan. Ask the restaurant owner if you need access.",
         code: 'HR_ADDON_REQUIRED',
-        upgradeUrl: '/subscription',
+        ...(isOwnerLevel(user?.role) ? { upgradeUrl: '/subscription' } : {}),
       });
     }
     next();
@@ -147,9 +150,11 @@ export const requireBarAccess = async (req: any, res: any, next: any) => {
     }
     if (!location.barAddonEnabled) {
       return res.status(403).json({
-        message: 'Bar & Beverage add-on not enabled for this location',
+        message: isOwnerLevel(user?.role)
+          ? 'Bar & Beverage add-on not enabled for this location'
+          : "Bar & Beverage isn't included in your restaurant's plan. Ask the restaurant owner if you need access.",
         code: 'BAR_ADDON_REQUIRED',
-        upgradeUrl: '/subscription',
+        ...(isOwnerLevel(user?.role) ? { upgradeUrl: '/subscription' } : {}),
       });
     }
     next();

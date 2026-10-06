@@ -56,13 +56,20 @@ import BarWasteLog from "@/pages/bar-waste-log";
 import BarPurchaseOrders from "@/pages/bar-purchase-orders";
 import PlatformSettings from "@/pages/platform-settings";
 import Sidebar from "@/components/layout/sidebar";
+import { FeatureNotIncluded, useIsPayer } from "@/components/subscription/feature-not-included";
 import Header from "@/components/layout/header";
 import MobileBottomNav from "@/components/layout/mobile-bottom-nav";
 
 function HRGuard({ component: Component }: { component: React.ComponentType }) {
   const { hasHRAccess } = useLocationCtx();
-  if (!hasHRAccess) return <Redirect to="/subscription" />;
+  const isPayer = useIsPayer();
+  if (!hasHRAccess) return isPayer ? <Redirect to="/subscription" /> : <FeatureNotIncluded feature="HR" />;
   return <Component />;
+}
+
+// Billing and pricing belong to the account owner; staff never see them.
+function PayerOnly({ component: Component }: { component: React.ComponentType }) {
+  return useIsPayer() ? <Component /> : <Redirect to="/" />;
 }
 
 function OnboardingGuard({
@@ -179,8 +186,8 @@ function Router() {
                 <Route path="/analytics">{() => <OnboardingGuard component={Analytics} isOwner={isOwner} onboardingProgress={onboardingProgress} />}</Route>
                 <Route path="/invoice-processing">{() => <OnboardingGuard component={InvoiceProcessing} isOwner={isOwner} onboardingProgress={onboardingProgress} />}</Route>
                 <Route path="/multi-unit-dashboard">{() => <OnboardingGuard component={MultiUnitDashboard} isOwner={isOwner} onboardingProgress={onboardingProgress} />}</Route>
-                <Route path="/subscription" component={Subscription} />
-                <Route path="/pricing" component={Pricing} />
+                <Route path="/subscription">{() => <PayerOnly component={Subscription} />}</Route>
+                <Route path="/pricing">{() => <PayerOnly component={Pricing} />}</Route>
                 {/* Hidden owner-only prototype routes */}
                 <Route path="/bluetooth-scale-prototype" component={BluetoothScalePrototype} />
                 <Route path="/beveragecost" component={BeverageCost} />
